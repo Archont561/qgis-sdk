@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -49,6 +50,7 @@ from ._history import (
     UI_PACKAGE,
     UI_PEER,
     QgisSdkReleaseVersionError,
+    is_shallow_repository,
     list_tags,
 )
 from ._pins import (
@@ -64,6 +66,13 @@ from ._version import Version, normalize_scope
 
 def cmd_plan(args: argparse.Namespace) -> int:
     config = parse_versionrc(Path(args.config).read_text(encoding="utf-8"))
+    if is_shallow_repository():
+        print(
+            "release plan: this checkout is shallow, so the tags and the commit "
+            "ranges it reads are incomplete; run `git fetch --unshallow --tags` "
+            "before trusting the version",
+            file=sys.stderr,
+        )
     tags = list_tags()
     milestone_tag = getattr(args, "milestone_tag", "") or ""
     requested = requested_scope(args, tags, milestone_tag)

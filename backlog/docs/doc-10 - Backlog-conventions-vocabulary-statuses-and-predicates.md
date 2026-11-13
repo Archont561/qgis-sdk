@@ -153,7 +153,8 @@ TASK-15) had meanwhile moved to m-2 in the same re-scope.
 That is the rule in section 3 applied literally: acceptance tracks the decision,
 not the delivery. Their rows above are struck but left in place, because the
 audit is a snapshot and rewriting it would erase what was true at the time. Ten
-decisions remain proposed.
+decisions were proposed then; two are now - `decision-11` and `decision-68` - and
+`decision list` is the count that never goes stale (2026-11-13).
 
 Two decisions have no inbound reference anywhere: `decision-5` (Rust algorithms
 post-v1) and `decision-9` (typed bridge endpoints). That is acceptable for

@@ -317,3 +317,37 @@ def test_main_reports_a_gh_failure_as_127(monkeypatch, capsys) -> None:
     monkeypatch.setattr(pr, "run_gh", run_gh)
     assert pr.main(["open"]) == 127
     assert "not authenticated" in capsys.readouterr().out
+
+
+def test_a_pull_request_with_no_checks_yet_is_not_green(monkeypatch, capsys) -> None:
+    """An empty rollup is a pull request seconds old, not a passing one.
+
+    Starting the watcher right after `pr open` found no check-runs and answered
+    "all checks green" before the first workflow had been queued, so both #216
+    and #217 reported green instantly.
+    """
+    snapshots = iter([_snapshot(), _green()])
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(pr, "fetch", lambda number, repo="": next(snapshots))
+    monkeypatch.setattr(pr, "sleep", sleeps.append)
+    assert pr.watch(pr=215, interval=20) == 0
+    assert sleeps == [20]
+    output = capsys.readouterr().out
+    assert "no checks reported yet" in output
+    assert "all checks green" in output
+
+
+def test_no_checks_with_a_timeout_gives_up_rather_than_waiting_forever(
+    monkeypatch,
+) -> None:
+    """Nothing queued and a deadline is a timeout, not a silent pass."""
+    clock = [0.0]
+
+    def sleep(seconds: float) -> None:
+        clock[0] += seconds
+
+    monkeypatch.setattr(pr, "fetch", lambda number, repo="": _snapshot())
+    monkeypatch.setattr(pr, "sleep", sleep)
+    monkeypatch.setattr(pr, "monotonic", lambda: clock[0])
+    assert pr.watch(pr=215, interval=20, timeout=40) == 2

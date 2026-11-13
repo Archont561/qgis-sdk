@@ -7,7 +7,9 @@ every 15 seconds and breaks on the first error.
 ``gh pr checks --watch`` waits for every check to finish before it answers, so
 a job that fails in the first minute still costs the whole run. This watcher
 answers as soon as any check fails, while the rest are still queued or
-running, and answers success only when nothing is left pending.
+running, and answers success only when at least one check reported and nothing
+is left pending - a pull request with no check-runs yet is still waiting, not
+green.
 
     python -m automation.pr open                    # commits decide title/body
     python -m automation.pr open --title "..." --body-file body.md
@@ -20,7 +22,8 @@ belong, with the commit list as the default body.
 Exit status: 0 when the pull request was created or every check passed, 1 when
 `open` refuses (the branch is the base, or a pull request already exists) or a
 check failed, 2 on a watch timeout, 127 when `git` or ``gh`` failed. The tool
-is stdlib-only and independently runnable.
+is stdlib-only and runs without the task runner - `python -m automation.pr`,
+the same way every module here is run.
 """
 
 from __future__ import annotations
@@ -30,81 +33,19 @@ import json
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
-#: Conclusions that mean the check failed. A completed check with any other
-#: conclusion is not a failure; one outside both sets is still pending.
-FAILED_CONCLUSIONS = frozenset(
-    {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STALE", "STARTUP_FAILURE"}
+# The records live in a sibling module; they are re-exported here, so
+# `pr.Snapshot` and `pr_records.Snapshot` stay one object (decision-84).
+from automation.pr_records import (
+    FAILED_CONCLUSIONS,  # noqa: F401 - re-exported: the tests parametrise over it
+    PASSED_CONCLUSIONS,  # noqa: F401 - re-exported: the tests parametrise over it
+    Branch,
+    Check,
+    PullRequestRequest,
+    QgisSdkPrError,
+    Snapshot,
 )
-PASSED_CONCLUSIONS = frozenset({"SUCCESS", "SKIPPED", "NEUTRAL"})
-
-
-class QgisSdkPrError(RuntimeError):
-    """``gh`` failed, or answered with something this watcher cannot read."""
-
-
-@dataclass(frozen=True)
-class Check:
-    """One check of a pull request, as ``statusCheckRollup`` reports it."""
-
-    name: str
-    status: str
-    conclusion: str | None
-
-
-@dataclass(frozen=True)
-class Snapshot:
-    """Every check of one pull request at one moment."""
-
-    pr: int
-    state: str
-    checks: tuple[Check, ...]
-
-    @property
-    def failed(self) -> tuple[Check, ...]:
-        return tuple(
-            check
-            for check in self.checks
-            if check.status == "COMPLETED" and check.conclusion in FAILED_CONCLUSIONS
-        )
-
-    @property
-    def pending(self) -> tuple[Check, ...]:
-        return tuple(
-            check
-            for check in self.checks
-            if check.status != "COMPLETED"
-            or check.conclusion not in FAILED_CONCLUSIONS | PASSED_CONCLUSIONS
-        )
-
-    @property
-    def passed(self) -> tuple[Check, ...]:
-        return tuple(
-            check
-            for check in self.checks
-            if check.status == "COMPLETED" and check.conclusion in PASSED_CONCLUSIONS
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class Branch:
-    """The branch a pull request opens and the branch it lands on."""
-
-    head: str
-    base: str
-
-
-@dataclass(frozen=True, slots=True)
-class PullRequestRequest:
-    """Everything ``open`` needs, so no function takes five loose strings."""
-
-    branch: Branch
-    title: str = ""
-    body: str = ""
-    draft: bool = False
-    repo: str = ""
 
 
 def run_gh(arguments: list[str]) -> str:
@@ -297,6 +238,12 @@ def _poll(number: int, repo: str, polls: int, errors: int) -> tuple[int | None, 
     if snapshot.failed:
         _report_failed(snapshot)
         return 1, 0
+    if not snapshot.checks:
+        # A pull request opened seconds ago has no check-runs yet, and an empty
+        # rollup is not a green one: without this the watcher answered "all
+        # checks green" before the first workflow had even been queued.
+        print(f"pr #{number}: no checks reported yet", flush=True)
+        return None, 0
     if not snapshot.pending:
         print(f"pr #{number}: all checks green", flush=True)
         return 0, 0

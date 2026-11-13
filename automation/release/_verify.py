@@ -188,7 +188,9 @@ def _add_planning_parsers(sub) -> None:
     plan.add_argument("--scope", default="")
     plan.add_argument("--bump", default="")
     plan.add_argument("--milestone-tag", default="")
-    plan.add_argument("--dry-run", default="false")
+    # `--dry-run` alone means "yes"; the workflow passes the literal string
+    # "true"/"false" because a dispatch input is a string, so both forms work.
+    plan.add_argument("--dry-run", nargs="?", const="true", default="false")
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(handler=cmd_plan)
 

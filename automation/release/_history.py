@@ -82,6 +82,25 @@ def list_tags(runner: Runner | None = None) -> tuple[str, ...]:
     return tuple(line.strip() for line in out.splitlines() if line.strip())
 
 
+def is_shallow_repository(runner: Runner | None = None) -> bool:
+    """Whether this checkout is a shallow clone, which cannot plan a release.
+
+    ``git tag --list`` and every ``git log`` range answer from what is on disk,
+    and a depth-1 clone has neither the tags nor the history. ``plan`` then
+    derives a version from the wrong base without saying so - in this
+    workspace it planned a `0.1.0` bootstrap release while
+    `python-v0.11.0-rc.1` was the newest tag. Naming it is the difference
+    between a wrong answer and a loud one.
+    """
+    run = runner or _default_runner
+    try:
+        return bool(
+            run(["git", "rev-parse", "--is-shallow-repository"]).strip() == "true"
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+
 def list_changed_files(
     revision_range: str | None = None, runner: Runner | None = None
 ) -> tuple[str, ...]:

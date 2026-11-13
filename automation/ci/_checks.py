@@ -182,7 +182,7 @@ def _gherkin_guard(executable: str | None, root: Path) -> tuple[str | None, int 
             print(f"{path.relative_to(root)} is outside the linted directories")
         print(
             "::error title=feature file outside the lint::Add its directory to "
-            "FEATURE_DIRECTORIES in automation/ci.py so every scenario is linted."
+            "FEATURE_DIRECTORIES in automation/ci/_checks.py so every scenario is linted."
         )
         return None, 1
     if not feature_files(root):

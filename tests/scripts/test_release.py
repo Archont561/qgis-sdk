@@ -50,6 +50,7 @@ from automation.release import (
     parse_release_tag,
     parse_versionrc,
     plan_base_tag,
+    plan_changelog_directory,
     read_alias_versions,
     read_example_windows,
     read_pyproject_version,
@@ -1194,6 +1195,90 @@ def test_a_dispatch_is_not_forced_into_a_dry_run(tmp_path, monkeypatch):
         line.split("=", 1) for line in out_file.read_text().splitlines() if line
     )
     assert outputs["dry_run"] == "false"
+
+
+def _plan_with_dry_run(config: Path, *values: str) -> int:
+    """Run `plan` with `--dry-run` spelled the way the caller spells it."""
+    return _cli(
+        "plan", "--trigger", "dispatch", "--config", str(config), "--dry-run", *values
+    )
+
+
+def test_a_bare_dry_run_flag_is_accepted(tmp_path, monkeypatch):
+    """`--dry-run` alone means yes; the workflow still passes "true"/"false".
+
+    A dispatch input is a string, so `autorelease.yml` writes
+    `--dry-run "${{ inputs.dry-run && 'true' || 'false' }}"`. Nothing else
+    should have to spell out the value, and until this was pinned a bare
+    `--dry-run` was an argparse error.
+    """
+    config = _versionrc(tmp_path)
+    out_file = _outputs(tmp_path, monkeypatch)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.1",),
+        log="a" * 40 + "\x1f" + "feat(sdk): x" + "\x1f" + "\x1e\n",
+    )
+
+    assert _plan_with_dry_run(config) == 0
+    assert _read_outputs(out_file)["dry_run"] == "true"
+
+    assert _plan_with_dry_run(config, "false") == 0
+    assert _read_outputs(out_file)["dry_run"] == "false"
+
+
+def test_a_plan_never_writes_its_changelog_into_the_checkout(monkeypatch, tmp_path):
+    """The changelog is one command's artifact, so it goes to a temp directory.
+
+    `plan` used to write `qgis-sdk-release-changelog.md` into the current
+    directory when `RUNNER_TEMP` was unset, which is the checkout root for a
+    local run, and nothing ignored it.
+    """
+    monkeypatch.delenv("RUNNER_TEMP", raising=False)
+    monkeypatch.chdir(tmp_path)
+    directory = plan_changelog_directory()
+    assert directory != tmp_path
+    assert not (tmp_path / "qgis-sdk-release-changelog.md").exists()
+    assert plan_changelog_directory({"RUNNER_TEMP": "/run/temp"}) == Path("/run/temp")
+
+
+def test_a_shallow_checkout_says_so_before_it_plans(tmp_path, monkeypatch, capsys):
+    """A depth-1 clone has no tags and no history, and plans the wrong version."""
+    config = _versionrc(tmp_path)
+    _outputs(tmp_path, monkeypatch)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.1",),
+        log="a" * 40 + "\x1f" + "feat: x" + "\x1f" + "\x1e\n",
+    )
+    monkeypatch.setattr("automation.release._stamp.is_shallow_repository", lambda: True)
+
+    assert _cli("plan", "--trigger", "dispatch", "--config", str(config)) == 0
+
+    assert "this checkout is shallow" in capsys.readouterr().err
+
+
+def test_a_complete_checkout_plans_without_the_warning(tmp_path, monkeypatch, capsys):
+    config = _versionrc(tmp_path)
+    _outputs(tmp_path, monkeypatch)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.1",),
+        log="a" * 40 + "\x1f" + "feat: x" + "\x1f" + "\x1e\n",
+    )
+    monkeypatch.setattr(
+        "automation.release._stamp.is_shallow_repository", lambda: False
+    )
+
+    assert _cli("plan", "--trigger", "dispatch", "--config", str(config)) == 0
+
+    assert "shallow" not in capsys.readouterr().err
 
 
 def test_compute_plan_supports_scoped_tags_and_forced_bumps(sample_config):

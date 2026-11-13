@@ -23,7 +23,10 @@ first; this skill only records where the sandbox diverges from them.
   do not switch, create, rename, or push to any other branch, and do not fetch other `arena/*`
   branches into it. Work outside that branch is not attributed to the session.
 - Push only with `git push origin arena/<session-id>-qgis-sdk`. Open every pull request from it
-  against `main`.
+  against `main`, through the repository's own command: `python -m automation.pr open` (or
+  `python -m automation.pr open --title ... --body-file ...`) pushes and creates it, and
+  `python -m automation.pr --pr <n>` follows the checks. A hand-written `gh pr create` plus a
+  `gh api -X PATCH` to repair a body is what that command replaces (decision-83).
 - `bash scripts/restore.sh` resolves a published bundle from the `sandbox/*` branch recorded in
   [pixi-sandbox.toml](../../../pixi-sandbox.toml) (`branch_prefix = "sandbox"`). That is independent
   of the session branch: restoring never means checking out another branch.
@@ -121,8 +124,11 @@ npx -y skills@1.7.2 list
 
 - Name the route for every check: `pixi run …` or the fallback. Never present a fallback result as
   the Pixi gate, and never infer a pass from "it should work".
-- When CI is needed, read it with `gh pr checks <n> --watch` or `gh run list --branch …` and quote
-  the conclusion. Inaccessible checks are reported as unverified, not as passing.
+- When CI is needed, read it with `python -m automation.pr --pr <n>` (breaks on the first failure
+  instead of waiting for every check), or `gh pr checks <n>` / `gh run list --branch …` and quote
+  the conclusion. Inaccessible checks are reported as unverified, not as passing - and job logs
+  are often unreadable from this sandbox, so a failing step is named from `gh run view --json jobs`
+  and diagnosed by reproducing the command, not by guessing.
 - A blocked install, a 403, an aborted restore, or a missing tool is a finding about the environment:
   report the exact command and error, then continue with what is reachable.
 

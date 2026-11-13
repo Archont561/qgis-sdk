@@ -57,7 +57,7 @@ A passing local check is not permission to merge. Before a merge:
 
 1. Inspect the final diff and confirm it matches the approved scope.
 2. Run the relevant tests/coverage/build checks and validate a conventional commit message through the repository's Convco hook/task when committing.
-3. Confirm the target branch/PR and required CI checks if GitHub access is available. Report inaccessible checks as unverified.
+3. Confirm the target branch/PR and required CI checks if GitHub access is available - `python -m automation.pr --pr <n>` for the checks, and remember that the release gate's own command must be a command a pull request already runs (`tests/scripts/test_ci.py` holds that, decision-84). Report inaccessible checks as unverified.
 4. Merge or push only when the user explicitly authorizes that action. Respect the repo's stated merge method; if none is specified, ask before choosing a non-obvious strategy. Never force-push or rewrite shared history without explicit authorization.
 5. If Git metadata, remote access, or permissions are unavailable, stop at merge readiness and explain the blocker.
 
