@@ -2,8 +2,12 @@
 id: decision-80
 title: Gate the Clean Code metrics against a committed budget instead of a clean tree
 date: '2026-11-10'
-status: accepted
+status: superseded
 ---
+> Superseded by [decision-82](decision-82%20-%20Gate-the-Clean-Code-metrics-on-a-clean-tree-instead-of-a-budget-file.md):
+> the campaign closed the budget to `{}` at PR #214, so the file was deleted and
+> the gate now fails on any finding.
+
 ## Context
 
 Ruff and Biome cover what can be decided locally, rule by rule: an unused import,

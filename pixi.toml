@@ -28,9 +28,9 @@ jsonschema = "==4.26.0"
 alint = "==0.20.1"
 pyyaml = "==6.0.3"
 # The clean-code layer: Rude plus the Clean Code rules it discovers as a plugin.
-# Configured in the root `pyproject.toml`; gated by `automation clean_code`
-# against `clean_code_budget.json`. 0.3.1 ships 59 rules; `pyproject.toml`
-# curates the deterministic structural subset this gate measures.
+# Configured in the root `pyproject.toml`; gated by `automation clean_code`, which
+# fails on any finding. 0.3.1 ships 59 rules; `pyproject.toml` curates the
+# deterministic structural subset this gate measures.
 rude = "==0.1a4"
 rude-clean-code = "==0.3.1"
 
@@ -67,6 +67,13 @@ cmd = "ruff check --fix"
 
 [feature.utils.tasks.ruff-format]
 cmd = "ruff format"
+
+# The Clean Code gate from a shell, so `lefthook.yml` and a contributor type the
+# same command: `pixi run -e default clean-code [path ...]`. With no path it
+# measures the whole source tree; with paths (the hook's staged files) it
+# measures those. `automation clean_code` is the same function through `doit`.
+[feature.utils.tasks.clean-code]
+cmd = "python -m automation.clean_code"
 
 [feature.utils.tasks.convco-check-message]
 args = ["message_file"]

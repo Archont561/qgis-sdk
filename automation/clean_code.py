@@ -1,27 +1,30 @@
-"""The Clean Code rules as a ratchet over a committed budget.
+"""The Clean Code rules as a gate: the tree is clean, or this fails.
 
-`rude` (the linter) and `rude-clean-code` (the plugin that adds it rules
-CC101-CC303) measure the shape of Python definitions: how long a function or a
-class is, how many parameters, returns and locals it has, how deep it nests, how
-long its outermost boolean chain is, how many branches it owns.
+`rude` (the linter) and `rude-clean-code` (the plugin that adds the CC0xx-CC3xx
+rules) measure the shape of Python definitions: how long a function or a class
+is, how many parameters, returns and locals it has, how deep it nests, how long
+its outermost boolean chain is, how many branches it owns.
 
 Every one of those rules reports at ``WARNING`` severity, so ``rude check``
-prints them and still exits 0. That makes Rude a report, not a gate. This module
-turns the report into a gate without pretending the tree is clean: the findings
-of the current tree are written to ``clean_code_budget.json``, and the gate fails
-when a run disagrees with that file **in either direction**.
+prints them and still exits 0. That makes Rude a report, not a gate; this module
+is what turns the report into one.
 
-- **Up** - a file grew a violation, or a new file arrived with findings. The
-  budget cannot absorb it: clean code is the starting point for new code.
-- **Down** - a violation was fixed, in whole or in part. The budget is lowered in
-  the same change. That is what makes the number a ratchet rather than a
-  ceiling: leaving headroom would let the next regression hide inside it.
+**There is no budget.** Until PR #214 the tree kept its findings in
+``clean_code_budget.json`` and the gate failed only when a run disagreed with
+that file, which is what let a 40-line function be a line item instead of a
+review comment. The campaign closed the file to ``{}`` and it is gone: a finding
+now fails, wherever it appears. New code starts clean because the tree is clean,
+not because the budget has headroom.
 
-``pixi run automation clean_code --rebaseline`` rewrites the file from the live
-run; the diff it produces is the review surface. Thresholds live in
-``[tool.rude]`` in the root ``pyproject.toml`` and are the plugin's own defaults,
-so a tightened threshold shows up as budget movement rather than as a config
-nobody reads.
+Three places enforce it, all of them this function:
+
+- ``pixi run automation clean_code`` - the whole tree, also the CI fast job;
+- the ``pre-commit`` hook in ``lefthook.yml`` - the staged files, which is the
+  same answer sooner, because every rule here is about one file;
+- ``pixi run automation check`` - the fast local gate, next to Ruff and Alint.
+
+``python -m automation.clean_code [path ...]`` is the same gate from a shell, so
+the hook needs no task runner and no Pixi task in between.
 """
 
 from __future__ import annotations
@@ -30,13 +33,11 @@ import json
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from automation.lib.shell import ROOT
-
-BUDGET = ROOT / "clean_code_budget.json"
-"""Where the current findings are written, relative to the repository root."""
 
 SCOPE = ("packages", "automation", "scripts", "tests", "examples")
 """The directories Rude reads.
@@ -49,18 +50,35 @@ in the checkout is TypeScript, prose, or a build artifact.
 RULES = "CC"
 """The plugin's rule prefix. Ruff owns F/E/W and McCabe ``C901``."""
 
+#: The thresholds a failure points at, for the message that names the fix.
+THRESHOLDS = "[tool.rude] in pyproject.toml"
+
 __all__ = [
-    "BUDGET",
     "RULES",
     "SCOPE",
-    "compare",
-    "diagnostics",
+    "THRESHOLDS",
+    "Finding",
+    "command",
+    "counts",
+    "findings",
     "gate",
+    "main",
     "parse",
-    "render",
 ]
 
-Budget = Mapping[str, Mapping[str, int]]
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """One clean-code diagnostic, at the place it was raised."""
+
+    path: str
+    line: int
+    column: int
+    code: str
+    message: str
+
+    def __str__(self) -> str:
+        return f"{self.path}:{self.line}:{self.column}: {self.code} {self.message}"
 
 
 def command(scope: Iterable[str] = SCOPE) -> list[str]:
@@ -75,31 +93,51 @@ def command(scope: Iterable[str] = SCOPE) -> list[str]:
     return ["rude", "check", "--select", RULES, "--format", "json", *scope]
 
 
-def parse(output: str) -> dict[str, dict[str, int]]:
-    """Count diagnostics per file and rule code.
+def _relative(path: str) -> str:
+    """``path`` as the repository sees it, so a message is a clickable one."""
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def parse(output: str) -> tuple[Finding, ...]:
+    """Every clean-code diagnostic in one ``--format json`` stream.
 
     ``--format json`` is one JSON object per line, so a project is a stream
     rather than a document and the parser never has to buffer it whole.
     """
-    counts: dict[str, dict[str, int]] = {}
+    found: list[Finding] = []
     for line in output.splitlines():
         if not line.strip():
             continue
-        diagnostic = json.loads(line)
-        code = str(diagnostic["code"])
+        record = json.loads(line)
+        code = str(record["code"])
         if not code.startswith(RULES):
             continue
-        path = Path(diagnostic["file"]).resolve()
-        try:
-            relative = path.relative_to(ROOT).as_posix()
-        except ValueError:
-            relative = path.as_posix()
-        per_file = counts.setdefault(relative, {})
-        per_file[code] = per_file.get(code, 0) + 1
-    return {path: dict(sorted(codes.items())) for path, codes in sorted(counts.items())}
+        found.append(
+            Finding(
+                path=_relative(record["file"]),
+                line=int(record["line"]),
+                column=int(record.get("column", 0)),
+                code=code,
+                message=str(record["message"]),
+            )
+        )
+    return tuple(found)
 
 
-def diagnostics(scope: Iterable[str] = SCOPE) -> dict[str, dict[str, int]] | None:
+def counts(found: Iterable[Finding]) -> dict[str, dict[str, int]]:
+    """Findings per file and rule code, both sorted."""
+    tally: dict[str, dict[str, int]] = {}
+    for finding in found:
+        per_file = tally.setdefault(finding.path, {})
+        per_file[finding.code] = per_file.get(finding.code, 0) + 1
+    return {path: dict(sorted(codes.items())) for path, codes in sorted(tally.items())}
+
+
+def findings(scope: Iterable[str] = SCOPE) -> tuple[Finding, ...] | None:
     """Run Rude over ``scope`` and return its findings, or ``None`` on failure."""
     executable = shutil.which("rude")
     if executable is None:
@@ -125,103 +163,45 @@ def diagnostics(scope: Iterable[str] = SCOPE) -> dict[str, dict[str, int]] | Non
     return parse(completed.stdout)
 
 
-def render(budget: Budget) -> str:
-    """The budget file's text: sorted, indented, with a trailing newline."""
-    document = {
-        path: dict(sorted(codes.items())) for path, codes in sorted(budget.items())
-    }
-    # Tabs, because `biome.json` formats this file's JSON and the checks run
-    # both: a budget written with spaces fails `biome check`.
-    return f"{json.dumps(document, indent=chr(9), sort_keys=True)}\n"
-
-
-def load(path: Path = BUDGET) -> dict[str, dict[str, int]]:
-    """Read the committed budget, or an empty one when the file is absent."""
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def compare(found: Budget, budget: Budget) -> list[str]:
-    """Describe every place where the run and the budget disagree."""
-    problems: list[str] = []
-    for path in sorted(set(found) | set(budget)):
-        now = found.get(path, {})
-        then = budget.get(path, {})
-        for code in sorted(set(now) | set(then)):
-            current = now.get(code, 0)
-            committed = then.get(code, 0)
-            if current == committed:
-                continue
-            if not committed:
-                problems.append(
-                    f"{path}: {code} {current} new violation(s); new code starts clean"
-                )
-            elif not current:
-                problems.append(
-                    f"{path}: {code} {committed} fixed; lower the budget to lock it in"
-                )
-            elif current > committed:
-                problems.append(
-                    f"{path}: {code} {committed} -> {current} (+{current - committed})"
-                )
-            else:
-                problems.append(
-                    f"{path}: {code} {committed} -> {current} (-{committed - current}); "
-                    "lower the budget to lock it in"
-                )
-    return problems
-
-
-def total(budget: Budget) -> int:
-    """How many violations the budget accounts for."""
-    return sum(sum(codes.values()) for codes in budget.values())
-
-
-def _rewrite(found: dict[str, dict[str, int]]) -> int:
-    """Write the live run out as the budget."""
-    BUDGET.write_text(render(found), encoding="utf-8")
+def _report(found: Sequence[Finding]) -> None:
+    """Name every finding, then the number of files that have to change."""
+    for finding in found:
+        print(f"clean_code: {finding}", file=sys.stderr)
     print(
-        f"clean_code: {total(found)} finding(s) in {len(found)} file(s) "
-        f"written to {BUDGET.relative_to(ROOT)}",
-        flush=True,
-    )
-    return 0
-
-
-def _enforce(found: dict[str, dict[str, int]]) -> int:
-    """Fail when the live run disagrees with the budget, in either direction."""
-    if not BUDGET.exists():
-        print(
-            f"clean_code: no {BUDGET.relative_to(ROOT)} - create it with "
-            "`pixi run automation clean_code --rebaseline`",
-            file=sys.stderr,
-        )
-        return 1
-    budget = load()
-    problems = compare(found, budget)
-    if not problems:
-        print(
-            f"clean_code: {total(found)} finding(s) in {len(found)} file(s), "
-            "exactly the committed budget",
-            flush=True,
-        )
-        return 0
-    for problem in problems:
-        print(f"clean_code: {problem}", file=sys.stderr)
-    print(
-        f"clean_code: {len(problems)} difference(s) from "
-        f"{BUDGET.relative_to(ROOT)}; fix the code, or re-baseline with "
-        "`pixi run automation clean_code --rebaseline` when the change is the "
-        "trade you mean to make",
+        f"clean_code: {len(found)} finding(s) in {len(counts(found))} file(s); "
+        "this gate has no budget - extract or split the definition",
         file=sys.stderr,
     )
+    print(f"clean_code: thresholds are {THRESHOLDS}", file=sys.stderr)
+
+
+def gate(scope: Iterable[str] = SCOPE) -> int:
+    """Fail on any clean-code finding in ``scope``; 0 only when there is none."""
+    found = findings(scope)
+    if found is None:
+        return 127 if shutil.which("rude") is None else 2
+    if not found:
+        print("clean_code: no findings", flush=True)
+        return 0
+    _report(found)
     return 1
 
 
-def gate(*, rebaseline: bool = False, scope: Iterable[str] = SCOPE) -> int:
-    """Compare the tree with the budget, or rewrite the budget from the tree."""
-    found = diagnostics(scope)
-    if found is None:
-        return 127 if shutil.which("rude") is None else 1
-    return _rewrite(found) if rebaseline else _enforce(found)
+def main(argv: Sequence[str] | None = None) -> int:
+    """Gate the paths given, or the whole source tree when none are given.
+
+    The pre-commit hook passes the staged files, and a path that no longer
+    exists is a file the commit deleted - there is nothing left to measure.
+    """
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        return gate()
+    paths = [item for item in arguments if Path(item).exists()]
+    if not paths:
+        print("clean_code: nothing staged to check", flush=True)
+        return 0
+    return gate(paths)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

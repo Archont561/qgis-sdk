@@ -17,14 +17,15 @@
 # findings are thresholds a refactor can close. The subjective INFO heuristics,
 # same-file DRY / SOLID indicators (CC4xx-CC6xx), opt-in architecture and
 # pattern boundaries (CC7xx-CC8xx), and documentation/comment hygiene (CC9xx)
-# are deliberately not part of this budget: CC403's repeated magic literals and
-# CC901's public docstrings alone would add ~4,300 findings and swamp the
-# ratchet. Those families are separate campaigns with their own judgement calls.
+# are deliberately not part of this gate: CC403's repeated magic literals and
+# CC901's public docstrings alone would add ~4,300 findings and swamp it. Those
+# families are separate campaigns with their own judgement calls.
 #
 # The thresholds below are the plugin's defaults, written out because the number
 # a definition may reach should be readable, not a default of an installed
-# package. Changing one moves the budget: `pixi run automation clean_code` fails
-# until `clean_code_budget.json` is re-baselined in the same change.
+# package. There is no budget: `pixi run automation clean_code` fails on any
+# finding, so lowering a threshold here fails until the code meets it. Raising
+# one is a decision, not a config edit - it widens what the whole tree may do.
 [tool.rude]
 select = ["CC0", "CC1", "CC2", "CC3"]
 ignore = [

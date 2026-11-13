@@ -34,14 +34,13 @@ def lint_python() -> int:
     return run(["ruff", "check", "."])
 
 
-def clean_code(*, rebaseline: bool = False) -> int:
-    """Gate the Clean Code rules against the committed budget.
+def clean_code() -> int:
+    """Fail on any Clean Code finding; the tree has no budget to absorb one.
 
-    Rude reports the metrics at WARNING severity and exits 0, so the gate is the
-    comparison, not the exit status: :mod:`automation.clean_code` fails on any
-    movement either way. ``rebaseline`` rewrites the budget from the live run.
+    Rude reports the metrics at WARNING severity and exits 0, so the gate is
+    :mod:`automation.clean_code` reading the report, not the exit status.
     """
-    return clean_code_rules.gate(rebaseline=rebaseline)
+    return clean_code_rules.gate()
 
 
 def format_check() -> int:

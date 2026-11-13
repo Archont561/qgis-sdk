@@ -1,3 +1,6 @@
+# The commit-time gates. Each command is one the contributor could type; the
+# wrapper only decides *when*. (`pixi run automation <task>` is the vocabulary
+# for everything that needs sequencing - see `dodo.py`.)
 pre-commit:
   parallel: false
   commands:
@@ -9,7 +12,13 @@ pre-commit:
       glob: "*.{py,pyi}"
       run: "pixi run -e default ruff-format -- {staged_files}"
       stage_fixed: true
-    03-biome:
+    # The Clean Code rules have no budget to absorb a finding (decision-82), so
+    # the staged files are checked here rather than discovered in CI. Every rule
+    # is about one file, which is what makes the staged set the whole answer.
+    03-clean-code:
+      glob: "*.{py,pyi}"
+      run: "pixi run -e default clean-code -- {staged_files}"
+    04-biome:
       glob: "*.{js,jsx,ts,tsx,json,jsonc}"
       run: "pixi run -e bun biome-fix -- {staged_files}"
       stage_fixed: true
@@ -21,5 +30,9 @@ commit-msg:
 
 pre-push:
   commands:
+    # The same gate over the whole tree: a pre-commit hook that was bypassed, a
+    # merge, or a file changed outside the editor is still caught before a run.
+    clean-code:
+      run: "pixi run -e default automation -- clean_code"
     coverage:
       run: "pixi run -e bun bun run coverage"

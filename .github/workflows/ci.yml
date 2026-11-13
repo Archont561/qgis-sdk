@@ -25,6 +25,66 @@ concurrency:
   cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
+  # The cheap gates, in their own job and first in the file. They finish in about
+  # a minute, so a formatting slip or a 31-line function fails the pull request
+  # before the native suite has installed QGIS, and `abort` is told to cancel the
+  # rest of the run from there. The heavy jobs keep their own expensive steps.
+  #
+  # The Clean Code rules live here because there is no budget to absorb a finding
+  # (decision-82): the gate fails on anything Rude reports, and the same gate is
+  # the `pre-commit` hook, so a contributor meets it before the push does.
+  fast:
+    name: Fast gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit range is the merge base of the pull request, which needs
+          # the history the default depth-1 checkout does not have.
+          fetch-depth: 0
+
+      - name: Set up Pixi
+        id: s02
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          environments: default
+          cache: true
+          locked: true
+
+      - name: Compute commit range
+        id: s03
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python -m automation.commits
+
+      - name: Check commit messages
+        id: s04
+        run: pixi run -e default automation -- check_commits
+
+      # `automation check` is the fast local gate: Ruff lint and format, the Clean
+      # Code rules, Alint and actionlint, in the order `dodo.py` declares. One
+      # command, so what CI runs and what a contributor runs are the same list.
+      - name: Run the fast gates
+        id: s05
+        run: pixi run -e default automation -- check
+
+      # The policy's own tests travel with the policy: a rule that stops matching
+      # anything is a test, not a lint result.
+      - name: Test repository policy
+        id: s06
+        run: pixi run -e default automation -- test_alint_policy
+
+      - name: Report the failed step
+        id: s18
+        if: failure()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: pixi run -e default automation -- report_steps
+
   linux:
     name: Linux checks
     runs-on: ubuntu-latest
@@ -51,34 +111,6 @@ jobs:
       - name: Install JavaScript dependencies
         id: s03
         run: pixi run -e default automation -- install_js
-
-      - name: Compute commit range
-        id: s04
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: python -m automation.commits
-
-      - name: Check commit messages
-        id: s05
-        run: pixi run -e default automation -- check_commits
-
-      - name: Lint Python
-        id: s06
-        run: pixi run -e default automation -- lint_python
-
-      - name: Check Python formatting
-        id: s07
-        run: pixi run -e default automation -- format_check
-
-      # Rude reports the Clean Code metrics (function and class size, parameter,
-      # return and local counts, nesting, boolean chains, branches) at WARNING
-      # severity and exits 0, so the exit status is not the gate - the comparison
-      # with `clean_code_budget.json` is. A finding above the budget fails, and so
-      # does a finding fixed without the budget being lowered in the same change.
-      - name: Check the Clean Code budget
-        id: s30
-        run: pixi run -e default automation -- clean_code
 
       # Every `*.feature` file is linted, and a feature file outside the
       # directories the check knows is a failure rather than a file that
@@ -157,18 +189,6 @@ jobs:
       - name: Lint and format TypeScript
         id: s12
         run: pixi run -e default automation -- biome
-
-      - name: Lint GitHub Actions
-        id: s13
-        run: pixi run -e default automation -- lint_actions
-
-      - name: Check repository policy
-        id: s25
-        run: pixi run -e default automation -- lint_repository
-
-      - name: Test repository policy
-        id: s26
-        run: pixi run -e default automation -- test_alint_policy
 
       # AGENTS.md is two documents in one: three regions are generated from the
       # repository (`agents-md` plus `scripts/agents/refresh.mjs`), and a stale
@@ -409,17 +429,17 @@ jobs:
   # Preserve the existing required `checks` status while ensuring a failed,
   # cancelled, or unexpectedly skipped Linux job cannot pass the aggregate.
   checks:
-    needs: [linux, coverage, lts]
+    needs: [fast, linux, coverage, lts]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Report Linux job results
+      - name: Report the Linux job results
         run: >-
-          echo "Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}; QGIS 3.44 LTS: ${{ needs.lts.result }}"
+          echo "Fast gates: ${{ needs.fast.result }}; Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}; QGIS 3.44 LTS: ${{ needs.lts.result }}"
 
       - name: Require every Linux job to succeed
-        if: ${{ needs.linux.result != 'success' || needs.coverage.result != 'success' || needs.lts.result != 'success' }}
+        if: ${{ needs.fast.result != 'success' || needs.linux.result != 'success' || needs.coverage.result != 'success' || needs.lts.result != 'success' }}
         run: exit 1
 
   # GitHub cancels matrix siblings only through `strategy.fail-fast`; there is no
