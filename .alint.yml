@@ -78,3 +78,24 @@ rules:
     kind: no_bidi_controls
     paths: ["**/*"]
     level: error
+
+  # `scripts/` is the sandbox entry point and nothing else. The repository's own
+  # tooling - the Pixi task graph, the release planner, the CI harness, the
+  # generated-file writers - lives in `automation/`, where it can be imported,
+  # tested and linted. A stray script here is the drift this rule prevents.
+  #
+  # Two rules because `dir_only_contains` matches direct children only: the
+  # first covers `scripts/<file>`, the second everything nested below it.
+  - id: scripts-are-restore-only
+    kind: dir_only_contains
+    select: "scripts"
+    allow: "restore.sh"
+    level: error
+    message: "Keep `scripts/` to `restore.sh`; put tooling in `automation/`."
+
+  - id: scripts-nest-restore-only
+    kind: dir_only_contains
+    select: "scripts/**"
+    allow: "restore.sh"
+    level: error
+    message: "Keep `scripts/` to `restore.sh`; put tooling in `automation/`."

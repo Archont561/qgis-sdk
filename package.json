@@ -19,10 +19,10 @@
 		"build": "turbo run build",
 		"test": "turbo run test",
 		"coverage": "turbo run coverage",
-		"agents": "bun scripts/agents/refresh.mjs",
-		"agents:check": "bun scripts/agents/refresh.mjs --check",
+		"agents": "bun automation/agents/refresh.mjs",
+		"agents:check": "bun automation/agents/refresh.mjs --check",
 		"lint:markdown": "markdownlint-cli2",
-		"readme": "node scripts/readme/generate.mjs",
+		"readme": "node automation/readme/generate.mjs",
 		"sdk:generate": "pixi run -e build python packages/qgis-sdk-python/scripts/generate_contract.py packages/qgis-sdk-typescript/tests/contracts/generated/schemas && bun run --filter '@archont561/qgis-sdk' generate:contract-types && pixi run -e build python packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
 	},
 	"devDependencies": {

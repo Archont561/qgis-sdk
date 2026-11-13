@@ -44,7 +44,7 @@ had no equivalent.
    that is briefly down. The published site's links stay with
    `docs-link-check`, which resolves them against the exported files.
 5. **The landing page is generated.** `bun run readme` renders `README.md`
-   from `scripts/readme/template.ejs` with readme-md-generator, taking the
+   from `automation/readme/template.ejs` with readme-md-generator, taking the
    repository URL, homepage, license and badges from `package.json`. The
    template keeps the decision-29 shape, so the generated page passes the same
    test as before, and a moved repository or a renamed license is one edit

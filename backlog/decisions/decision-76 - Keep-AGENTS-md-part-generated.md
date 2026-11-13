@@ -27,7 +27,7 @@ whose environments are Pixi and whose JavaScript runs on Bun.
    Overview, Project structure and Git & PR workflow - sit between markers and
    belong to the generator. Every rule stays outside them, written by hand, and
    the tool's own contract guarantees it is never touched.
-2. **Correct the detection in one place.** `scripts/agents/refresh.mjs` runs the
+2. **Correct the detection in one place.** `automation/agents/refresh.mjs` runs the
    generator and then rewrites the two things it gets wrong here: the stack
    sentence (Python and TypeScript, Pixi and Bun) and the stub sentences it
    leaves where it cannot tell. The correction is a wrapper rather than a fork so
