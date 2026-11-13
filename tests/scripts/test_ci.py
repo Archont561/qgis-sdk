@@ -14,10 +14,13 @@ import pytest
 
 #: The Linux job's named gates, as this checkout declares them. Kept as data
 #: beside the assertions so one added step changes one line, not a function.
-EXPECTED_LINUX_CHECKS = {
+EXPECTED_FAST_CHECKS = {
     "Check commit messages": "pixi run -e default automation -- check_commits",
-    "Lint Python": "pixi run -e default automation -- lint_python",
-    "Check Python formatting": "pixi run -e default automation -- format_check",
+    "Run the fast gates": "pixi run -e default automation -- check",
+    "Test repository policy": "pixi run -e default automation -- test_alint_policy",
+}
+
+EXPECTED_LINUX_CHECKS = {
     "Test release tooling": "pixi run -e default automation -- test_scripts",
     "Verify the scoped versions and the shared contract": "pixi run -e default automation -- release_verify_versions",
     "Check the generated bridge clients are current": "pixi run -e default automation -- check_generated",
@@ -25,9 +28,6 @@ EXPECTED_LINUX_CHECKS = {
     "Test the reference plugin through qgis-sdk test": "pixi run -e default automation -- reference_example",
     "Test the reference page on the workspace bridge": "pixi run -e default automation -- test_reference_web",
     "Lint and format TypeScript": "pixi run -e default automation -- biome",
-    "Lint GitHub Actions": "pixi run -e default automation -- lint_actions",
-    "Check repository policy": "pixi run -e default automation -- lint_repository",
-    "Test repository policy": "pixi run -e default automation -- test_alint_policy",
     "Typecheck TypeScript": "pixi run -e default automation -- typecheck",
     "Build the qgis-sdk-ui Storybook": "pixi run -e default automation -- storybook",
 }
@@ -257,14 +257,48 @@ def _assert_aggregate_gate(jobs: dict) -> None:
     """The aggregate job turns any failed required row into a red check."""
     assert "needs" not in jobs["linux"] and "needs" not in jobs["coverage"]
     aggregate = jobs["checks"]
-    assert set(aggregate["needs"]) == {"linux", "coverage", "lts"}
+    assert set(aggregate["needs"]) == {"fast", "linux", "coverage", "lts"}
     assert aggregate["if"] == "${{ always() }}"
     gate = aggregate["steps"][-1]
     assert gate["if"] == (
-        "${{ needs.linux.result != 'success' || needs.coverage.result != 'success'"
+        "${{ needs.fast.result != 'success' || needs.linux.result != 'success'"
+        " || needs.coverage.result != 'success'"
         " || needs.lts.result != 'success' }}"
     )
     assert gate["run"] == "exit 1"
+
+
+def _assert_fast_job(jobs: dict) -> None:
+    """The cheap gates own a job of their own, and finish in about a minute.
+
+    The Clean Code rules have no budget to absorb a finding (decision-82), so a
+    31-line function has to fail where a pull request learns about it first:
+    the job that installs nothing but the locked Python environment.
+    """
+    fast = jobs["fast"]
+    assert fast["name"] == "Fast gates"
+    assert fast["timeout-minutes"] == 10
+    steps = {step.get("name"): step for step in fast["steps"]}
+    for name, command in EXPECTED_FAST_CHECKS.items():
+        assert steps[name]["run"] == command
+    # The commit range needs the merge base, which a depth-1 checkout lacks, and
+    # the range is what decides whether every commit message may be shipped.
+    assert steps["Checkout"]["with"]["fetch-depth"] == 0
+    assert (
+        steps["Compute commit range"]["env"]["BASE_SHA"]
+        == "${{ github.event.pull_request.base.sha || github.event.before }}"
+    )
+    assert steps["Set up Pixi"]["with"]["environments"] == "default"
+    assert steps["Report the failed step"]["if"] == "failure()"
+    assert steps["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
+
+
+def _assert_no_gate_runs_twice(jobs: dict) -> None:
+    """A gate moved to the fast job must not still run in the Linux job."""
+    fast = {step.get("name") for step in jobs["fast"]["steps"]}
+    linux = {step.get("name") for step in jobs["linux"]["steps"]}
+    assert fast & linux == {"Checkout", "Set up Pixi", "Report the failed step"}
+    assert "Check the Clean Code budget" not in linux | fast
 
 
 def _assert_pixi_setup(jobs: dict) -> None:
@@ -287,13 +321,8 @@ def _assert_linux_steps(checks: dict) -> None:
         assert checks[name]["run"] == command
 
 
-def _assert_checkout_and_native(checks: dict) -> None:
-    """The commit range and the offscreen native row keep their settings."""
-    assert checks["Checkout"]["with"]["fetch-depth"] == 0
-    assert (
-        checks["Compute commit range"]["env"]["BASE_SHA"]
-        == "${{ github.event.pull_request.base.sha || github.event.before }}"
-    )
+def _assert_native_row(checks: dict) -> None:
+    """The offscreen native row keeps its settings."""
     assert (
         checks["Test the native layers offscreen"]["run"]
         == "pixi run -e default automation -- native"
@@ -858,9 +887,11 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     coverage = {step.get("name"): step for step in jobs["coverage"]["steps"]}
     lts = {step.get("name"): step for step in jobs["lts"]["steps"]}
     _assert_aggregate_gate(jobs)
+    _assert_fast_job(jobs)
+    _assert_no_gate_runs_twice(jobs)
     _assert_pixi_setup(jobs)
     _assert_linux_steps(checks)
-    _assert_checkout_and_native(checks)
+    _assert_native_row(checks)
     _assert_lts_install(lts)
     _assert_lts_job(jobs, lts)
     _assert_coverage_run(coverage)

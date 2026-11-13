@@ -44,18 +44,20 @@ repository: how long functions and classes are, how many parameters, returns and
 locals they take, how deep they nest, how long their boolean chains and how many
 branches they own (CC101-CC303). The thresholds are `[tool.rude]` in the root
 `pyproject.toml`; the rules report at `WARNING` severity, so Rude exits 0
-whatever it finds and the gate is the comparison, not the exit status.
+whatever it finds and the gate is the command below, not the exit status.
 
 ```sh
-pixi run automation clean_code               # the tree against the budget
-pixi run automation clean_code --rebaseline  # rewrite the budget from the tree
+pixi run automation clean_code            # the whole tree
+python -m automation.clean_code PATH...   # only the files a change touches
 ```
 
-`clean_code_budget.json` is the committed count per file and rule, and the check
-fails on any movement: a file that grows a violation, a new file that arrives
-with one, and a violation fixed without the budget being lowered in the same
-change. New code starts clean. Lowering the budget is part of the fix, which is
-what makes the number a ratchet instead of a ceiling.
+There is no budget and no baseline: any finding fails the gate, and the answer
+to a finding is to extract the definition until the rule is satisfied, not to
+record a number that absorbs it ([decision-82](../../backlog/decisions/decision-82%20-%20Gate-the-Clean-Code-metrics-on-a-clean-tree-instead-of-a-budget-file.md)).
+It is enforced where a change is made: lefthook runs it on the staged files at
+commit, on the whole tree before a push, and the `Fast gates` CI job runs it
+before the jobs that install QGIS start. Raising a threshold is a new decision
+record, not a config edit.
 
 The full account of the layer is in the workspace guide
 (`apps/docs/guides/doc-14`); Ruff keeps its own `F`/`E`/`W` and `C901` sets in
@@ -72,7 +74,7 @@ The full account of the layer is in the workspace guide
 
 - [Documentation site](https://archont561.github.io/qgis-sdk/contributing/workspace/documentation-site/) - the Fumadocs site, its generator, the exports and the link check.
 - [The documentation policy](../README.md) - what has to be true before a change is considered documented, and the checks that enforce it.
-- `bun run readme` - regenerate the root landing page from `scripts/readme/template.ejs`.
+- `bun run readme` - regenerate the root landing page from `automation/readme/template.ejs`.
 - `bun run agents` - regenerate the marked regions of `AGENTS.md` with `@eugeniughelbur/agents-md`; `bun run agents:check` is what CI runs.
 
 ## Release

@@ -103,26 +103,28 @@ uploads; no workflow change is needed once it accepts reports again.
 
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
-| All local gates | `pixi run automation check` | Ruff lint, Ruff format, the clean-code budget, Alint and actionlint in one run |
-| Clean code | `pixi run automation clean_code` | The Clean Code metrics against `clean_code_budget.json`; `--rebaseline` rewrites it |
+| All local gates | `pixi run automation check` | Ruff lint, Ruff format, the Clean Code rules, Alint and actionlint in one run |
+| Clean code | `pixi run automation clean_code` | The Clean Code rules over the tree; any finding fails it |
 | Test | `pixi run -e bun bun run test` | Source tests, no coverage gate |
 | Coverage | `pixi run -e bun bun run coverage` | Separate 90% Python/TypeScript coverage gates |
 | Build | `pixi run -e bun bun run build` | Build workspace packages |
 | Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
 
-**Clean code is measured, and the measurement is a budget.** Rude runs the
-`rude-clean-code` plugin's rules over `packages`, `automation`, `scripts`,
-`tests` and `examples`: function and class length, parameter, return and local
-counts, nesting depth, boolean-chain length and branch count (CC101-CC303), for
-every Python definition in the repository. Those rules report at `WARNING`
-severity and `rude check` exits 0 whatever they find, so the numbers alone are a
-report rather than a gate. `automation clean_code` compares them with
-`clean_code_budget.json` and fails on any difference: a file that grows a
-violation fails, a new file has to start clean, and a violation fixed without
-the budget being lowered in the same change fails too, because headroom is where
-the next regression hides. `pixi run automation clean_code --rebaseline`
-rewrites the budget from the live run, and that diff is the review surface. The
-thresholds are `[tool.rude]` in the root `pyproject.toml`; Ruff keeps its own
+**Clean code is a gate with no budget.** Rude runs the `rude-clean-code`
+plugin's rules over `packages`, `automation`, `scripts`, `tests` and
+`examples`: function and class length, parameter, return and local counts,
+nesting depth, boolean-chain length and branch count (CC101-CC303), plus the
+module, class and naming rules (CC0xx-CC2xx) - for every Python definition in
+the repository. Those rules report at `WARNING` severity and `rude check` exits
+0 whatever they find, so the numbers alone are a report rather than a gate.
+`automation clean_code` turns them into one: it fails on any finding, so there
+is no committed count to move and no `--rebaseline` to run. The fix is the same
+shape every time - a long function is split, a long parameter list becomes a
+context object - and a threshold is raised only by a new decision record
+(decision-82 supersedes the budget of decision-80), not by editing
+`[tool.rude]` under pressure. The gate runs where the change is made: lefthook
+on the staged files at commit, on the whole tree before a push, and the `Fast
+gates` CI job before the jobs that install QGIS start. Ruff keeps its own
 `F`/`E`/`W` and `C901` sets in `ruff.toml`, so nothing is reported twice.
 | Lint Python | `pixi run automation lint_python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run automation format_check` | Ruff format check across the whole checkout |
@@ -143,7 +145,7 @@ The Gherkin scenarios are linted as well as run. `pixi run automation check_gher
 
 The Pixi environments pin one interpreter, the newest, so `requires-python = ">=3.11"` would otherwise be a claim nothing tests. tox is the other half: `tox.ini` names one environment per version from the floor to that pin, installs the runtime and the tools from their source trees plus the kit's `dev` extra, and runs the same QGIS-free suite. `skip_missing_interpreters = false` makes an absent interpreter a failure rather than a quiet skip, and `.github/workflows/compat.yml` gives each version its own job with an exact `tox` from PyPI - deliberately outside Pixi, because the point is to test the interpreter GitHub provides. `tests/scripts/test_python_versions.py` holds the three copies of the range together: the manifests' floor, `tox.ini`'s envlist and the workflow matrix. tox is not a Pixi dependency, so a local run needs `pip install tox==4.67.13` first.
 
-`AGENTS.md` is part-generated. Three regions - the overview, the top-level layout and the default branch - sit between `agents-md` markers and are written by `@eugeniughelbur/agents-md` through `scripts/agents/refresh.mjs`; everything outside the markers is written by hand and is never touched. The wrapper exists because the generator reads the workspace root's `package.json` and reports a Node repository with `npm` commands, which is not this tree: the script replaces that stack sentence, drops the stub sentences it leaves where it cannot tell, and adds where the SDK's code actually lives. CI runs `bun run agents:check`, which fails when a refresh would change the file.
+`AGENTS.md` is part-generated. Three regions - the overview, the top-level layout and the default branch - sit between `agents-md` markers and are written by `@eugeniughelbur/agents-md` through `automation/agents/refresh.mjs`; everything outside the markers is written by hand and is never touched. The wrapper exists because the generator reads the workspace root's `package.json` and reports a Node repository with `npm` commands, which is not this tree: the script replaces that stack sentence, drops the stub sentences it leaves where it cannot tell, and adds where the SDK's code actually lives. CI runs `bun run agents:check`, which fails when a refresh would change the file.
 
 Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 
@@ -262,7 +264,7 @@ tracked:
   that routes to the canonical page rather than restating it. That layer is
   checked by `.github/workflows/docs-check.yml` (markdownlint-cli2, Vale,
   lychee) and keeps the landing page generated: `bun run readme` renders
-  `README.md` from `scripts/readme/template.ejs`.
+  `README.md` from `automation/readme/template.ejs`.
 - `.github/workflows/docs.yml` builds and link-checks the site on pull
   requests that touch it, the guides or the UI package, and deploys it from
   `main` with `actions/deploy-pages`. The Pixi `bun` environment pins Bun

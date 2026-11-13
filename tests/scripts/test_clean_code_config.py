@@ -2,8 +2,11 @@
 
 `rude-clean-code` 0.3.1 ships 59 rules. The gate deliberately measures only the
 deterministic structural WARNING rules in CC0-CC3; a future version bump must
-not silently widen the budget by enabling heuristics, architecture or doc
-hygiene families. These guards read the three files that make that decision.
+not silently widen the gate by enabling heuristics, architecture or doc hygiene
+families. These guards read the three files that make that decision.
+
+The gate has no budget: `clean_code_budget.json` is gone (PR #214 closed it to
+`{}`), so every threshold here is a limit the tree already meets.
 """
 
 from __future__ import annotations
@@ -55,7 +58,7 @@ def test_only_deterministic_structural_rules_are_selected() -> None:
     assert rules["CC004"]["max_relative_depth"] == 2
     assert rules["CC207"]["max_bases"] == 3
     assert rules["CC311"]["max_lines"] == 20
-    # The nine thresholds that built the original budget are unchanged.
+    # The nine thresholds the campaign began with are unchanged.
     assert rules["CC101"]["max_lines"] == 30
     assert rules["CC102"]["max_parameters"] == 5
     assert rules["CC104"]["max_locals"] == 10

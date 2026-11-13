@@ -62,19 +62,8 @@ def task_format_check():
 
 
 def task_clean_code():
-    """Gate the Clean Code metrics against the committed budget."""
-    return {
-        "actions": [action(tasks.clean_code)],
-        "params": [
-            {
-                "name": "rebaseline",
-                "long": "rebaseline",
-                "default": False,
-                "type": bool,
-                "help": "rewrite the budget from the live run",
-            }
-        ],
-    }
+    """Fail on any Clean Code finding; there is no budget."""
+    return {"actions": [action(tasks.clean_code)]}
 
 
 def task_lint_repository():
