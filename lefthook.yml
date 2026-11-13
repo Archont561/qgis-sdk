@@ -1,15 +1,25 @@
 # The commit-time gates. Each command is one the contributor could type; the
 # wrapper only decides *when*. (`pixi run automation <task>` is the vocabulary
 # for everything that needs sequencing - see `dodo.py`.)
+#
+# Every command here skips `.agents/`: it holds skill bundles copied from
+# upstream, kept for their instructions rather than as this repository's source,
+# and some of these hooks rewrite what they are given (`stage_fixed`). The same
+# tree is outside `SCOPE` in `automation/clean_code.py` (which calls it
+# `VENDORED`) and excluded in `ruff.toml` and `biome.json`, so the hook and the
+# gates agree on what is source; `tests/scripts/test_clean_code.py` holds the
+# four files to that one answer.
 pre-commit:
   parallel: false
   commands:
     01-ruff-lint:
       glob: "*.{py,pyi}"
+      exclude: ".agents/**"
       run: "pixi run -e default ruff-lint -- {staged_files}"
       stage_fixed: true
     02-ruff-format:
       glob: "*.{py,pyi}"
+      exclude: ".agents/**"
       run: "pixi run -e default ruff-format -- {staged_files}"
       stage_fixed: true
     # The Clean Code rules have no budget to absorb a finding (decision-82), so
@@ -17,9 +27,11 @@ pre-commit:
     # is about one file, which is what makes the staged set the whole answer.
     03-clean-code:
       glob: "*.{py,pyi}"
+      exclude: ".agents/**"
       run: "pixi run -e default clean-code -- {staged_files}"
     04-biome:
       glob: "*.{js,jsx,ts,tsx,json,jsonc}"
+      exclude: ".agents/**"
       run: "pixi run -e bun biome-fix -- {staged_files}"
       stage_fixed: true
 

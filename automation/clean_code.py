@@ -44,7 +44,20 @@ SCOPE = ("packages", "automation", "scripts", "tests", "examples")
 
 Named here rather than in the configuration because Rude has no exclude
 setting: what is linted is what is passed on the command line. Everything else
-in the checkout is TypeScript, prose, or a build artifact.
+in the checkout is TypeScript, prose, a build artifact, or the vendored tree
+below.
+"""
+
+VENDORED = (".agents",)
+"""Trees of somebody else's code, which nothing in this repository measures.
+
+`.agents/` holds skill bundles copied in from upstream - 59 files, 10 of them
+Python - kept for their instructions, not as this repository's source. Because
+Rude has no exclude setting, the only way to keep them out of a run is not to
+name them: they are absent from `SCOPE`, `ruff.toml` keeps them out of the
+whole-checkout Ruff run (which would otherwise reformat upstream code),
+`biome.json` excludes the same tree, and `lefthook.yml` never passes one over.
+`_measured` is the last line of defence for a path handed over by hand.
 """
 
 RULES = "CC"
@@ -57,6 +70,7 @@ __all__ = [
     "RULES",
     "SCOPE",
     "THRESHOLDS",
+    "VENDORED",
     "Finding",
     "command",
     "counts",
@@ -91,6 +105,31 @@ def command(scope: Iterable[str] = SCOPE) -> list[str]:
     gate measures; the two must stay in sync.
     """
     return ["rude", "check", "--select", RULES, "--format", "json", *scope]
+
+
+def _vendored(path: str | Path) -> bool:
+    """Whether ``path`` sits inside a tree this gate never measures."""
+    try:
+        relative = Path(path).resolve().relative_to(ROOT)
+    except (OSError, ValueError):
+        return False
+    return bool(relative.parts) and relative.parts[0] in VENDORED
+
+
+def _measured(scope: Iterable[str]) -> list[str]:
+    """The paths to hand Rude, with the vendored tree dropped and the root widened.
+
+    A directory that merely contains a vendored tree - `.` or the checkout root -
+    is widened back to `SCOPE`, because Rude would otherwise read `.agents/` and
+    report on code this repository does not own.
+    """
+    wanted: list[str] = []
+    for item in scope:
+        resolved = Path(item).resolve()
+        if _vendored(resolved):
+            continue
+        wanted.extend(SCOPE if resolved == ROOT else [item])
+    return wanted
 
 
 def _relative(path: str) -> str:
@@ -147,7 +186,7 @@ def findings(scope: Iterable[str] = SCOPE) -> tuple[Finding, ...] | None:
             file=sys.stderr,
         )
         return None
-    arguments = command(scope)
+    arguments = command(_measured(scope))
     print(f"automation: {' '.join(arguments)}", flush=True)
     completed = subprocess.run(
         arguments, cwd=ROOT, check=False, capture_output=True, text=True
@@ -196,7 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not arguments:
         return gate()
-    paths = [item for item in arguments if Path(item).exists()]
+    paths = [item for item in arguments if Path(item).exists() and not _vendored(item)]
     if not paths:
         print("clean_code: nothing staged to check", flush=True)
         return 0

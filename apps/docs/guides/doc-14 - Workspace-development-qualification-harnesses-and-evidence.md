@@ -128,6 +128,12 @@ classes), so the number cannot drift back up while nobody is looking. The gate r
 on the staged files at commit, on the whole tree before a push, and the `Fast
 gates` CI job before the jobs that install QGIS start. Ruff keeps its own
 `F`/`E`/`W` and `C901` sets in `ruff.toml`, so nothing is reported twice.
+`.agents/` is not this repository's source - it holds skill bundles copied from
+upstream, kept for their instructions - so it is outside every linter rather
+than inside this one: absent from the measured scope, `".agents"` in
+`ruff.toml`'s `extend-exclude`, `!!**/.agents` in `biome.json`, and `exclude` on
+every lefthook command. A path named by hand is dropped before Rude sees it,
+because Rude has no exclude setting of its own.
 | Lint Python | `pixi run automation lint_python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run automation format_check` | Ruff format check across the whole checkout |
 | Gherkin lint | `pixi run automation lint_features` | gherlint over every `*.feature` file; a scenario outside `FEATURE_DIRECTORIES` fails |
