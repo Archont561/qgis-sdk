@@ -2644,5 +2644,36 @@ side, and `archont561-qgis-sdk-0.8.0-rc.1.tgz`, `qgis-sdk-0.8.0-rc.1.tgz` and
 
 The rehearsal is the whole publish chain minus the uploads: the same stamp, the
 same verification and the same artifact set the stable tags will produce. The
-stable pair - `python-v0.11.0` and `ts-v0.8.0` - is still uncut and waits for
-"publish"; both tags land on `0737994`, the merge commit, on that one word.
+stable pair waited on the word "publish"; it was spent on 2026-11-13, on a later
+commit than the rehearsal, and the record is below.
+
+### Released afterwards (2026-11-13)
+
+The owner's "publish next version" cut both stable tags, but a day apart and on
+different commits, because the first one exposed a defect in the train.
+
+| Tag | Tagged on | `release.yml` run | Outcome |
+| --- | --- | --- | --- |
+| `python-v0.11.0` | `f3fd460` | [43415396998](https://github.com/Archont561/qgis-sdk/actions/runs/43415396998) | `build`, `pypi` and `conda` succeeded - PyPI serves `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` **0.11.0** as `latest`, and the three prefix.dev uploads ran. `github-release` **failed** (exit 3), so the tag has no release page of its own |
+| `ts-v0.8.0` | `592eb77` | [43422826319](https://github.com/Archont561/qgis-sdk/actions/runs/43422826319) | every job green: `build`, `npm`, `github-packages` and `github-release`. npm serves `@archont561/qgis-sdk` **0.8.0** as `latest` (12:12:38Z) and the unscoped alias `qgis-sdk` at the same version; the release carries `archont561-qgis-sdk-0.8.0.tgz`, `qgis-sdk-0.8.0.tgz` and `SHA256SUMS` |
+
+**The train had been broken since the doit migration (`130a32b`), and nothing
+noticed.** `dodo.py` declared its four list parameters with `"default": None`,
+and `doit` builds such a parameter by appending to the declared default, so
+every command line that set one died with `AttributeError: 'NoneType' object
+has no attribute 'append'` and exited 3. Two smaller defects sat behind it:
+`doit` collects one value per flag (`--paths a b` reads `b` as a task name), and
+`release_checksums` forwarded its files as `--paths` where the release CLI takes
+them positionally. The failing step is the last one in the train, so every
+earlier job went green after the wheels had already been published - and no
+pull request runs `release.yml`, so the release path had no rehearsal of its own
+between the migration and this release (PR #222 fixed the three defects and
+pinned them in `tests/scripts/test_automation_cli.py`).
+
+**The `python-v0.11.0` page.** Because the tag points at `f3fd460`, where the
+defect still lives, re-running its `release.yml` could not succeed. The page was
+created by hand for the existing tag with the changelog the train would have
+generated, and states that the artifacts are on PyPI and in the channel rather
+than attached to it - no wheels, no `.conda` files, no `SHA256SUMS` are attached
+there. Nothing was re-tagged: the wheels PyPI accepted are the ones built from
+`f3fd460`.
