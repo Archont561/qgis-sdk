@@ -88,7 +88,19 @@ def test_mounting_without_qgis_is_refused_by_name(
     """On a machine without Qt the error names the component, not a Qt internal."""
     from qgis_sdk.ui.components import NATIVE_CATALOGUE
 
-    monkeypatch.delitem(sys.modules, NATIVE_CATALOGUE, raising=False)
+    # The catalogue is a package, so dropping its own entry is not enough: the
+    # `._widgets` submodule would stay cached and be reused, its Qt imports
+    # would never run again, and the mount would succeed on the Qt this process
+    # had already loaded. The whole subtree goes, which is what a machine
+    # without Qt looks like from here - and what makes the test independent of
+    # whether anything imported the catalogue before it.
+    prefix = f"{NATIVE_CATALOGUE}."
+    for name in [
+        module
+        for module in sys.modules
+        if module == NATIVE_CATALOGUE or module.startswith(prefix)
+    ]:
+        monkeypatch.delitem(sys.modules, name, raising=False)
     for module in ("qgis.PyQt", "qgis.core", "qgis.gui", "PyQt6", "PyQt5"):
         monkeypatch.setitem(sys.modules, module, None)
 

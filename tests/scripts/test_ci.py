@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,25 @@ EXPECTED_FAST_CHECKS = {
     "Check commit messages": "pixi run -e default automation -- check_commits",
     "Run the fast gates": "pixi run -e default automation -- check",
     "Test repository policy": "pixi run -e default automation -- test_alint_policy",
+}
+
+#: The release gate's command in a job of its own (decision-84): the suite the
+#: pre-release train runs, which is both layers in one interpreter.
+EXPECTED_LAYERS_CHECKS = {
+    "Test both layers in one process": "pixi run -e default automation -- test_python",
+}
+
+#: The tasks `check` composes, so a gate that runs `check` covers them without
+#: naming them. Read from `dodo.py` by the test below; this is the fallback the
+#: assertion would have found before `check` existed.
+CHECK_TASKS = frozenset(
+    {"lint_python", "format_check", "clean_code", "lint_repository", "lint_actions"}
+)
+
+#: The release gate names these tasks, and no pull-request job runs them by that
+#: name; each is asserted to run as the command given here instead.
+GATE_TASK_ELSEWHERE = {
+    "test_js": "bun test packages/qgis-sdk-typescript/tests",
 }
 
 EXPECTED_LINUX_CHECKS = {
@@ -257,12 +277,19 @@ def _assert_aggregate_gate(jobs: dict) -> None:
     """The aggregate job turns any failed required row into a red check."""
     assert "needs" not in jobs["linux"] and "needs" not in jobs["coverage"]
     aggregate = jobs["checks"]
-    assert set(aggregate["needs"]) == {"fast", "linux", "coverage", "lts"}
+    assert set(aggregate["needs"]) == {
+        "fast",
+        "linux",
+        "coverage",
+        "layers",
+        "lts",
+    }
     assert aggregate["if"] == "${{ always() }}"
     gate = aggregate["steps"][-1]
     assert gate["if"] == (
         "${{ needs.fast.result != 'success' || needs.linux.result != 'success'"
         " || needs.coverage.result != 'success'"
+        " || needs.layers.result != 'success'"
         " || needs.lts.result != 'success' }}"
     )
     assert gate["run"] == "exit 1"
@@ -291,6 +318,26 @@ def _assert_fast_job(jobs: dict) -> None:
     assert steps["Set up Pixi"]["with"]["environments"] == "default"
     assert steps["Report the failed step"]["if"] == "failure()"
     assert steps["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
+
+
+def _assert_layers_job(jobs: dict) -> None:
+    """Both halves of the suite are proven together, on every pull request.
+
+    The pre-release gate has always run the whole suite in one process, and no
+    pull-request job did, so an order-dependent test could only fail on `main`
+    (decision-84). This row is that command, unchanged.
+    """
+    layers = jobs["layers"]
+    assert layers["name"] == "Both layers in one process"
+    assert layers["timeout-minutes"] == 20
+    steps = {step.get("name"): step for step in layers["steps"]}
+    for name, command in EXPECTED_LAYERS_CHECKS.items():
+        assert steps[name]["run"] == command
+    # The native backend is opt-in by flag; the gate runs the suite without it,
+    # so this row must too, or the two are not the command they claim to share.
+    assert "env" not in steps["Test both layers in one process"]
+    assert steps["Set up Pixi"]["with"]["environments"] == "default"
+    assert steps["Report the failed step"]["if"] == "failure()"
 
 
 def _assert_no_gate_runs_twice(jobs: dict) -> None:
@@ -888,6 +935,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     lts = {step.get("name"): step for step in jobs["lts"]["steps"]}
     _assert_aggregate_gate(jobs)
     _assert_fast_job(jobs)
+    _assert_layers_job(jobs)
     _assert_no_gate_runs_twice(jobs)
     _assert_pixi_setup(jobs)
     _assert_linux_steps(checks)
@@ -1089,3 +1137,68 @@ def test_the_linter_policy_file_is_where_the_linter_reads_it():
     disabled = tomllib.loads(policy.read_text(encoding="utf-8"))["reporting"]["disable"]
     # Exactly the one message the Background rule cannot satisfy both ways.
     assert disabled == ["missing-given-step"]
+
+
+def _automation_tasks(text: str) -> set[str]:
+    """Every `automation -- <task>` a workflow file runs."""
+    return set(re.findall(r"automation -- ([a-z_]+)", text))
+
+
+def _check_composition(root: Path) -> set[str]:
+    """The tasks `pixi run automation check` runs, read from `dodo.py`."""
+    import ast
+
+    tree = ast.parse((root / "dodo.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef) or node.name != "task_check":
+            continue
+        for inner in ast.walk(node):
+            if not isinstance(inner, ast.Dict):
+                continue
+            for key, value in zip(inner.keys, inner.values, strict=True):
+                if isinstance(key, ast.Constant) and key.value == "task_dep":
+                    return {element.value for element in value.elts}
+    raise AssertionError("dodo.py declares no task_check task_dep list")
+
+
+def _release_gate_tasks(root: Path) -> set[str]:
+    """The tasks `autorelease`'s `Run quality gate` step names."""
+    import yaml
+
+    release = yaml.safe_load(
+        (root / ".github/workflows/autorelease.yml").read_text(encoding="utf-8")
+    )
+    gate = next(
+        step["run"]
+        for step in release["jobs"]["plan-and-tag"]["steps"]
+        if step.get("name") == "Run quality gate"
+    )
+    return _automation_tasks(gate)
+
+
+def test_the_release_gate_runs_what_a_pull_request_runs():
+    """`autorelease` may not be the first place a command ever runs.
+
+    The pre-release gate ran `test_python` - both layers in one process - while
+    every pull-request job ran the halves separately. Three "a machine without
+    QGIS" tests then passed in both lanes and failed on `main`, and the only
+    evidence was a red `autorelease` whose log could not be read (decision-84).
+    The invariant this holds: every task the gate names is a task some pull
+    request already ran, or has a named stand-in that does.
+    """
+    root = SCRIPT.parents[2]
+    pull_requests = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    gated = _release_gate_tasks(root)
+
+    covered = _automation_tasks(pull_requests) | _check_composition(root)
+    uncovered = gated - covered - set(GATE_TASK_ELSEWHERE)
+    assert not uncovered, (
+        "the release gate runs tasks no pull request runs: "
+        f"{sorted(uncovered)}; add the command to ci.yml or a stand-in to "
+        "GATE_TASK_ELSEWHERE"
+    )
+    for task, command in GATE_TASK_ELSEWHERE.items():
+        assert task in gated, f"{task} is no longer gated"
+        assert command in pull_requests, (
+            f"{task} is claimed to run as {command!r}, which ci.yml does not run"
+        )

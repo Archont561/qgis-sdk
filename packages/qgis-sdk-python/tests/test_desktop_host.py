@@ -108,8 +108,21 @@ def bare_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
     ``qgis_is_running()`` is a process-wide fact, so a process that started a
     ``QgsApplication`` for the ``qgis`` layer would otherwise hand ``host()``
     the native context and make "without QGIS" untestable.
+
+    The patch goes on ``_lifecycle``, the module that *defines* it and whose
+    ``default_context``/``desktop_surfaces`` are the two callers of it. The
+    function is also re-exported by the package ``__init__``, and patching that
+    name - which is what this fixture used to do - binds nothing the caller
+    reads: ``from ._lifecycle import qgis_is_running`` makes a second name for
+    one object, so the host went on seeing a running QGIS and only a process
+    that had started one (the combined suite, never a lane on its own) showed
+    the difference. The assertion below is what turns that back into a failure
+    here, in every lane, if the function moves again.
     """
-    monkeypatch.setattr("qgis_sdk.adapters.desktop.qgis_is_running", lambda: False)
+    from qgis_sdk.adapters.desktop import _lifecycle
+
+    monkeypatch.setattr(_lifecycle, "qgis_is_running", lambda: False)
+    assert _lifecycle.qgis_is_running() is False
 
 
 def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
