@@ -857,8 +857,22 @@ jobs:
           # A TypeScript-only tag downloads no wheel, so dist/ does not exist
           # yet; ts-v0.2.0 failed here after npm had already published.
           mkdir -p dist
-          pixi run -e build automation -- release_checksums --out dist/SHA256SUMS --paths "${assets[@]}"
+          # `doit` builds a list parameter from a repeated flag, one value each
+          # (`--paths a --paths b`), so the assets are expanded into flags here
+          # rather than passed as `--paths a b`: the second form is read as a
+          # task name and doit exits 3 before anything is hashed. python-v0.11.0
+          # failed in this step for exactly that reason, after PyPI had already
+          # accepted the wheels.
+          asset_flags=()
+          for asset in "${assets[@]}"; do
+            asset_flags+=(--asset "$asset")
+          done
+          path_flags=()
+          for asset in "${assets[@]}"; do
+            path_flags+=(--paths "$asset")
+          done
+          pixi run -e build automation -- release_checksums --out dist/SHA256SUMS "${path_flags[@]}"
           pixi run -e build automation -- release_github_release \
             --tag "$RELEASE_TAG" \
             --body-file notes/release-notes.md \
-            --asset "${assets[@]}" dist/SHA256SUMS
+            "${asset_flags[@]}" --asset dist/SHA256SUMS

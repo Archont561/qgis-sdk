@@ -122,8 +122,14 @@ def release_verify_python(dist: str = "dist/pypi") -> int:
 
 
 def release_checksums(paths: Sequence[str], out: str = "SHA256SUMS") -> int:
-    """Write a ``SHA256SUMS`` file over the release assets."""
-    return _release_command("checksums", out=out, paths=list(paths))
+    """Write a ``SHA256SUMS`` file over the release assets.
+
+    The files are positional on the command line rather than behind a flag, so
+    this one does not go through `_release_command`: forwarding ``--paths``
+    produced an argument the release parser never declared, which is how a
+    release failed after PyPI had already accepted the wheels.
+    """
+    return release.main(["checksums", "--out", out, *paths])
 
 
 def release_github_release(
