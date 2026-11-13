@@ -87,7 +87,7 @@ def task_check_commits():
 
 
 def task_check():
-    """Run the fast local gates: Ruff, clean code, Alint and actionlint."""
+    """Run the fast local gates: Ruff lint and format, Clean Code, Alint, actionlint."""
     return {
         "actions": [],
         "task_dep": [
@@ -104,7 +104,7 @@ def task_check():
 
 
 def task_test_python():
-    """Run the QGIS-free suite of the Python kit."""
+    """Run the whole kit suite: both layers, one process, as the release gate does."""
     return {"actions": [action(tasks.test_python)]}
 
 

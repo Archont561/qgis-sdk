@@ -285,7 +285,7 @@ tracked:
 - Run `pixi run -e bun bun run test` for local tests and `pixi run -e bun bun run coverage` for the coverage gates used by CI and pre-push.
 - Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change.
 - Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
-- Lefthook runs staged-file Ruff/Biome checks, Convco validates commit messages, and pre-push runs the coverage task.
+- Lefthook runs staged-file Ruff, Biome and Clean Code checks, Convco validates commit messages, and pre-push runs the Clean Code gate over the whole tree plus the coverage task. `pixi run automation pr_open` and `pr_watch` are the way a pull request is opened and followed (decision-83).
 
 Commit messages use Conventional Commits form (validated by Convco). Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
 

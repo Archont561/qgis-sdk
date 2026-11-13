@@ -359,6 +359,12 @@ What landed:
 
 **What is left.** 166 findings in 115 files: CC101 98, CC102 31, CC104 28, CC303 8, CC202 1. The 31 CC102 are mostly Typer CLI commands and declared algorithm/pytest signatures whose parameter list *is* the contract; the four-finding `test_parameter_kinds.py` and `services/conftest.py` are the worst remaining files. The long CC101/CC104 tail now lives mostly in QGIS-gated native tests, and the eight CC303 branch ladders need one dispatch design per site. AC 4 (threshold review) and the one CC202 remain the two different cuts after the long tail.
 
+**2026-11-13 - closed out by decision-82.** The budget reached `{}` at PR #214 and
+the file was then deleted: the gate now fails on any finding, so "the budget is
+empty" and "the tree is clean" are one statement instead of two. No slice is left
+to run; a new finding is a fix in the change that introduced it. AC #2's "lowers
+`clean_code_budget.json` in the same commit" is history, not a rule.
+
 <!-- SECTION:NOTES:END -->
 
 

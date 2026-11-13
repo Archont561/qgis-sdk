@@ -138,7 +138,7 @@ def test_alint_policy() -> int:
 
 
 def test_python() -> int:
-    """Run the QGIS-free suite of the Python kit."""
+    """Run the whole kit suite: both layers, one process, as the release gate does."""
     return run(
         [
             sys.executable,

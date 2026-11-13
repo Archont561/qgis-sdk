@@ -69,7 +69,7 @@ request that touches documentation and are required before merging.
 
 | Layer | Tool | Scope | Config | Runs in |
 | :-- | :-- | :-- | :-- | :-- |
-| Repository conventions | [alint](https://alint.org) | the whole repository | `.alint.yml` | `Linux checks` |
+| Repository conventions | [alint](https://alint.org) | the whole repository | `.alint.yml` | `Fast gates` |
 | Markdown structure | markdownlint-cli2 | `docs/`, `README.md`, `AGENTS.md` | `.markdownlint-cli2.jsonc` | `Documentation` |
 | Writing style | [Vale](https://vale.sh) | `docs/`, `README.md` | `.vale.ini`, `docs/vale/styles` | `Documentation` |
 | Links and references | [lychee](https://github.com/lycheeverse/lychee) | `docs/`, `README.md`, `AGENTS.md` | `.lychee.toml` | `Documentation` |
