@@ -1,9 +1,10 @@
 ---
 id: TASK-165
 title: Put the compatibility on the landing page, sync the Storybook theme, and make the first-plugin guide a single walk
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 10:20'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 ordinal: 165000

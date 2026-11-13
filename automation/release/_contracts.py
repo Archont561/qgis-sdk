@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Callable, Sequence
+import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib import request as urlrequest
@@ -316,11 +317,27 @@ def plan_options(args, requested: str, milestone_tag: str) -> PlanOptions:
     )
 
 
+def plan_changelog_directory(env: Mapping[str, str] | None = None) -> Path:
+    """Where a plan writes its changelog: the runner's temp dir, never the tree.
+
+    The workflow sets ``RUNNER_TEMP`` and hands the path to `tag --message-file`
+    in a later step. A local run has no such variable, and writing to the
+    current directory left an untracked `qgis-sdk-release-changelog.md` in the
+    checkout after every plan - the file is a build artifact of one command, so
+    it goes to this process's temp directory instead.
+    """
+    values = os.environ if env is None else env
+    configured = values.get("RUNNER_TEMP", "").strip()
+    if configured:
+        return Path(configured)
+    return Path(tempfile.mkdtemp(prefix="qgis-sdk-release-"))
+
+
 def write_plan_changelog(plan: Plan) -> str:
     """Write the changelog where the workflow expects it, and name the file."""
     if not plan.changelog:
         return ""
-    target = Path(os.environ.get("RUNNER_TEMP", ".")) / "qgis-sdk-release-changelog.md"
+    target = plan_changelog_directory() / "qgis-sdk-release-changelog.md"
     target.write_text(plan.changelog, encoding="utf-8")
     return str(target.resolve())
 

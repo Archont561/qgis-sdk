@@ -1,9 +1,10 @@
 ---
 id: TASK-166
 title: Adopt Rude and the Clean Code plugin as the source-shape linter, gated by a committed budget
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 11:40'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 ordinal: 166000

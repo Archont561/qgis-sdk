@@ -1,9 +1,10 @@
 ---
 id: TASK-163
 title: Move repository automation into a doit task graph
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-09 23:20'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 ordinal: 163000

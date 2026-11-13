@@ -1,9 +1,10 @@
 ---
 id: TASK-164
 title: Add the FAQ, migration paths, agent onboarding, roadmap and registry stats to the site
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 09:10'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 ordinal: 164000

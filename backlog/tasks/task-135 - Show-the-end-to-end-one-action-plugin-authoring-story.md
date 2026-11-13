@@ -1,10 +1,10 @@
 ---
 id: TASK-135
 title: Show the end-to-end one-action plugin authoring story
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-28 16:24'
-updated_date: '2026-10-29 09:11'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 references:
@@ -39,7 +39,9 @@ Use one real example project to demonstrate the same action through QGIS-free te
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-The durable first-plugin guide follows the real examples/simple buffer action through the Python declaration, fake-service test, native Form.for_action and generated typed web client. Regression tests check verbatim source excerpts and execute the documented default, native and vanilla-web scaffold commands, including the actual ui.py and bridge.schema.ts paths. The guide distinguishes QGIS 4/experimental status, adapters versus scaffolds, fakes and native requirements. Local validation: reference pure check/test 20 passed; reference web tests 6 passed; native scaffold check/test/build produced an installable ZIP (4 pure tests passed); real offscreen QGIS Desktop scaffold ZIP smoke passed and qgis-sdk dev reload test passed. Documentation built with 7050 internal links, zero broken. Workspace coverage 6/6, Python 1991 passed, 56 skipped, 7 deselected, 96.90%. Keep In Progress pending merge.
+The durable first-plugin guide follows the real examples/simple buffer action through the Python declaration, fake-service test, native Form.for_action and generated typed web client. Regression tests check verbatim source excerpts and execute the documented default, native and vanilla-web scaffold commands, including the actual ui.py and bridge.schema.ts paths. The guide distinguishes QGIS 4/experimental status, adapters versus scaffolds, fakes and native requirements. Local validation: reference pure check/test 20 passed; reference web tests 6 passed; native scaffold check/test/build produced an installable ZIP (4 pure tests passed); real offscreen QGIS Desktop scaffold ZIP smoke passed and qgis-sdk dev reload test passed. Documentation built with 7050 internal links, zero broken. Workspace coverage 6/6, Python 1991 passed, 56 skipped, 7 deselected, 96.90%. Kept In Progress pending the merge at the time; the guide and its regression tests are on `main` now, so the task closed with them (see the note below).
 
 The reference project native QGIS target also passed 7 tests, including its native buffer dialog and direct action path; this is offscreen Linux evidence, not visible GUI or other-platform qualification.
+
+**2026-11-13 - closed.** `apps/docs/content/docs/guides/test-a-plugin.md` and the regression tests that hold it are on `main`, every acceptance criterion is proven, and the status now matches the work. Nothing about the guide changed here - only its bookkeeping.
 <!-- SECTION:NOTES:END -->

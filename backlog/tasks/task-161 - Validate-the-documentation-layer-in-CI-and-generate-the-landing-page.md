@@ -1,9 +1,10 @@
 ---
 id: TASK-161
 title: Validate the documentation layer in CI and generate the landing page
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-09 19:26'
+updated_date: '2026-11-13 09:15'
 labels: []
 dependencies: []
 priority: medium
