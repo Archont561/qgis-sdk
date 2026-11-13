@@ -209,9 +209,9 @@ def task_run_log():
             {
                 "name": "command",
                 "long": "command",
-                "default": None,
+                "default": [],
                 "type": list,
-                "help": "the command to run, repeated or space-separated",
+                "help": "the command to run; repeat the flag per argument",
             },
         ],
     }
@@ -616,7 +616,7 @@ def task_release_build_python():
             {
                 "name": "package",
                 "long": "package",
-                "default": None,
+                "default": [],
                 "type": list,
                 "help": "package directories to build",
             },
@@ -655,9 +655,9 @@ def task_release_checksums():
             {
                 "name": "paths",
                 "long": "paths",
-                "default": None,
+                "default": [],
                 "type": list,
-                "help": "assets to hash",
+                "help": "assets to hash; repeat the flag per asset",
             },
         ],
     }
@@ -685,9 +685,9 @@ def task_release_github_release():
             {
                 "name": "asset",
                 "long": "asset",
-                "default": None,
+                "default": [],
                 "type": list,
-                "help": "assets to upload",
+                "help": "assets to upload; repeat the flag per asset",
             },
             {
                 "name": "repo",

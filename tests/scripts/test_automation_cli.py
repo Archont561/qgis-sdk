@@ -13,6 +13,7 @@ testable - without it.
 from __future__ import annotations
 
 import ast
+import importlib
 import re
 import tomllib
 from pathlib import Path
@@ -99,6 +100,71 @@ def test_the_workflows_only_call_registered_tasks() -> None:
     assert unknown == set(), (
         f"workflows call tasks that do not exist: {sorted(unknown)}"
     )
+
+
+def task_params(name: str) -> list[dict]:
+    """The parameters a task declaration offers, as ``doit`` reads them."""
+    module = importlib.import_module("dodo")
+    declaration = getattr(module, f"task_{name}")()
+    return list(declaration.get("params", ()))
+
+
+def test_a_list_parameter_defaults_to_a_list() -> None:
+    """`doit` appends to the default, so ``None`` cannot be one.
+
+    A list parameter declared ``"default": None`` made every command line that
+    set it die inside `doit` with ``AttributeError: 'NoneType' object has no
+    attribute 'append'`` and exit 3, which is how the 0.11.0 release failed
+    after PyPI had already accepted the wheels: the registration step is the
+    last one in the train, so nothing before it noticed.
+    """
+    module = importlib.import_module("dodo")
+    names = [
+        node.name.removeprefix("task_")
+        for node in _tree(DODO).body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("task_")
+    ]
+    wrong = [
+        f"{name}.{param['name']}"
+        for name in names
+        for param in getattr(module, f"task_{name}")().get("params", ())
+        if param.get("type") is list and not isinstance(param.get("default"), list)
+    ]
+    assert wrong == [], f"list parameters doit cannot collect: {wrong}"
+
+
+def test_a_list_parameter_is_collected_from_repeated_flags() -> None:
+    """The one form `doit` accepts, pinned: `--paths a --paths b`.
+
+    `--paths a b` reads ``b`` as a task name and exits 3, so every caller -
+    `release.yml` included - has to repeat the flag. This exercises the same
+    parser `doit` runs, so the rule is proven here rather than at a release.
+    """
+    cmdparse = pytest.importorskip("doit.cmdparse")
+    params = task_params("release_checksums")
+    parser = cmdparse.TaskParse([cmdparse.CmdOption(param) for param in params])
+    parsed, rest = parser.parse(["--paths", "a.whl", "--paths", "b.conda"])
+    assert parsed["paths"] == ["a.whl", "b.conda"]
+    assert rest == []
+
+
+def test_the_release_checksums_task_sends_the_paths_positionally() -> None:
+    """The release CLI takes the files as arguments, so the adapter must too.
+
+    Forwarding them as ``--paths`` produced ``unrecognized arguments`` from
+    argparse after the wheels were already published - the same failure, one
+    layer down.
+    """
+    from automation.tasks import _release
+
+    seen: list[list[str]] = []
+    original = _release.release.main
+    try:
+        _release.release.main = lambda argv: seen.append(list(argv)) or 0
+        assert _release.release_checksums(["a.whl", "b.conda"], "sums") == 0
+    finally:
+        _release.release.main = original
+    assert seen == [["checksums", "--out", "sums", "a.whl", "b.conda"]]
 
 
 def test_the_registry_is_reachable_from_pixi() -> None:

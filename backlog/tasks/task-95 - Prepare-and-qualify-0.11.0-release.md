@@ -4,7 +4,7 @@ title: Prepare and qualify 0.11.0 release
 status: In Progress
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-07 12:30'
+updated_date: '2026-11-13 11:50'
 labels: []
 milestone: m-10
 dependencies:
@@ -217,4 +217,42 @@ builds 90 pages with the new anchor resolving to `/python/migration/v0-11/
 (excluding the two environmental `test_app_build` cases), `tests/scripts` 380,
 `clean_code` and `alint` clean across 11 rules. No name was renamed and no
 threshold moved.
+**2026-11-13 - the stable pair, first half: `python-v0.11.0` is on PyPI.** The
+owner said "publish next version". `autorelease` was dispatched on `main`
+`f3fd460` with `scope=python bump=minor suffix=` (run 43414905727): `plan-and-tag`
+planned `python-v0.11.0` from `python-v0.10.0` ("forced release from
+python-v0.10.0"), ran the locked quality gates and the packaging check, pushed
+the annotated tag and handed it to `release.yml`. That run (43415396998) built
+the three wheels and the Conda package, and both registries took them -
+PyPI serves `qgis-sdk` 0.11.0 as `latest` with `qgis-sdk-runtime` and
+`qgis-sdk-tools` beside it, and the Conda upload succeeded. `ts-v0.8.0` is not
+cut yet; npm still serves 0.7.0.
+
+**`github-release` failed, and the release train had been broken since the doit
+migration.** The last step of `release.yml` exited 3 after the wheels had
+already been published, so `python-v0.11.0` has no GitHub Release and no
+attached artifacts. Three defects, all found by running the command rather than
+reading it:
+
+* `dodo.py` declared all four list parameters with `"default": None`.
+  `doit` builds such a parameter by appending to the declared default
+  (`cmdparse.parse_only`), so any command line that set one died with
+  `AttributeError: 'NoneType' object has no attribute 'append'` and exited 3.
+* Even with a list default, `doit` collects one value per flag: `--paths a b`
+  reads `b` as a task name. Every caller has to repeat the flag.
+* `release_checksums` forwarded its files as `--paths`, but the release CLI
+  takes them positionally (`nargs="+"`), so `_release_command` would have
+  produced an argument argparse never declared.
+
+The fix is the three files that decided it: `dodo.py` defaults to `[]` and says
+in each help string that the flag repeats, `automation/tasks/_release.py` builds
+`checksums --out X a b`, and `release.yml` expands the assets into repeated
+flags. `tests/scripts/test_automation_cli.py` now pins the contract - a list
+parameter must default to a list, `doit`'s own parser must collect the repeated
+form, and the adapter must send the paths positionally - and the first two
+tests fail on the tree that failed the release.
+
+Nothing about the version moved: the wheels PyPI accepted are the ones built
+from `f3fd460`, and the fix touches no package source.
+
 <!-- SECTION:NOTES:END -->
