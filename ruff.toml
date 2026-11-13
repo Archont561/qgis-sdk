@@ -32,6 +32,11 @@ extend-exclude = [
   # Vendored Python inside a Conda prefix, if a prefix is materialised in-tree.
   "**/site-packages",
   "**/share/qgis/python",
+  # Skill bundles copied from upstream. Their Python is somebody else's source,
+  # so it is neither checked nor reformatted here; `lefthook.yml`, `biome.json`
+  # and `VENDORED` in `automation/clean_code.py` draw the same line, and a test
+  # holds the four files to it.
+  ".agents",
   # Ruff formats Python code blocks found inside Markdown. This repository's Markdown
   # is mostly backlog evidence (task notes, decisions, spike records), which is a
   # historical record rather than source, so a formatter must not rewrite it. The

@@ -12,13 +12,18 @@ whole-tree run says is the CI job's business, not this file's.
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 from automation import clean_code
 
 ROOT = clean_code.ROOT
+
+#: The one exclusion every lint hook and gate has to carry for `.agents/`.
+VENDORED_GLOB = ".agents/**"
 
 
 def diagnostic(path: str, line: int, code: str, message: str) -> str:
@@ -131,6 +136,58 @@ def test_the_scope_is_source_not_artifacts() -> None:
         "examples",
     )
     assert all((ROOT / directory).is_dir() for directory in clean_code.SCOPE)
+
+
+def test_the_vendored_skills_are_never_measured(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`.agents/` is upstream code: outside `SCOPE`, and refused when named.
+
+    The hook is the only caller that hands over paths, and it now excludes the
+    tree, but `python -m automation.clean_code .agents/...` is a thing somebody
+    can type. Both routes have to come out the same, and so does `.` - which
+    contains the tree and must not become a way to measure it.
+    """
+    assert ".agents" not in set(clean_code.SCOPE)
+    assert clean_code.VENDORED == (".agents",)
+
+    called: list[object] = []
+    monkeypatch.setattr(
+        clean_code, "gate", lambda scope=clean_code.SCOPE: called.append(scope) or 0
+    )
+    vendored = ROOT / ".agents" / "skills" / "session" / "evals" / "evals.json"
+
+    assert clean_code.main([str(vendored)]) == 0
+    assert called == []
+    assert "nothing staged to check" in capsys.readouterr().out
+
+    assert clean_code._measured(["."]) == list(clean_code.SCOPE)
+    assert clean_code._measured([str(vendored), "automation"]) == ["automation"]
+
+
+def test_every_linter_agrees_the_vendored_skills_are_out_of_scope() -> None:
+    """Four files decide what is source; a fifth answer is a bug.
+
+    The hook, Ruff and Biome each see a different set of files, so each needs
+    its own exclusion, and one of them drifting is how upstream code gets
+    reformatted again. Ruff and Biome are read as configuration and the hook as
+    YAML, so a renamed key or a lost line fails here rather than in a commit.
+    """
+    ruff = tomllib.loads((ROOT / "ruff.toml").read_text(encoding="utf-8"))
+    assert ".agents" in ruff["extend-exclude"]
+
+    biome = json.loads((ROOT / "biome.json").read_text(encoding="utf-8"))
+    assert "!!**/.agents" in biome["files"]["includes"]
+
+    hook = yaml.safe_load((ROOT / "lefthook.yml").read_text(encoding="utf-8"))
+    commands = hook["pre-commit"]["commands"]
+    assert commands, "the hook has no commands to check"
+    missing = [
+        name
+        for name, command in commands.items()
+        if command.get("exclude") != VENDORED_GLOB
+    ]
+    assert missing == [], f"these hooks would lint or reformat .agents/: {missing}"
 
 
 def test_the_command_selects_only_the_plugin_rules() -> None:
