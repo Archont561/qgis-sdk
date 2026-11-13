@@ -26,6 +26,14 @@
 # package. There is no budget: `pixi run automation clean_code` fails on any
 # finding, so lowering a threshold here fails until the code meets it. Raising
 # one is a decision, not a config edit - it widens what the whole tree may do.
+#
+# Two numbers are lower than the default because the whole tree already meets
+# them (measured 2026-11-13, TASK-167): no module is longer than 396 lines and no
+# class longer than 199. The other eleven are still the defaults because the tree
+# sits exactly on them - 72 functions are 30 lines, 177 take five parameters, 3
+# try blocks span 20 - so the next move is a refactor, not a number. To re-measure
+# one, set it to 1 in a copy of this table, run `rude check` over `packages
+# automation scripts tests examples`, and read the maximum off the findings.
 [tool.rude]
 select = ["CC0", "CC1", "CC2", "CC3"]
 ignore = [
@@ -38,7 +46,8 @@ ignore = [
 
 # Modules.
 [tool.rude.rules.CC001]
-max_lines = 400
+# 396: the longest module there is, measured 2026-11-13 (was the 400 default).
+max_lines = 396
 
 [tool.rude.rules.CC004]
 max_relative_depth = 2
@@ -58,7 +67,8 @@ max_locals = 10
 
 # Classes.
 [tool.rude.rules.CC201]
-max_lines = 200
+# 199: the longest class there is, measured 2026-11-13 (was the 200 default).
+max_lines = 199
 
 [tool.rude.rules.CC202]
 max_methods = 15

@@ -122,7 +122,9 @@ is no committed count to move and no `--rebaseline` to run. The fix is the same
 shape every time - a long function is split, a long parameter list becomes a
 context object - and a threshold is raised only by a new decision record
 (decision-82 supersedes the budget of decision-80), not by editing
-`[tool.rude]` under pressure. The gate runs where the change is made: lefthook
+`[tool.rude]` under pressure. The two limits the tree already meets below the
+plugin's default are pinned to what it meets (396-line modules, 199-line
+classes), so the number cannot drift back up while nobody is looking. The gate runs where the change is made: lefthook
 on the staged files at commit, on the whole tree before a push, and the `Fast
 gates` CI job before the jobs that install QGIS start. Ruff keeps its own
 `F`/`E`/`W` and `C901` sets in `ruff.toml`, so nothing is reported twice.
