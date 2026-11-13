@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ._bindings import (
     DesktopBindings,
+    surface_id_of,
 )
 from ._entries import (
     DOCK_VISIBLE_SETTING,
@@ -24,4 +25,5 @@ __all__ = [
     "OpenDock",
     "SurfaceHost",
     "dock_visible_setting",
+    "surface_id_of",
 ]

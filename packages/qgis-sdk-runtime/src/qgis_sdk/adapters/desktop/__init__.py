@@ -9,6 +9,7 @@ from ._host import (
 from ._lifecycle import (
     CONTEXT_FACTORY_ATTRIBUTE,
     ContextFactory,
+    DesktopHostOptions,
     DesktopLifecycleAdapter,
     MessageBarNotifications,
     QgisSdkHostError,
@@ -22,6 +23,7 @@ __all__ = [
     "CONTEXT_FACTORY_ATTRIBUTE",
     "ContextFactory",
     "DesktopHost",
+    "DesktopHostOptions",
     "DesktopLifecycleAdapter",
     "MessageBarNotifications",
     "QgisSdkHostError",

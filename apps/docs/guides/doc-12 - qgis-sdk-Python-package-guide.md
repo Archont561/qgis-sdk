@@ -249,12 +249,13 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `declarations` | `QgisSdkPlugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
-| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, their frozen slots records `PluginServices`, `UiServices`, `AlgorithmServices` and `JobServices`, `Host`, `ResourceScope`, `PluginRuntime`, and lifecycle errors; a context reports the host that built it as `ctx.host` (`desktop`, `server`, `app`) instead of inferring one from an `iface` (decision-52) |
+| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, one frozen slots record per context for the services it carries (`PluginServices`, `UiServices`, `AlgorithmServices`, `JobServices`; `ServerServices` lives in `qgis_sdk.server`), `Host`, `ResourceScope`, `PluginRuntime`, and lifecycle errors; a context reports the host that built it as `ctx.host` (`desktop`, `server`, `app`) instead of inferring one from an `iface` (decision-52) |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, `JobSubscription`, `Jobs` and `JobRegistry` - scoped local jobs over the step scheduler, named by the plugin's `jobs` declaration, with typed handles and owner-bound delivery |
 | `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - providers explicitly added to an application |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types |
+| `testing` | The fakes and their declarations: `FakeLayers` with `register(VectorLayerDeclaration)`, `register_layer(OtherLayerDeclaration)` and `register_annotation`, `FakeAlgorithms` over one `FakeAlgorithmSetup` with `declare_output(DeclaredOutput)` and `FakeConnections` with `ConnectionDeclaration` |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -2298,23 +2299,28 @@ is the same read ref it needed for a vector.
 
 ### Testing without QGIS
 
-`FakeLayers.register_layer(source, name=..., kind=..., crs=..., **detail)` declares
-a dataset of one of the five kinds, where `detail` is exactly the fields that
-kind's description carries; a misspelt or missing one is refused where the test
-arranged it. `register_annotation(name, item_count=..., crs=...)` declares what
-opening that annotation layer answers - and opening an undeclared name creates an
-empty one, as the native adapter does.
+`FakeLayers.register(declaration)` takes one `VectorLayerDeclaration(source,
+name=..., geometry_type=..., field_names=...)`, and
+`register_layer(declaration)` takes one `OtherLayerDeclaration(source, name=...,
+kind=..., crs=..., detail={...})` for any of the five kinds that are not vector
+or raster. `detail` is exactly the fields that kind's description carries; a
+misspelt or missing one is refused where the test arranged it.
+`register_annotation(name, item_count=..., crs=...)` declares what opening that
+annotation layer answers - and opening an undeclared name creates an empty one,
+as the native adapter does.
 
 ```python
+from qgis_sdk.testing import FakeLayers, OtherLayerDeclaration
+
 layers = FakeLayers(scope, rasters=rasters)
 layers.register_layer(
-    Path("lagoon.2dm"),
-    name="lagoon",
-    kind="mesh",
-    crs="EPSG:4326",
-    vertex_count=4,
-    face_count=2,
-    group_count=1,
+    OtherLayerDeclaration(
+        Path("lagoon.2dm"),
+        name="lagoon",
+        kind="mesh",
+        crs="EPSG:4326",
+        detail={"vertex_count": 4, "face_count": 2, "group_count": 1},
+    )
 )
 layers.open_mesh(Path("lagoon.2dm")).vertex_count   # 4
 layers.open_point_cloud(Path("lagoon.2dm"))
@@ -4552,10 +4558,123 @@ host manifest grew from 63 operations and 22 grants to 84 and 29; the
 TypeScript side of the same release is in
 [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#080-migration-notes).
 
-**Nothing a 0.10 project does today stops working.** Every name, signature
-and refusal a 0.10 release answered still answers the same way; there is no
-renamed method, no moved import and no rewritten manifest in this minor. Two
-surfaces widen, and a type checker notices one of them before a test does.
+**One kind of change breaks 0.10 code, and it is deliberate.** Every capability,
+refusal and manifest a 0.10 release answered still answers the same way -
+nothing was renamed, nothing moved between modules - but the constructors that
+took a capability per keyword now take one record, so a 0.10 host or test that
+wrote `PluginContext(..., layers=layers, project=project)` gets a `TypeError`
+the first time it runs. That is
+[decision-81](../../../backlog/decisions/decision-81%20-%20Pass-a-constructor-one-record-instead-of-its-fields-as-keyword-parameters.md),
+applied to the last constructors that still broke the clean-code limits. The
+section below is the whole of it; everything after it widens rather than
+breaks.
+
+### Contexts and fakes take one record
+
+A context used to take its capabilities one keyword at a time - `PluginContext`
+took eighteen, `UiContext` seventeen - so a capability had to be named three
+times (the slot list, the name tuple and the constructor) and a name that lagged
+failed inside a handler instead of at construction. Each one now takes a frozen
+slots record whose fields are exactly the capabilities it carries:
+
+| 0.10 form | 0.11 form | Record lives in |
+| :-- | :-- | :-- |
+| `PluginContext(notifications, scope, layers=..., project=..., host=...)` | `PluginContext(notifications, scope, PluginServices(...))` | `qgis_sdk.core` |
+| `UiContext(notifications, view, scope, canvas=..., streams=...)` | `UiContext(notifications, view, scope, UiServices(...))` | `qgis_sdk.core` |
+| `AlgorithmContext(progress, cancellation, scope, algorithms=...)` | `AlgorithmContext(progress, cancellation, scope, AlgorithmServices(...))` | `qgis_sdk.core` |
+| `JobContext(progress, cancellation, scope, workers=...)` | `JobContext(progress, cancellation, scope, JobServices(...))` | `qgis_sdk.core` |
+| `ServerContext(scope, request, response, layers=...)` | `ServerContext(scope, request, response, ServerServices(...))` | `qgis_sdk.server` |
+
+Everything except the container is unchanged: `PluginContext` is still
+constructed once per plugin, `notifications` and `scope` stay positional, the
+capabilities keep their names, `ctx.has(name)` and `ctx.capabilities` answer the
+same way, and reading a capability the host did not supply still raises
+`QgisSdkUnsupportedCapabilityError` by name. `host`, which used to be a
+keyword beside the services, is a field of `PluginServices` and `UiServices`,
+because it is what the host says about itself when it hands over its services
+(decision-52 point 4). `with_services(**services)` is unchanged - it builds the
+record for you.
+
+Moving a 0.10 call site is mechanical:
+
+```python
+# 0.10
+context = PluginContext(
+    notifications,
+    scope,
+    layers=layers,
+    project=project,
+    settings=settings,
+    desktop=desktop,
+    host=Host.DESKTOP,
+)
+
+# 0.11
+from qgis_sdk.core import Host, PluginContext, PluginServices
+
+context = PluginContext(
+    notifications,
+    scope,
+    PluginServices(
+        host=Host.DESKTOP,
+        layers=layers,
+        project=project,
+        settings=settings,
+        desktop=desktop,
+    ),
+)
+```
+
+Every field is optional except `AlgorithmServices.algorithms`, which the runner
+always supplies; `JobServices`, `ServerServices` and `UiServices` may be omitted
+entirely when the host provides none of their capabilities. A field the record
+does not declare is a `TypeError` at construction rather than an attribute
+discovered missing inside a handler, and a record is `frozen`, so it cannot be
+edited after the context was built.
+
+The test doubles moved for the same reason, and these are the ones a 0.10
+project's own `conftest.py` calls:
+
+- `FakeAlgorithms(layers, scope, catalogue=..., files=...)` is
+  `FakeAlgorithms(FakeAlgorithmSetup(layers, scope))`, where the record also
+  carries `catalogue`, `files` and `workers`. `declare_output(request_type,
+  source, name=..., geometry_type=..., field_names=...)` is
+  `declare_output(DeclaredOutput(...))`.
+- `FakeLayers.register(source, name=..., geometry_type=..., field_names=...)` is
+  `register(VectorLayerDeclaration(...))`, and `register_layer` takes
+  `OtherLayerDeclaration(...)` for the five kinds that are not vector or raster.
+
+The scaffolds always generated against the records, so a project created by
+`qgis-sdk new` needs no edit: only a hand-written context or fake does.
+
+Five other public shapes changed in the same way. None of them is a call a
+plugin author writes - the scaffolds, `host()`'s `classFactory` and the bridge
+build them - and every new record is importable from a public module:
+
+- `Dispatcher.from_description(description, handlers, streams=..., authorize=...,
+  ledger=..., theme=...)` is `from_description(DispatchSetup(...))`.
+- `LayoutService(backend, scope, workers, files=..., working_directory=...)` is
+  `LayoutService(LayoutWiring(...))`.
+- `DesktopHost(app, iface, title=..., view_id=..., grants=..., assets=...)` is
+  `DesktopHost(app, iface, DesktopHostOptions(...))`.
+- `HostAuthority.grant_file(binding, path, operations=..., overwrite=...,
+  ttl_seconds=...)` is `grant_file(binding, path, FilePolicy(...))`, where
+  `FilePolicy` carries all five. The plugin-facing call did **not** change:
+  `ctx.files.grant_file(path, operations=("read",), overwrite=False)` keeps its
+  keyword form, because it is the one a handler writes.
+- `qgis_sdk.network.build_request(defaults, method, url, params=..., json=...)`
+  is `build_request(defaults, method, url, RequestOptions(...))`, the same
+  `RequestOptions` record `qgis_sdk.services` declares for the client's own
+  calls.
+
+The names that are new in 0.11 and appear nowhere in a 0.10 release:
+`PluginServices`, `UiServices`, `AlgorithmServices` and `JobServices` in
+`qgis_sdk.core`, `ServerServices` in `qgis_sdk.server`, `FakeAlgorithmSetup`,
+`VectorLayerDeclaration`, `OtherLayerDeclaration` and `DeclaredOutput` in
+`qgis_sdk.testing`, `DispatchSetup` and `FilePolicy` in `qgis_sdk.bridge`
+(`FileOperation` existed in 0.10; it is the enum `FilePolicy` reads),
+`LayoutWiring` in `qgis_sdk.layouts`, `DesktopHostOptions` in
+`qgis_sdk.adapters.desktop`, and `RequestOptions` in `qgis_sdk.services`.
 
 ### The two surfaces that widened
 
@@ -4694,9 +4813,11 @@ services.
 - `FakeConnections` declares what a test needs: `declare_connection`,
   `declare_table` and `declare_auth_configuration(name) -> id` (an id, not
   a secret), then answers the whole `Connections` protocol.
-- `FakeLayers` gained the five `open_*` calls; `FakeAlgorithms` gained
-  `model_runs` (what `run_model` was called with), `script_run_model` and
-  `batch`.
+- `FakeLayers` gained the five `open_*` calls, and `register_layer` now takes
+  one `OtherLayerDeclaration` for the kinds that are not vector or raster;
+  `FakeAlgorithms` gained `model_runs` (what `run_model` was called with),
+  `script_run_model` and `batch`, and is built from one `FakeAlgorithmSetup`
+  (see [Contexts and fakes take one record](#contexts-and-fakes-take-one-record)).
 - The test fixtures the suite itself uses are readable examples:
   `tests/layer_kind_fixtures.py` builds the three container formats the
   native half opens (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles
@@ -4719,14 +4840,19 @@ generates from its plugin description does not change shape.
 1. Upgrade `qgis-sdk` to `0.11.0`; the kit brings `qgis-sdk-runtime==0.11.0`
    and `qgis-sdk-tools==0.11.0`. The scaffold windows move to
    `>=0.11,<0.12`.
-2. Nothing to rename. If you annotated a `LayerInfo` where one branch is
+2. Move every hand-written `PluginContext`, `UiContext`, `AlgorithmContext`,
+   `JobContext` and `ServerContext` call to its record, and every
+   `FakeAlgorithms`, `FakeLayers.register` and `declare_output` call in your
+   tests to theirs ([Contexts and fakes take one record](#contexts-and-fakes-take-one-record)).
+   A project scaffolded by `qgis-sdk new` has none of these and needs no edit.
+3. Nothing to rename. If you annotated a `LayerInfo` where one branch is
    required, narrow it (`layer_kind_of`, the `is` checks).
-3. If you implement the `Algorithms` protocol yourself (not the fakes or
+4. If you implement the `Algorithms` protocol yourself (not the fakes or
    the native adapters), add `run_model`, `batch` and `jobs`.
-4. Grant the new names only for the new services (`connections.*`,
+5. Grant the new names only for the new services (`connections.*`,
    `auth.*`, `styles.*`, `symbology.*`); what you granted in 0.10 is still
    sufficient for everything it ran.
-5. The npm side is `@archont561/qgis-sdk` `0.8.0` or the unscoped `qgis-sdk`
+6. The npm side is `@archont561/qgis-sdk` `0.8.0` or the unscoped `qgis-sdk`
    alias at the same version.
 
 ## 0.10.0 migration notes

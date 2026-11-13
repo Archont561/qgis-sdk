@@ -188,4 +188,33 @@ green again on `406c6e9`, which is the tree the next cut should be built from.
 The rehearsal of 2026-11-07 still stands: nothing was published, `python-v0.11.0`
 and `ts-v0.8.0` are uncut, and the stable pair is still spent only on "publish".
 
+**2026-11-13 - the 0.11.0 migration notes now cover the record shapes.** AC 1
+asks the migration notes to cover every added or renamed name, and they did not
+cover the one source-breaking change in this minor: the contexts and the test
+fakes take a record. The notes claimed "nothing a 0.10 project does today stops
+working", which was false - `PluginContext(..., layers=..., project=...)` and
+`FakeAlgorithms(layers, scope)` raise `TypeError` in 0.11. Checked against the
+released `qgis-sdk-runtime 0.10.0` wheel rather than against the previous
+release's notes: 13 public shapes lost keyword parameters (5 contexts, 3 fakes,
+`Dispatcher.from_description`, `LayoutService`, `DesktopHost`,
+`HostAuthority.grant_file`, `network.build_request`), and three names that 0.10
+imported by module path had stopped being re-exported after the module-to-package
+splits (`core.scheduling.CancellationToken`, `adapters.surfaces.surface_id_of`,
+`testing.fakes.FakeProviderRegistration`) - those are re-exported and declared
+again, so the notes stay true about names as well as signatures.
+
+`doc-12` gains "Contexts and fakes take one record" (a before/after table, a
+worked call-site migration, the fakes a project's own `conftest.py` calls, the
+host-side constructions, and the new names with the module each lives in), its
+contract table gains the `testing` row and the four `core` records, the
+"Testing without QGIS" bullets name the declarations, and the 0.10 checklist
+gains the step that moves a hand-written context or fake. `doc-13` needs
+nothing: the TypeScript side has no Python constructor in it.
+
+Evidence: `bun test` in `apps/docs` 58 passed, `bun run scripts/generate.ts`
+builds 90 pages with the new anchor resolving to `/python/migration/v0-11/
+#contexts-and-fakes-take-one-record`; the Python suite 3482 passed / 130 skipped
+(excluding the two environmental `test_app_build` cases), `tests/scripts` 380,
+`clean_code` and `alint` clean across 11 rules. No name was renamed and no
+threshold moved.
 <!-- SECTION:NOTES:END -->
