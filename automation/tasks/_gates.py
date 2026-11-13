@@ -69,6 +69,27 @@ def pr_watch(pr: int = 0, interval: int = 15, timeout: int = 0, repo: str = "") 
     return pr_module.watch(pr=pr, interval=interval, timeout=timeout, repo=repo)
 
 
+def pr_open(
+    title: str = "", base: str = "", body_file: str = "", draft: bool = False
+) -> int:
+    """Open the pull request for the current branch (AGENTS.md).
+
+    The flags are the command line's own, so `pixi run automation pr_open` and
+    `python -m automation.pr open` cannot drift apart.
+    """
+    arguments = ["open"]
+    for flag, value in (
+        ("--title", title),
+        ("--base", base),
+        ("--body-file", body_file),
+    ):
+        if value:
+            arguments.extend([flag, value])
+    if draft:
+        arguments.append("--draft")
+    return pr_module.main(arguments)
+
+
 def test_scripts() -> int:
     """Run the repository script tests and the README mirror rules."""
     status = run(

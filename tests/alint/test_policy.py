@@ -105,6 +105,39 @@ def test_unpinned_nested_composite_action_is_rejected(tree: Path) -> None:
     assert "immutable-actions" in violations
 
 
+def test_scripts_dir_is_the_restore_entry_point_only(tree: Path) -> None:
+    """`scripts/` holds the sandbox entry point; tooling lives in `automation/`.
+
+    The rule is the enforcement behind AGENTS.md: a second script in `scripts/`
+    is how the tooling drifted there in the first place, so the policy names the
+    one file that may stay rather than listing what may not.
+    """
+    scripts = tree / "scripts"
+    scripts.mkdir()
+    (scripts / "restore.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    assert check(tree) == (0, set())
+
+
+@pytest.mark.parametrize(
+    ("relative", "rule"),
+    [
+        ("scripts/release.py", "scripts-are-restore-only"),
+        ("scripts/readme/generate.mjs", "scripts-nest-restore-only"),
+    ],
+)
+def test_stray_scripts_are_rejected(tree: Path, relative: str, rule: str) -> None:
+    """A stray script is caught whether it sits at the top or in a subdirectory."""
+    scripts = tree / "scripts"
+    scripts.mkdir()
+    (scripts / "restore.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    stray = tree / relative
+    stray.parent.mkdir(parents=True, exist_ok=True)
+    stray.write_text("print('tooling')\n", encoding="utf-8")
+    status, violations = check(tree)
+    assert status == 1
+    assert rule in violations
+
+
 def test_ignored_files_are_not_scanned(tree: Path) -> None:
     (tree / ".gitignore").write_text("generated/\n", encoding="utf-8")
     ignored = tree / "generated"

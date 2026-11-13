@@ -15,7 +15,7 @@ ordinal: 162000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Close two gaps left by the toolchain. The distributions promise requires-python >=3.11 while every environment pins one interpreter, so tox runs the QGIS-free suite on each version from the floor to the pin, with a CI job per version and a guard test holding the manifests, tox.ini and the workflow matrix together (decision-75). AGENTS.md stops being all hand-written: @eugeniughelbur/agents-md owns its three fact regions through scripts/agents/refresh.mjs, which corrects the tool's npm-and-node reading of this tree, and CI fails when a refresh would change the file (decision-76).
+Close two gaps left by the toolchain. The distributions promise requires-python >=3.11 while every environment pins one interpreter, so tox runs the QGIS-free suite on each version from the floor to the pin, with a CI job per version and a guard test holding the manifests, tox.ini and the workflow matrix together (decision-75). AGENTS.md stops being all hand-written: @eugeniughelbur/agents-md owns its three fact regions through automation/agents/refresh.mjs, which corrects the tool's npm-and-node reading of this tree, and CI fails when a refresh would change the file (decision-76).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

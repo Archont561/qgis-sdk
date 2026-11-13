@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
-"""Watch a pull request's CI: poll every 15 seconds, break on the first error.
+"""The one way this repository opens and watches a pull request.
+
+``open`` pushes the branch and creates the pull request; ``watch`` polls its CI
+every 15 seconds and breaks on the first error.
 
 ``gh pr checks --watch`` waits for every check to finish before it answers, so
 a job that fails in the first minute still costs the whole run. This watcher
 answers as soon as any check fails, while the rest are still queued or
 running, and answers success only when nothing is left pending.
 
+    python -m automation.pr open                    # commits decide title/body
+    python -m automation.pr open --title "..." --body-file body.md
     python -m automation.pr --pr 211
-    python -m automation.pr --pr 211 --interval 15 --timeout 600
-    python -m automation.pr  # the pull request of the current branch
 
-Exit status: 0 when every check passed, 1 when a check failed (the wait
-breaks, the remote run is not cancelled), 2 on timeout, 127 when ``gh``
-itself kept failing. The tool is stdlib-only and independently runnable.
+A hand-written `git push` plus `gh pr create` plus `gh api -X PATCH` to repair
+a body is what `open` replaces (AGENTS.md): the same steps, in the order they
+belong, with the commit list as the default body.
+
+Exit status: 0 when the pull request was created or every check passed, 1 when
+`open` refuses (the branch is the base, or a pull request already exists) or a
+check failed, 2 on a watch timeout, 127 when `git` or ``gh`` failed. The tool
+is stdlib-only and independently runnable.
 """
 
 from __future__ import annotations
@@ -23,6 +31,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 #: Conclusions that mean the check failed. A completed check with any other
 #: conclusion is not a failure; one outside both sets is still pending.
@@ -79,6 +88,25 @@ class Snapshot:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Branch:
+    """The branch a pull request opens and the branch it lands on."""
+
+    head: str
+    base: str
+
+
+@dataclass(frozen=True, slots=True)
+class PullRequestRequest:
+    """Everything ``open`` needs, so no function takes five loose strings."""
+
+    branch: Branch
+    title: str = ""
+    body: str = ""
+    draft: bool = False
+    repo: str = ""
+
+
 def run_gh(arguments: list[str]) -> str:
     """Run ``gh`` and hand back its stdout, or raise with its stderr."""
     completed = subprocess.run(
@@ -89,6 +117,113 @@ def run_gh(arguments: list[str]) -> str:
             f"gh {' '.join(arguments)} failed: {completed.stderr.strip()}"
         )
     return completed.stdout
+
+
+def run_git(arguments: list[str]) -> str:
+    """Run ``git`` and hand back its stdout, or raise with its stderr."""
+    completed = subprocess.run(
+        ["git", *arguments], capture_output=True, text=True, check=False
+    )
+    if completed.returncode:
+        raise QgisSdkPrError(
+            f"git {' '.join(arguments)} failed: {completed.stderr.strip()}"
+        )
+    return completed.stdout
+
+
+def current_branch() -> str:
+    """The branch being opened; a detached HEAD has nothing to open."""
+    name = run_git(["rev-parse", "--abbrev-ref", "HEAD"]).strip()
+    if not name or name == "HEAD":
+        raise QgisSdkPrError("detached HEAD: check out the branch to open")
+    return name
+
+
+def default_branch(repo: str = "") -> str:
+    """The branch a pull request lands on, as GitHub names it."""
+    arguments = ["repo", "view", "--json", "defaultBranchRef", "--jq"]
+    arguments.append(".defaultBranchRef.name")
+    if repo:
+        arguments.extend(["--repo", repo])
+    name = run_gh(arguments).strip()
+    if not name:
+        raise QgisSdkPrError("gh could not name the default branch")
+    return name
+
+
+def subjects(base: str) -> tuple[str, ...]:
+    """The commit subjects the base branch does not have, oldest first."""
+    output = run_git(["log", "--reverse", "--format=%s", f"{base}..HEAD"])
+    return tuple(line for line in output.splitlines() if line.strip())
+
+
+def title_for(items: tuple[str, ...]) -> str:
+    """A title from the commits: the newest one speaks for the branch."""
+    if not items:
+        raise QgisSdkPrError("no commits against the base: nothing to open")
+    return items[-1]
+
+
+def body_for(items: tuple[str, ...]) -> str:
+    """The default body: the commits, one per line, and nothing invented."""
+    return "\n".join(f"- {item}" for item in items)
+
+
+def existing(repo: str = "") -> int | None:
+    """The pull request already open for this branch, if there is one."""
+    try:
+        return resolve_pr(repo)
+    except QgisSdkPrError:
+        return None
+
+
+def push(head: str) -> None:
+    """Publish the branch, so the pull request has a head to point at."""
+    run_git(["push", "--set-upstream", "origin", head])
+
+
+def create(request: PullRequestRequest) -> str:
+    """Create the pull request and hand back the URL GitHub answered."""
+    branch = request.branch
+    arguments = [
+        "pr",
+        "create",
+        "--base",
+        branch.base,
+        "--head",
+        branch.head,
+        "--title",
+        request.title,
+        "--body",
+        request.body,
+    ]
+    if request.draft:
+        arguments.append("--draft")
+    if request.repo:
+        arguments.extend(["--repo", request.repo])
+    return run_gh(arguments).strip()
+
+
+def open_pr(request: PullRequestRequest) -> int:
+    """Push the branch and open its pull request, or say why not."""
+    if request.branch.head == request.branch.base:
+        print(
+            "pr open: the base branch is the default branch; "
+            "push the work to its own branch first",
+            flush=True,
+        )
+        return 1
+    number = existing(request.repo)
+    if number is not None:
+        print(
+            f"pr open: #{number} is already open - "
+            f"watch it with `python -m automation.pr --pr {number}`",
+            flush=True,
+        )
+        return 1
+    push(request.branch.head)
+    print(create(request), flush=True)
+    return 0
 
 
 def fetch(pr: int, repo: str = "") -> Snapshot:
@@ -189,30 +324,74 @@ def watch(pr: int = 0, interval: int = 15, timeout: int = 0, repo: str = "") -> 
         sleep(interval)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--pr",
-        type=int,
-        default=0,
-        help="pull request number; 0 is the current branch's",
+def _body(args: argparse.Namespace, items: tuple[str, ...]) -> str:
+    """A written body wins, then a body file, then the commits themselves."""
+    if args.body:
+        return args.body
+    if args.body_file:
+        return Path(args.body_file).read_text(encoding="utf-8")
+    return body_for(items)
+
+
+def _request(args: argparse.Namespace) -> PullRequestRequest:
+    """Read the checkout and the flags into one request."""
+    head = current_branch()
+    base = args.base or default_branch(args.repo)
+    items = () if head == base else subjects(base)
+    return PullRequestRequest(
+        branch=Branch(head=head, base=base),
+        title=args.title or title_for(items),
+        body=_body(args, items),
+        draft=args.draft,
+        repo=args.repo,
     )
+
+
+def _watch_flags(parser: argparse.ArgumentParser) -> None:
+    """The polling knobs `watch` reads from the parsed namespace."""
+    parser.add_argument("--pr", type=int, default=0, help="number; 0 is the branch's")
     parser.add_argument(
         "--interval", type=int, default=15, help="seconds between polls"
     )
+    parser.add_argument("--timeout", type=int, default=0, help="0 waits forever")
+
+
+def _open_flags(parser: argparse.ArgumentParser) -> None:
+    """What `open` needs beyond the checkout."""
+    parser.add_argument("--title", default="", help="defaults to the newest commit")
+    parser.add_argument("--body", default="", help="the body, inline")
+    parser.add_argument("--body-file", default="", help="read the body from a file")
+    parser.add_argument("--base", default="", help="the branch to merge into")
+    parser.add_argument("--draft", action="store_true", help="open as a draft")
+
+
+def _parser() -> argparse.ArgumentParser:
+    """One action, then the flags each action reads from the same namespace."""
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--timeout",
-        type=int,
-        default=0,
-        help="give up after this many seconds; 0 waits forever",
+        "action",
+        nargs="?",
+        default="watch",
+        choices=("open", "watch"),
+        help="open a pull request, or watch one; default: watch",
     )
-    parser.add_argument(
-        "--repo", default="", help="owner/name; defaults to this checkout"
-    )
-    args = parser.parse_args(argv)
-    return watch(
-        pr=args.pr, interval=args.interval, timeout=args.timeout, repo=args.repo
-    )
+    parser.add_argument("--repo", default="", help="owner/name; defaults to here")
+    _watch_flags(parser)
+    _open_flags(parser)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if args.action == "watch":
+        return watch(
+            pr=args.pr, interval=args.interval, timeout=args.timeout, repo=args.repo
+        )
+    try:
+        return open_pr(_request(args))
+    except QgisSdkPrError as exc:
+        print(f"pr open: {exc}", flush=True)
+        return 127
 
 
 if __name__ == "__main__":

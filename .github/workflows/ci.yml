@@ -191,7 +191,7 @@ jobs:
         run: pixi run -e default automation -- biome
 
       # AGENTS.md is two documents in one: three regions are generated from the
-      # repository (`agents-md` plus `scripts/agents/refresh.mjs`), and a stale
+      # repository (`agents-md` plus `automation/agents/refresh.mjs`), and a stale
       # one sends an agent to a directory that no longer exists or a branch that
       # was renamed. The refresh is deterministic, so a difference is the whole
       # check.

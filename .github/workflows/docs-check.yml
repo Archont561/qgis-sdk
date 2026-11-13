@@ -16,7 +16,7 @@ on:
       - "README.md"
       - "AGENTS.md"
       - "package.json"
-      - "scripts/readme/**"
+      - "automation/readme/**"
       - ".markdownlint-cli2.jsonc"
       - ".vale.ini"
       - ".lychee.toml"

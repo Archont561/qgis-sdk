@@ -371,6 +371,43 @@ def task_pr_watch():
     }
 
 
+def task_pr_open():
+    """Open the pull request for the current branch."""
+    return {
+        "actions": [action(tasks.pr_open)],
+        "params": [
+            {
+                "name": "title",
+                "long": "title",
+                "default": "",
+                "type": str,
+                "help": "defaults to the newest commit's subject",
+            },
+            {
+                "name": "base",
+                "long": "base",
+                "default": "",
+                "type": str,
+                "help": "the branch to merge into; defaults to the default branch",
+            },
+            {
+                "name": "body_file",
+                "long": "body-file",
+                "default": "",
+                "type": str,
+                "help": "read the body from this file",
+            },
+            {
+                "name": "draft",
+                "long": "draft",
+                "default": False,
+                "type": bool,
+                "help": "open as a draft",
+            },
+        ],
+    }
+
+
 # --- release train --------------------------------------------------------
 
 _PLAN_PARAMS = [
