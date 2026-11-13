@@ -1,9 +1,10 @@
 ---
 id: TASK-167
 title: Burn down the Clean Code budget, starting with the runtime's largest definitions
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-10 11:50'
+updated_date: '2026-11-13 10:20'
 labels: []
 dependencies: []
 ordinal: 167000
@@ -19,8 +20,8 @@ TASK-166 makes the Clean Code metrics a gate by freezing today's 939 findings as
 <!-- AC:BEGIN -->
 - [x] #1 The five largest definitions are split behind unchanged public behaviour: `bridge/dispatch.py` (756-line class), `http/_server.py` (699-line class, 379-line function), `bridge/host/_handlers.py` (602-line function), `generate/_generator.py` (588-line class) and `bridge/authority.py` (520-line class).
 - [x] #2 Each slice lowers `clean_code_budget.json` in the same commit, and the existing suites pass without a test rewritten to fit the new shape.
-- [ ] #3 The outstanding findings are recorded by rule and by file in this task, so the next slice does not have to re-measure the tree.
-- [ ] #4 After the five slices, the thresholds are reviewed: any metric the tree now meets everywhere is tightened in `[tool.rude]` and the budget re-baselined, so the ratchet moves rather than the number merely shrinking.
+- [x] #3 The outstanding findings are recorded by rule and by file in this task, so the next slice does not have to re-measure the tree.
+- [x] #4 After the five slices, the thresholds are reviewed: any metric the tree now meets everywhere is tightened in `[tool.rude]` and the budget re-baselined, so the ratchet moves rather than the number merely shrinking.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -365,6 +366,78 @@ empty" and "the tree is clean" are one statement instead of two. No slice is lef
 to run; a new finding is a fix in the change that introduced it. AC #2's "lowers
 `clean_code_budget.json` in the same commit" is history, not a rule.
 
+**2026-11-13 - the threshold review (AC 3 and AC 4), and the task closes.** The
+tree is clean, so the "outstanding findings" AC 3 asks to record are none: what
+is worth recording instead is where the next finding would come from, and that
+had to be measured with Rude rather than read off a budget that no longer
+exists.
+
+**AC 2's mechanism is gone.** `clean_code_budget.json` was retired by
+decision-82 before this review, so "lowers the budget in the same commit" cannot
+be satisfied by a file. The intent held in every slice: the suite passed and no
+test was rewritten to fit a shape, and the current answer - `clean_code: no
+findings` over `packages automation scripts tests examples` - is the record the
+file used to be.
+
+**How the tree was measured.** For each rule, a copy of `[tool.rude]` with that
+one threshold set to `1`, `rude check --config <copy> --select <rule> --format
+json` over the gate's own `SCOPE`, and the maximum read off the findings, which
+name the value they exceeded (`36 > 1`). Thirteen rules, one run each. The
+distribution matters as much as the maximum: a rule whose largest definition is
+one below its limit can be tightened, a rule with seventy-two definitions *on*
+its limit cannot.
+
+| Rule | Metric | Limit | Largest in the tree | Definitions at the limit |
+| :-- | :-- | :-- | :-- | :-- |
+| CC001 | module lines | 400 → **396** | 396 | 2 |
+| CC004 | relative import depth | 2 | 2 | 30 |
+| CC101 | function lines | 30 | 30 | 72 (60 at 29, 80 at 28) |
+| CC102 | parameters | 5 | 5 | 177 |
+| CC103 | returns | 5 | 5 | 33 |
+| CC104 | locals | 10 | 10 | 29 |
+| CC201 | class lines | 200 → **199** | 199 | 1 (a second at 197) |
+| CC202 | methods | 15 | 15 | 6 |
+| CC207 | bases | 3 | 3 | 11 |
+| CC301 | nesting depth | 4 | 4 | 13 |
+| CC302 | boolean operands | 3 | 3 | 97 |
+| CC303 | branches | 10 | 10 | 11 |
+| CC311 | try-block lines | 20 | 20 | 3 |
+
+**AC 4, done.** Two metrics had headroom and both were tightened to what the
+tree meets: modules 400 → 396 and classes 200 → 199. Both bite, which was
+checked rather than assumed: a 397-line module fails `CC001 Module has too many
+lines (397 > 396)` and a 200-line class fails `CC201 ... (200 > 199)`, and the
+whole tree still reports no findings. The other ten sit exactly on their limits,
+and tightening any of them is a refactor before it is a number:
+
+- **CC202 (15 methods, 6 classes).** `Views`, `PluginHttpServer`, `StepScheduler`
+  and `FakeAlgorithms` in the runtime, plus `_Handler` and `FakeIface` in the
+  native tests. Each needs one cohesive method moved to a collaborator; that is
+  the next slice worth doing, because the count is small and the classes are the
+  widest surfaces after the contexts.
+- **CC207 (3 bases, 11 classes).** `QgisSdkPlugin`, `PluginRuntime`, `Input`,
+  `JobProgress`, `NativeProject`, `FakeProject`, `_Exchange` and four test
+  doubles. Composition rather than inheritance for the two application classes
+  is a design decision (decision-1 already chose explicit composition for the
+  authoring surface), not a mechanical edit.
+- **CC301 (depth 4, 13 functions)** and **CC303 (10 branches, 11 functions)** are
+  the small-rule campaign of slice 12 over again: guard clauses, tables and named
+  predicates. The offenders are named in the run above; `_cc_validate_paramet_p6`
+  (`models/processing/_validation_state.py:121`) is worth a look on its own
+  because the name reads like a generated one that outlived its generator.
+- **CC101 72 / CC102 177 / CC103 33 / CC104 29 / CC302 97** are per-definition
+  edits across the long tail; no threshold move is available until they are.
+- **CC311 (20 lines, 3 try blocks)** is the newest limit and the cheapest of the
+  whole set: three `try:` bodies to narrow, then the limit becomes 19.
+
+The numbers in `[tool.rude]` now carry the measurement date and the method,
+`tests/scripts/test_clean_code_config.py` pins the two that moved (and the dozen
+that did not, so a future edit cannot quietly relax one), and `AGENTS.md` and
+doc-14 quote the tightened class limit.
+
+**Verification.** `python -m automation.clean_code` over the whole tree: no
+findings. The package suite, `tests/scripts`, `ruff`, `alint` and the docs build
+are the same commands the release gate runs.
 <!-- SECTION:NOTES:END -->
 
 

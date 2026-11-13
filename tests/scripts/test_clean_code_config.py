@@ -54,13 +54,22 @@ def test_only_deterministic_structural_rules_are_selected() -> None:
     assert EXCLUDED_FAMILIES <= ignored
 
     rules = rude["rules"]
-    assert rules["CC001"]["max_lines"] == 400
+    # The two the tree meets below the plugin's default are pinned to what it
+    # meets (TASK-167, 2026-11-13): 396 is the longest module there is and 199
+    # the longest class. Pinning is the ratchet - a module that grows past 396
+    # has to be split, not re-baselined.
+    assert rules["CC001"]["max_lines"] == 396
+    assert rules["CC201"]["max_lines"] == 199
     assert rules["CC004"]["max_relative_depth"] == 2
     assert rules["CC207"]["max_bases"] == 3
     assert rules["CC311"]["max_lines"] == 20
-    # The nine thresholds the campaign began with are unchanged.
+    # The nine thresholds the campaign began with are unchanged, and every one
+    # of them is met exactly at its limit: lowering any is a refactor first.
     assert rules["CC101"]["max_lines"] == 30
     assert rules["CC102"]["max_parameters"] == 5
+    assert rules["CC103"]["max_returns"] == 5
     assert rules["CC104"]["max_locals"] == 10
     assert rules["CC202"]["max_methods"] == 15
+    assert rules["CC301"]["max_depth"] == 4
+    assert rules["CC302"]["max_operands"] == 3
     assert rules["CC303"]["max_branches"] == 10
