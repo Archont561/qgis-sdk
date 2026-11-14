@@ -15,14 +15,20 @@ from __future__ import annotations
 
 import inspect
 import re
+from importlib import import_module
+from importlib.util import find_spec
 from typing import Any
 
 __all__ = ["enum_members", "signature_of", "text_of"]
 
-try:  # 3.14 reads annotations lazily; its module is absent before that.
-    from annotationlib import Format as _Format
-except ImportError:  # older interpreters keep the source text already.
-    _Format = None
+LAZY = "annotationlib"
+"""3.14's module for reading annotations without evaluating them."""
+
+# One expression rather than `try`/`except ImportError`: the import runs only
+# where the module exists, and a single statement is executed on every
+# interpreter - which a guard's two arms are not, on whichever one runs the
+# tests. `find_spec` is how the rest of the tree asks the same question.
+_Format = getattr(import_module(LAZY), "Format", None) if find_spec(LAZY) else None
 
 
 SIMPLE_DEFAULTS = (str, int, float, bool, type(None))
@@ -148,10 +154,14 @@ def _parameter(parameter: Any, keyword_only: bool) -> str:
     return rendered
 
 
-try:  # 3.14 reads annotations lazily; its module is absent before that.
-    from annotationlib import Format as _Format
-except ImportError:  # older interpreters keep the source text already.
-    _Format = None
+LAZY = "annotationlib"
+"""3.14's module for reading annotations without evaluating them."""
+
+# One expression rather than `try`/`except ImportError`: the import runs only
+# where the module exists, and a single statement is executed on every
+# interpreter - which a guard's two arms are not, on whichever one runs the
+# tests. `find_spec` is how the rest of the tree asks the same question.
+_Format = getattr(import_module(LAZY), "Format", None) if find_spec(LAZY) else None
 
 
 def _read_signature(value: Any) -> inspect.Signature:
@@ -161,12 +171,12 @@ def _read_signature(value: Any) -> inspect.Signature:
     error, and the contract records what the source said rather than what one
     interpreter could make of it.
     """
-    if _Format is None:
-        return inspect.signature(value, eval_str=False)
-    try:
-        return inspect.signature(value, annotation_format=_Format.STRING)
-    except (TypeError, ValueError):
-        return inspect.signature(value, eval_str=False)
+    if _Format is not None:
+        try:
+            return inspect.signature(value, annotation_format=_Format.STRING)
+        except (TypeError, ValueError):
+            pass
+    return inspect.signature(value, eval_str=False)
 
 
 def _parameters(signature: inspect.Signature) -> str:
