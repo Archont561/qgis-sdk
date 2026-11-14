@@ -83,6 +83,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
+          # The public API is diffed against the previous release tag
+          # (decision-56), which needs the tags and the history that reaches
+          # them.
+          fetch-depth: 0
 
       - name: Set up Pixi
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
@@ -136,6 +140,26 @@ jobs:
           pixi run -e build automation -- release_verify_versions
           --scope "${{ steps.classify.outputs.scope }}"
           --version "${{ steps.classify.outputs.version }}"
+
+      # decision-56 point 2: the version a release carries decides what the
+      # public API may change. The previous release tag is the baseline, and a
+      # breaking change in a stable symbol is refused unless the version is a
+      # major. The first tag cut after the inventory landed can be diffed; the
+      # tags before it recorded none, and the command says so instead of
+      # reporting the whole surface as new.
+      - name: Verify the public API against the previous release
+        run: |
+          current="${{ steps.classify.outputs.tag_name }}"
+          # The inventory describes the Python surface, so a TypeScript or UI
+          # release is still measured against the last Python tag.
+          previous=$(git tag --sort=-creatordate --list 'python-v*' | grep -v -x "$current" | head -1)
+          if [ -z "$previous" ]; then
+            echo "no previous release tag; nothing to compare against" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          pixi run -e build automation -- release_verify_api \
+            --tag "$previous" \
+            --version "${{ steps.classify.outputs.version }}"
 
       - name: Record the support matrix the release is qualified on
         run: |

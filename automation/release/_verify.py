@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ._api import add_parser as add_api_parser
 from ._build import build_wheel, twine_check
 from ._contracts import (
     contract_versions,
@@ -271,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_planning_parsers(sub)
     _add_stamping_parsers(sub)
     _add_verify_versions_parser(sub)
+    add_api_parser(sub)
     _add_build_parsers(sub)
     _add_publish_parsers(sub)
     return parser

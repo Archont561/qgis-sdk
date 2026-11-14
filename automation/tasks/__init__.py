@@ -67,6 +67,7 @@ from ._release import (
     release_rehearsal,
     release_stamp,
     release_tag,
+    release_verify_api,
     release_verify_python,
     release_verify_versions,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "release_rehearsal",
     "release_stamp",
     "release_tag",
+    "release_verify_api",
     "release_verify_python",
     "release_verify_versions",
     "report_bun",

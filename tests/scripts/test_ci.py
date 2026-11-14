@@ -43,6 +43,7 @@ GATE_TASK_ELSEWHERE = {
 EXPECTED_LINUX_CHECKS = {
     "Test release tooling": "pixi run -e default automation -- test_scripts",
     "Verify the scoped versions and the shared contract": "pixi run -e default automation -- release_verify_versions",
+    "Check the public API inventory is current": "pixi run -e default automation -- release_verify_api --check",
     "Check the generated bridge clients are current": "pixi run -e default automation -- check_generated",
     "Check the Processing snapshot is current": "pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check",
     "Test the reference plugin through qgis-sdk test": "pixi run -e default automation -- reference_example",
