@@ -20,7 +20,7 @@ import warnings
 from pathlib import Path
 
 import pytest
-from qgis_sdk_tools.api import _inventory as inventory_module
+from qgis_sdk_tools.api import _signatures as signatures_module
 from qgis_sdk_tools.api import (
     diff,
     early_removals,
@@ -96,10 +96,10 @@ def test_a_signature_names_parameters_without_the_interpreters_own_forms():
     class Inherited(Exception):
         """No ``__init__`` of its own: the interpreter describes this one."""
 
-    assert inventory_module._signature(plain) == (
+    assert signatures_module.signature_of(plain) == (
         "(a, b = 1, *args, key = None, **kwargs)"
     )
-    assert "self" not in inventory_module._signature(Inherited)
+    assert "self" not in signatures_module.signature_of(Inherited)
 
 
 def test_an_annotation_reads_the_same_however_the_interpreter_prints_it():
@@ -113,14 +113,17 @@ def test_an_annotation_reads_the_same_however_the_interpreter_prints_it():
     import typing
     from pathlib import Path as PathType
 
-    text = inventory_module._text
+    text = signatures_module.text_of
 
     assert text("qgis_sdk.models.files.FileRef") == "FileRef"
     assert text(PathType) == "Path"
     assert text(int | None) == "int | None"
-    # The legacy spelling is the point: an evaluated old-style alias must
-    # record the same short name a source annotation would.
-    assert text(typing.Optional[PathType]) == "Optional[Path]"  # noqa: UP045
+    # `Optional[X]` and `X | None` are one type, and which an interpreter prints
+    # depends on its `typing`: 3.11 says `typing.Optional[pathlib.Path]`, 3.14
+    # says `pathlib.Path | None`. Both record the PEP 604 spelling.
+    assert text(typing.Optional[PathType]) == "Path | None"  # noqa: UP045
+    assert text("Optional[dict[str, int]]") == "dict[str, int] | None"
+    assert text("Union[int, str]") == "int | str"
     assert text("dict[str, Any]") == "dict[str, Any]"
     assert text(None) == "None"
 
