@@ -118,6 +118,78 @@ def roadmap_inventory() -> dict[str, set[str]]:
     return inventory
 
 
+GATE_TITLE = re.compile(r"^Prepare and qualify (\d+\.\d+\.\d+) release")
+DEFERRAL = re.compile(r"^\*\*Deferred[^\n]*\*\*[^\n]*\S", re.MULTILINE)
+STATUS_KEY = "status"
+
+SHIPPED = "Done"
+
+
+def task_statuses() -> dict[str, str]:
+    """task id -> its ``status`` field."""
+    statuses: dict[str, str] = {}
+    for path in sorted(TASKS.glob("*.md")):
+        identifier = field(path, "id")
+        status = field(path, STATUS_KEY)
+        if identifier and status:
+            statuses[identifier] = status
+    return statuses
+
+
+def gate_tasks() -> dict[str, str]:
+    """milestone version -> the id of the task that gates that release.
+
+    Each milestone names its gate in its exit criteria ("released at 0.11.0
+    from one green gate (TASK-95)"); the gate's own title carries the version,
+    so the pair is found without reading prose.
+    """
+    gates: dict[str, str] = {}
+    for path in sorted(TASKS.glob("*.md")):
+        title = " ".join((field(path, "title") or "").split())
+        match = GATE_TITLE.match(title)
+        identifier = field(path, "id")
+        if match and identifier:
+            gates[match.group(1)] = identifier
+    return gates
+
+
+def shipped_milestones() -> dict[str, str]:
+    """milestone id -> version, for the milestones whose release gate is Done."""
+    statuses = task_statuses()
+    gates = gate_tasks()
+    versions = milestone_versions()
+    return {
+        identifier: version
+        for identifier, version in versions.items()
+        if statuses.get(gates.get(version, ""), "") == SHIPPED
+    }
+
+
+def test_a_shipped_milestone_has_no_open_task_without_a_deferral() -> None:
+    """Shipped work is `Done`, or its record says why it is not.
+
+    TASK-102 is the shape this allows: its behaviour shipped in 0.10.0 and one
+    criterion asks for a measurement that was never taken, so the task stays
+    open and its note begins `**Deferred`. Anything else is drift - work that
+    landed while the board still lists it as outstanding.
+    """
+    statuses = task_statuses()
+    assignments = task_assignments()
+    shipped = shipped_milestones()
+    problems = []
+    for identifier, milestone in sorted(assignments.items()):
+        if milestone not in shipped or statuses.get(identifier, SHIPPED) == SHIPPED:
+            continue
+        text = next(TASKS.glob(f"task-{identifier.removeprefix('TASK-')} *.md"), None)
+        body = text.read_text(encoding="utf-8") if text else ""
+        if not DEFERRAL.search(body):
+            problems.append(
+                f"{identifier} is {statuses[identifier]} in shipped "
+                f"{shipped[milestone]} with no **Deferred note"
+            )
+    assert problems == [], "open tasks in shipped milestones:\n" + "\n".join(problems)
+
+
 def test_every_task_milestone_exists() -> None:
     known = set(milestone_files())
     unknown = {

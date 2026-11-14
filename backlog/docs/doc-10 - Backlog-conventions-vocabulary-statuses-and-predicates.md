@@ -241,6 +241,15 @@ document:
   originate from it, and the recorded evidence must say so. TASK-33 owns those.
 - Notes record execution progress; comments record review discussion and blockers.
 - Never restate a CI result that was not observed.
+- **A shipped milestone does not keep open tasks without a note.** When a
+  milestone's release gate is `Done`, every task assigned to it is `Done` too,
+  unless its record carries a line beginning `**Deferred` that says what is
+  outstanding and why the milestone shipped without it. TASK-102 is the shape:
+  its behaviour shipped in 0.10.0 and one criterion asks for a measurement that
+  was never taken, so the task stays `In Progress` with the deferral named.
+  `tests/scripts/test_backlog.py` enforces this, because four records had drifted
+  by 2026-11-14 - TASK-94 sat `To Do` through the release that carried it, and
+  TASK-120/121 waited on merge evidence their note had never been given.
 
 ## 8. CLI notes
 
@@ -256,8 +265,10 @@ document:
   sub-task IDs are `TASK-N.M` and must be passed as such to `--dep`.
 - `backlog doctor` fails on cycles and duplicate IDs — run it after bulk edits.
 - `tests/scripts/test_backlog.py` is the same checks as a gate: relative links,
-  `milestone:` against the doc-4 inventory, milestone sections, and record-id
-  uniqueness. `.github/workflows/backlog.yml` runs it on every `backlog/**`
+  `milestone:` against the doc-4 inventory, milestone sections, record-id
+  uniqueness, and the deferral rule above (a shipped milestone's gate task is
+  found by its `Prepare and qualify <version> release` title, so no extra field
+  is needed). `.github/workflows/backlog.yml` runs it on every `backlog/**`
   change, because `ci.yml` ignores that path and would otherwise never execute it.
   A backlog-only pull request therefore still shows one status, `backlog drift`;
   run the file locally before pushing, since a merge here is otherwise unguarded.
