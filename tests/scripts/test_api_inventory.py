@@ -20,14 +20,44 @@ ROOT = Path(__file__).resolve().parents[2]
 GUIDE = ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
 
 
+def _difference(tracked: dict, dumped: dict) -> str:
+    """The first place two inventories disagree, in one readable line."""
+    for section in sorted(set(tracked) | set(dumped)):
+        before, after = tracked.get(section), dumped.get(section)
+        if before == after:
+            continue
+        if isinstance(before, dict) and isinstance(after, dict):
+            return _module_difference(section, before, after)
+        added = set(after or ()) - set(before or ())
+        removed = set(before or ()) - set(after or ())
+        return f"{section}: committed only {sorted(removed)[:3]}, tree only {sorted(added)[:3]}"
+    return "no difference"
+
+
+def _module_difference(section: str, before: dict, after: dict) -> str:
+    """The first name, tier or signature two module maps disagree on."""
+    for module in sorted(set(before) | set(after)):
+        old, new = before.get(module), after.get(module)
+        if old == new:
+            continue
+        if old is None or new is None:
+            return f"{section}.{module}: present only in {old and 'the tree' or 'the file'}"
+        for key in sorted(set(old) | set(new)):
+            if old.get(key) != new.get(key):
+                return f"{section}.{module}.{key}: committed {old.get(key)!r} / tree {new.get(key)!r}"
+    return f"{section}: differs"
+
+
 def test_the_tracked_inventory_describes_this_tree():
     """`api/python.json` is what a release diffs, so it may not be stale."""
     from qgis_sdk_tools.api import inventory
 
     tracked = json.loads((ROOT / "api/python.json").read_text(encoding="utf-8"))
+    dumped = inventory().document()
 
-    assert tracked == inventory().document(), (
-        "api/python.json is stale; run `qgis-sdk api dump` and commit the result"
+    assert tracked == dumped, (
+        "api/python.json is stale; run `qgis-sdk api dump` and commit the result. "
+        + _difference(tracked, dumped)
     )
 
 
