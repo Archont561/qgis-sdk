@@ -9,3 +9,5 @@ It is experimental and is not automatically enabled by project metadata.
 from ._server import PluginHttpServer, QgisSdkHttpError
 
 __all__ = ["PluginHttpServer", "QgisSdkHttpError"]
+
+__stability__ = "stable"

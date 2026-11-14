@@ -129,6 +129,7 @@ __all__ = [
     "ProviderDescription",
 ]
 
+__stability__ = "stable"
 T = TypeVar("T", bound=Callable[..., Any])
 
 

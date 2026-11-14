@@ -24,10 +24,12 @@ from qgis_sdk_tools.api._inventory import (
     read,
     write,
 )
+from qgis_sdk_tools.api._render import render_stability
 from qgis_sdk_tools.api._verify import (
     Change,
     consequence,
     diff,
+    early_removals,
     refusals,
     verdict,
 )
@@ -39,9 +41,11 @@ __all__ = [
     "Inventory",
     "consequence",
     "diff",
+    "early_removals",
     "inventory",
     "read",
     "refusals",
+    "render_stability",
     "verdict",
     "write",
 ]

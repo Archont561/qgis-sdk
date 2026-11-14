@@ -204,6 +204,7 @@ def _plan_export_facts1(destination, driver, overwrite, reasons):
 
 __all__ = ["EXPORT_DRIVERS", "ExportPlan", "plan_export", "run_export"]
 
+__stability__ = "stable"
 #: Destination suffix (lower-case) -> OGR driver name. Two formats on purpose:
 #: the reference workflow needs one text and one container format, and every
 #: addition is a packaging and qualification decision, not a convenience.

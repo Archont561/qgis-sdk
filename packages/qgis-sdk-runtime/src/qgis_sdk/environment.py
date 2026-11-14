@@ -20,6 +20,7 @@ __all__ = [
     "dev_server",
 ]
 
+__stability__ = "stable"
 #: The origin of the Vite dev server ``qgis-sdk dev`` started for a web UI,
 #: for example ``http://127.0.0.1:5173``; only ever set by the command, so a
 #: production build never reaches a dev server.

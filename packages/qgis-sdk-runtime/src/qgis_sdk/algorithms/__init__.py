@@ -31,3 +31,5 @@ __all__ = [
     "invoke",
     "parameter_kind",
 ]
+
+__stability__ = "stable"

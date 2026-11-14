@@ -282,3 +282,5 @@ __all__ = [
     "symbol_kind",
     "validate_parameters",
 ]
+
+__stability__ = "stable"

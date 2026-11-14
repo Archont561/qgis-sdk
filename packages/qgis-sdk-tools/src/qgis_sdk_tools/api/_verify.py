@@ -20,13 +20,21 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["Change", "consequence", "diff", "refusals", "verdict"]
+__all__ = [
+    "Change",
+    "consequence",
+    "diff",
+    "early_removals",
+    "refusals",
+    "verdict",
+]
 
 ADDITIVE = "additive"
 DEPRECATING = "deprecating"
 BREAKING = "breaking"
 
 SECTIONS = ("rules", "host_operations", "cli")
+DEPRECATIONS = "deprecations"
 """The flat collections: a name either appears or it does not."""
 
 
@@ -86,6 +94,68 @@ def _module(
     return changes
 
 
+def _key(entry: Mapping[str, str]) -> tuple[str, str]:
+    """One deprecation entry's symbol, as a comparable pair."""
+    return (entry["module"], entry["name"])
+
+
+def _deprecating(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[Change]:
+    """Names that carry a removal notice now and did not before."""
+    marked = {_key(entry) for entry in old.get(DEPRECATIONS, ())}
+    return [
+        Change(
+            DEPRECATING,
+            entry["module"],
+            f"deprecated {entry['name']} until {entry['removal']}",
+        )
+        for entry in new.get(DEPRECATIONS, ())
+        if _key(entry) not in marked
+    ]
+
+
+def _gone(old: Mapping[str, Any], new: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """Every ``(module, name)`` the new document no longer carries."""
+    removed: set[tuple[str, str]] = set()
+    for module, entry in old.get("modules", {}).items():
+        after = new.get("modules", {}).get(module)
+        if after is None:
+            removed |= {(module, name) for name in entry.get("names", {})}
+            continue
+        removed |= {(module, name) for name in entry.get("names", {})} - set(
+            after.get("names", {})
+        )
+    return removed
+
+
+def _order(version: str) -> tuple[int, ...]:
+    """A version's numbers, so ``1.10.0`` sorts after ``1.9.0``."""
+    release = version.split("-")[0].split("+")[0]
+    return tuple(int(piece) if piece.isdigit() else 0 for piece in release.split("."))
+
+
+def early_removals(
+    old: Mapping[str, Any], new: Mapping[str, Any], version: str
+) -> list[str]:
+    """Removals that land before the version the deprecation announced.
+
+    decision-56 point 3 gives a deprecated symbol a window: no removal earlier
+    than the next major after 1.0, or the second following minor before it. The
+    mark names that version, so the only question left is whether the release
+    being cut has reached it.
+    """
+    if not version:
+        return []
+    released, gone = _order(version), _gone(old, new)
+    return [
+        (
+            f"{entry['module']}.{entry['name']} was announced for removal in "
+            f"{entry['removal']}, so {version} cannot remove it"
+        )
+        for entry in old.get(DEPRECATIONS, ())
+        if _key(entry) in gone and _order(entry["removal"]) > released
+    ]
+
+
 def diff(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[Change]:
     """Every change between two inventory documents, in a stable order."""
     before = old.get("modules", {})
@@ -95,6 +165,7 @@ def diff(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[Change]:
         changes += _module(name, before.get(name), after.get(name))
     for section in SECTIONS:
         changes += _flat(old.get(section, []), new.get(section, []), section)
+    changes += _deprecating(old, new)
     return sorted(
         changes, key=lambda change: (change.where, change.kind, change.detail)
     )

@@ -122,11 +122,20 @@ def _emit(changes: Sequence, version: str, as_json: bool) -> None:
     print(required)
 
 
-def _refuse(changes: Sequence, version: str) -> None:
-    """Stop the release when the version cannot carry what changed."""
+def _refuse(changes: Sequence, version: str, old: Mapping, new: Mapping) -> None:
+    """Stop the release when the version cannot carry what changed.
+
+    Two ways it cannot: the change is breaking and the version is not a major
+    after 1.0, or a deprecated symbol is removed before the version its mark
+    announced (decision-56 points 2 and 3).
+    """
     if not version:
         return
-    reasons = _tools().refusals(changes, version)
+    api = _tools()
+    reasons = [
+        *api.refusals(changes, version),
+        *api.early_removals(old, new, version),
+    ]
     if reasons:
         raise QgisSdkReleaseError("; ".join(reasons))
 
@@ -148,7 +157,7 @@ def cmd_verify_api(args: argparse.Namespace) -> int:
         )
     changes = _tools().diff(baseline, current)
     _emit(changes, getattr(args, "version", ""), getattr(args, "json", False))
-    _refuse(changes, getattr(args, "version", ""))
+    _refuse(changes, getattr(args, "version", ""), baseline, current)
     return 0
 
 
