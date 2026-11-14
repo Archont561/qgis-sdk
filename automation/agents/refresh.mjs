@@ -148,7 +148,9 @@ function normalize(text) {
 	// Splitting on ` Stack: ` assumed the generator writes the stack inline; it
 	// writes it on its own line, so the split missed and the line was kept -
 	// and then the corrected one was appended under it.
-	const overview = withoutStub(region(text, "overview").split(/\n\s*Stack:/)[0]);
+	const overview = withoutStub(
+		region(text, "overview").split(/\n\s*Stack:/)[0],
+	);
 	const body = (text, id, content) =>
 		replaceRegion(text, id, `\n${tidy(content)}`);
 	let out = body(text, "overview", `${overview}\n\n${STACK}`);
