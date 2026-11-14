@@ -58,6 +58,15 @@ Four judgement calls, recorded because each one decides what the freeze covers:
   Duplicated `@app.command` registrations in `_commands/` collapse here because
   the typer app keys commands by name.
 
+A signature is built from the parameters, not from
+`str(inspect.signature(...))`: that string embeds the interpreter's own forms - an
+inherited `__init__` reads `(*args, **kwargs)` on one Python and
+`(self, /, *args, **kwargs)` on the next - and a contract that changes with the
+interpreter is not a contract. `self`/`cls` are dropped, a default is kept only
+when it is a literal (anything else renders `...`), and the CLI commands are
+adapted to MCP in the same commit, because the adapter's test asserts the two
+lists are the same.
+
 Model fields come along for free: a dataclass renders its fields in
 `inspect.signature`, so `BufferRequest` is recorded as
 `(layer_id: LayerInput, distance_metres: Metres, working_crs: CrsInput) -> None`
@@ -118,6 +127,13 @@ doc-12 carries between `<!-- stability:begin -->` and
 `<!-- stability:end -->`. `qgis-sdk api stability` prints that table, which is
 how the guide is updated - the same arrangement `qgis-sdk targets` has with the
 support matrix, and for the same reason: a promise restated by hand drifts.
+
+The tests live in two places on purpose: the contract's behaviour is unit-tested
+in `packages/qgis-sdk-python/tests/test_api_contract.py`, where the coverage the
+release reports is measured (`tests/scripts` is outside the codecov flag, so a
+module tested only there reads as 0% covered), and what needs the repository -
+the tracked file, the guide's table, the workflows - stays in
+`tests/scripts/test_api_inventory.py`, the split `test_targets.py` already uses.
 
 Three tests hold it: every public module declares a tier the vocabulary knows,
 the inventory's tier is the module's declaration, and the guide's rendered block
