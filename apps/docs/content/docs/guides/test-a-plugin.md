@@ -30,6 +30,19 @@ exercise plugin behavior without starting QGIS; see the
 [scoped plugin runtime](/python/scoped-plugin-runtime/) for the
 service boundary.
 
+### If you arrived from PyQGIS: mock `iface`, or use the fakes?
+
+Most PyQGIS testing material says to mock the QGIS interface. This kit exists
+partly to remove that practice: a mock asserts that your code called a method,
+while a fake refuses what the host would refuse, so a declaration QGIS would
+reject fails in a test instead of in a user's QGIS. Both targets check that, and
+on a real host a skip is not a pass - a fixture that needs PyQGIS fails when you
+asked for that target, and a session where every test skipped exits `1`.
+
+A mock is still the right tool for what the fakes do not model: a third-party Qt
+widget, an external HTTP client. The full comparison is in
+[the testing section of the Python guide](/python/running-tests-qgis-sdk-test/).
+
 ## Qualify on a QGIS host
 
 With a supported QGIS installation available, run:
@@ -56,3 +69,15 @@ qgis-sdk build
 Install the ZIP in `dist/` through QGIS's plugin manager. See the
 [build reference](/python/building-an-installable-zip-qgis-sdk-build/)
 for packaging details.
+
+## When something goes wrong, or the kit stops
+
+- A rule ID in `check` output, or QGIS refusing the plugin: the
+  [troubleshooting page](/python/troubleshooting/) starts from the symptom and
+  gives the smallest project that reproduces it.
+- Editor completion and type checkers: [IDE, autocompletion and
+  typing](/python/ide-autocompletion-and-typing/).
+- Something the kit does not cover at all - attribute forms, custom map tools,
+  PostGIS and web services, temporal and 3D: [going
+  deeper](/python/going-deeper-where-this-contract-stops/) names the two exits
+  and links the raw-API guide for each.

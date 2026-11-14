@@ -85,6 +85,23 @@ the plumbing around it.
    qgis-sdk build       # dist/field_tools-<version>.zip
    ```
 
+## What you lose, what you gain
+
+Moving onto declarations is a trade, and it is worth knowing which side of it
+you are choosing before the port rather than after.
+
+| You lose | You gain |
+| :-- | :-- |
+| `iface` breadth. A handler no longer reaches the whole `QgisInterface`; it gets the services the context carries, and the rest stays behind `ctx.desktop.iface` one call at a time. | Fakes for every service. The same handler runs in a test without QGIS, because the services are Protocols with `qgis_sdk.testing` implementations. |
+| Arbitrary Qt widgets as the primary interface. A window is a `Dialog`/`Dock` over catalogue components or a `.ui` file, so a bespoke widget tree is a `Custom` inside that structure. | Grants and a generated page. A web view reaches exactly the host operations its grants name, and the client is generated from the declarations rather than hand-written. |
+| Hand-written lifecycle. `initGui`/`unload`, `QAction` plumbing and `metadata.txt` stop being yours: `host()` binds `classFactory` and `build` renders the metadata. | One description of the plugin. `describe(app)` feeds `check`, `build`, the bridge schema, `dev` reload and the agent tool surface from the same declarations. |
+| The direct `QgsApplication` loop. Long work goes through `@job`, whose body gets a worker context - no widgets, no `iface`. | Cancellation, progress and a queue that behave the same on Desktop, in an app window and in a test. |
+
+What does *not* change: the plugin's id and its code. The id stays so an
+installed copy keeps its settings, and everything below the declarations is
+still ordinary PyQGIS reached through the exits described in
+[going deeper](/python/going-deeper-where-this-contract-stops/).
+
 ## Before and after
 
 ```python

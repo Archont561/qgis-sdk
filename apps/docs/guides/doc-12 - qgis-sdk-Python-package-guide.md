@@ -12,12 +12,15 @@ surfaces, Processing, the bridge host side, networking, scoped jobs, the
 project scaffold and the `qgis-sdk` command, with the migration notes of every
 release at the end. The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders it one page per section. Status at the time of writing: Python `0.7.0`
-(`python-v0.7.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
-and prefix.dev) released as a triple with the bridge `@archont561/qgis-sdk`
-`0.5.0` (`ts-v0.5.0`) and the web components `@archont561/qgis-sdk-ui`
-`0.1.0` (`ui-v0.1.0`), all tagged on one merge commit; the previous pair was
-`0.6.0` + `0.4.0`.
+renders it one page per section. Status at the time of writing: Python `0.11.0`
+(`python-v0.11.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
+and prefix.dev) published beside the bridge `@archont561/qgis-sdk` `0.8.0`
+(`ts-v0.8.0`) and the web components `@archont561/qgis-sdk-ui` `0.1.0`
+(`ui-v0.1.0`). The two are planned together but tagged in separate runs, and the
+Python release page carries no files because its artifact upload failed - the
+records are in
+[doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
+The previous pair was `0.10.0` + `0.7.0`.
 
 Companion guides: [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
@@ -42,6 +45,33 @@ stdlib-only, what a plugin imports and `qgis-sdk build` vendors) and
 the version it was released with. `pip install qgis-sdk` keeps meaning "the
 developer kit"; a QGIS console user installs `qgis-sdk-runtime` by name; a
 plugin installs nothing because the ZIP carries its own copy.
+
+### If you arrived from PyQGIS: "do not use a virtualenv"
+
+Advice you will read in most PyQGIS material: use QGIS's own interpreter, not a
+virtual environment, because the bindings are only importable from the Python
+QGIS ships. For a script that runs inside QGIS that is true, and worth following.
+For a plugin it is the opposite of what this SDK does - and the reason is the
+ZIP: `qgis-sdk build` copies the runtime into the plugin, so the plugin never
+imports the environment it was developed in, and any interpreter that can
+install `qgis-sdk` can build and test it.
+
+Where the coupling actually is:
+
+- **Writing and pure tests - any interpreter.** The declarations, the contract
+  layer, the fakes and `check` never import QGIS, so a virtualenv without QGIS
+  is the normal place to work (`qgis-sdk test --target pure`).
+- **Native tests and reload - the QGIS build you target.** `--target
+  qgis|desktop|server` and `qgis-sdk dev` need the bindings and find them
+  through `QGIS_PREFIX_PATH`, `qgis` on `PATH`, then `qgis-prefix` in
+  `pyproject.toml`. That is one interpreter per target, not one per project.
+- **The release - none of them.** A built ZIP imports only what it carries plus
+  what QGIS provides, and `check`'s import buckets exist to prove it (`DEP001`,
+  `DEP003`).
+
+`qgis-sdk targets` reports which row of [Supported targets](#supported-targets)
+this interpreter matches, so "does this environment speak to my QGIS" is a
+command rather than a guess.
 
 ## Supported targets
 
@@ -4035,11 +4065,12 @@ it is `DEP001`, and it is reported here rather than first at `build`
 | :-- | :-- |
 | `QGIS001` | `qgis`, `PyQt5/6` or `PySide2/6` is imported when the module loads: module scope, a class body, a `try`, a `with` or a module-level `if` all count. Imports inside a function and under `if TYPE_CHECKING:` are fine. |
 | `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; let `host()` build the context, or reach the adapter inside the function that runs in QGIS. |
+| `API001` (warning) | An import of a public name the SDK has marked for removal: the finding names the replacement and the release that removes it. No shipped name carries a mark yet - choosing which names 1.0 drops is TASK-98's sweep - so the rule exists and waits. |
 | `PROJECT001` | No directory with an `__init__.py` under the root (other than `tests/`). |
 | `PROJECT002` | No `pyproject.toml`, or no `[tool.qgis-sdk] plugin = "<package>.plugin:app"` in it; `build` and `dev` derive `metadata.txt` and `classFactory` from that line (decision-43). |
 | `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]`, `[tool.qgis-sdk.console]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:app`, `placement` not `dock`/`dialog`, `grants` not a list of strings, an unknown key under `[tool.qgis-sdk.console]`, a passthrough value that is not a scalar). |
 | `META001` | The plugin package has a hand-written `metadata.txt`; `build` renders it, so delete the file (or move extra keys under `[tool.qgis-sdk.metadata]`). |
-| `META002` | `pyproject.toml` lacks a key `metadata.txt` needs: `[project] name`, `version`, `description`, `authors[0].name`/`.email`, or `[tool.qgis-sdk] qgis-minimum-version`. |
+| `META002` | `pyproject.toml` lacks a key `metadata.txt` needs: `[project] version`, `description`, `authors[0].name`/`.email`, or `[tool.qgis-sdk] qgis-minimum-version`. The generated `name` line is the application's declared `title` (or its id when it has none), so `[project] name` is not one of the four. |
 | `ENTRY002` | A module of the plugin package defines or imports `classFactory`; `build` and `dev` bind it through `host()`. |
 | `GRANT001` | A `grants` list (`[tool.qgis-sdk.web]` or `[tool.qgis-sdk.console]`) names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); the message names the section, and the remediation lists the one vocabulary (`qgis_sdk.bridge.host.host_grant_names`). |
 | `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
@@ -4080,6 +4111,25 @@ Unknown arguments go to pytest unchanged (`qgis-sdk test -x -k ping`,
 command's. A plain `pytest` in the project keeps working: the generated
 `pyproject.toml` loads the same plugin through
 `addopts = "-p qgis_sdk_tools.pytest_plugin"`.
+
+### If you arrived from PyQGIS: "mock `iface` to test"
+
+Mocking the QGIS interface is the standard testing advice for a hand-written
+plugin, and it is the practice this SDK exists to remove. A mocked `iface`
+asserts that your code called a method; it cannot say whether QGIS would accept
+the declaration, whether the widget would ever be shown, or whether the grant a
+page needs exists - and the mock drifts from QGIS without telling anyone.
+
+What replaces it is a contract with fakes on one side and a real target on the
+other. `--target pure` runs against `qgis_sdk.testing`, where every service is a
+fake that refuses by name what the host would refuse. `--target qgis|desktop`
+runs the same suite inside a real QGIS, and there a skip is not a pass: a
+fixture that needs PyQGIS fails rather than skipping, and a session in which
+every test skipped exits `1`.
+
+A mock is still the right tool for what the fakes do not model - a third-party
+Qt widget inside a `Custom`, an external HTTP client. What it is not is the way
+to test a declaration: if the fake refuses it, QGIS refuses it too.
 
 | Target | Where pytest runs | Selection |
 | :-- | :-- | :-- |
@@ -4500,6 +4550,516 @@ This does not prevent a plugin from using a separately provisioned Pydantic
 package; it removes the SDK's adapter and dependency extra. Historical release
 and qualification records below describe the old release, not current support.
 See [decision-67](../../../backlog/decisions/decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md).
+
+## Troubleshooting
+
+`qgis-sdk check` answers most of the questions on this page before QGIS is
+started, and every finding carries a stable rule id. [Project checks](#project-checks)
+is the reference: one row per rule, with its message and remediation. This page
+is the other direction - it starts from what you saw.
+
+```sh
+qgis-sdk check --json | jq -r '.diagnostics[] | "\(.rule) \(.path):\(.line)"'
+```
+
+Every example below is the smallest project that produces its finding, run
+against this release. Two rules cannot be reproduced on a machine that has no
+QGIS: `HOST003` needs a QGIS built without QGIS Server, and `API001` needs a name
+that carries a deprecation mark - no shipped name does yet. Both say so where
+they appear.
+
+### QGIS will not list the plugin, or lists it and does nothing
+
+**`PROJECT001` - no plugin package.** `check` and `build` look for a directory
+under the project root that has an `__init__.py`. What you see: `no plugin
+package (a directory with __init__.py) under <path>`. Create the package the
+declaration names, or run the command from the project root.
+
+```text
+field_tools/pyproject.toml     # [tool.qgis-sdk] plugin = "field_tools.plugin:app"
+field_tools/plugin.py          # no field_tools/__init__.py anywhere
+```
+
+**`PROJECT002` - `plugin` is not set.** `build` and `dev` derive `metadata.txt`
+and `classFactory` from this one line, so nothing can be generated without it.
+What you see: `[tool.qgis-sdk] plugin is not set`. Write
+`plugin = "field_tools.plugin:app"`.
+
+```toml
+[tool.qgis-sdk]
+# plugin = "field_tools.plugin:app"   <- commented out or deleted
+hosts = ["desktop"]
+```
+
+**`META001` - a hand-written `metadata.txt`.** QGIS reads it, the build
+regenerates it, and the two disagree the first time a version changes. Delete
+it; move `version`, `description` and the author under `[project]`,
+`qgisMinimumVersion` to `qgis-minimum-version`, and any other key to
+`[tool.qgis-sdk.metadata]`.
+
+```text
+field_tools/metadata.txt
+```
+
+**`META002` - a key `metadata.txt` needs is missing.** Four findings, one per
+key: `[project] version`, `[project] description`, `authors[0].name` or
+`.email`, and `[tool.qgis-sdk] qgis-minimum-version`. The `name` line of
+`metadata.txt` is not one of them - it is the application's declared `title`,
+or the id when there is no title - so a project without `[project] name` gets no
+finding here.
+
+```toml
+[tool.qgis-sdk]
+plugin = "field_tools.plugin:app"
+hosts = ["desktop"]
+# qgis-minimum-version = "4.0"       <- removed
+```
+
+**`ENTRY002` - `__init__.py` binds `classFactory`.** `host()` binds it, and a
+second binding of your own shadows the one the ZIP needs. What you see:
+`__init__.py binds classFactory`. Delete the definition or the import.
+
+```python
+# field_tools/__init__.py
+def classFactory(iface):
+    return None
+```
+
+**`SYNTAX001` - a file does not parse.** `check` reads the source without
+importing it, so this is a plain `SyntaxError` reported with the path and line
+rather than a traceback. Fix the file; nothing else about the project is
+examined until it parses.
+
+```python
+def broken(:
+```
+
+**`ICON001` - the toolbar icon is not in the package.** A bare file name is
+required, and the file must be under `<package>/icons/`. What you see:
+`@toolbar icon 'missing.svg' is not a file under field_tools/icons/`.
+
+```python
+@toolbar(icon="missing.svg", text="Buffer")
+@app.action(id="go", title="Go")
+def go(ctx: PluginContext) -> None: ...
+```
+
+**`HOST001` - a window declaration in a plugin that declares no window host.**
+`@toolbar`, `@menu`, `@shortcut`, a `Dialog`/`Dock` surface or a web view in a
+plugin whose `hosts` says `server` only. What you see: `the @toolbar binding on
+go needs a window ... but [tool.qgis-sdk] hosts declares server`. Add `desktop`
+(or `app`), or move the declaration to a module only a windowed host loads.
+
+```toml
+[tool.qgis-sdk]
+hosts = ["server"]
+```
+
+**`HOST002` - a server hook in a plugin that does not declare the server host.**
+The mirror of `HOST001`, and the one that stays silent about ordinary words:
+only `qgis_sdk.server` counts, so a `filter` imported from anywhere else is not
+a declaration this host recognises.
+
+```python
+from qgis_sdk import server
+
+
+@server.filter
+def filter_request(request, response): ...
+```
+
+**`HOST003` (warning) - the plugin declares `server`, and this QGIS has no
+server bindings.** Nothing is wrong with the project: a developer machine
+without QGIS Server is normal, and the deployment target may carry them. The
+finding exists so `qgis-sdk test --target server` refusing here is not a
+surprise. Needs a visible QGIS without `qgis.server`; on a machine with no QGIS
+installed, the state is unreadable and nothing is reported.
+
+### It loads, but the button does nothing
+
+**`UI003` - a typed action bound to the toolbar.** A button collects nothing,
+so the host refuses the trigger by name instead of opening a dialog you did not
+ask for. What you see: `buffer is bound to the Desktop (@toolbar) but takes
+inputs (layer_id); nothing collects them`. Give it a surface, or drop the
+inputs.
+
+```python
+@toolbar(icon="buffer.svg", text="Buffer")
+@app.action(id="buffer", title="Buffer")
+def buffer(ctx: PluginContext, layer_id: str) -> None: ...
+```
+
+**`UI001` - an interactive widget with no `objectName`.** Tests and UI
+snapshots find widgets by name (decision-51); an unnamed input is invisible to
+both. What you see: `self.button (QPushButton) in Settings.__init__() has no
+objectName`. Name it, or use a `qgis_sdk.ui` component, which names its own
+widgets.
+
+```python
+class Settings(Dialog):
+    def __init__(self):
+        self.button = QPushButton("Go")
+```
+
+**`UI002` - `@on` names a widget the Designer file does not declare.** What you
+see: `@on('go') in Settings: settings.ui declares no widget named 'go'`. The
+message lists the object names the file does have, which is usually enough to
+see the typo.
+
+```python
+class Settings(Dialog):
+    ui = "settings.ui"
+
+    @on("go")
+    def go(self): ...
+```
+
+**`UI005` - `@on` names a literal.** A class attribute holding a string, a
+number or a container is not a component, so nothing can be copied into a
+window. What you see: `@on(label) in Settings: 'label' is a str, not a
+component`. Assign a catalogue component, or pass the object name as a string.
+
+```python
+class Settings(Dialog):
+    label = "not a component"
+
+    @on(label).clicked
+    def label_changed(self): ...
+```
+
+### The job fails on its first step
+
+**`JOB001` - the job body reaches GUI state.** The whole body runs on a worker
+thread, so `iface`, a Qt or QGIS GUI class, `QgsProject.instance()` or a
+module-level name holding one of them is a crash waiting for a slow enough
+machine. Prepare before submitting; apply in the success callback.
+
+```python
+@app.job(id="load", title="Load")
+def load(ctx: WorkerContext) -> None:
+    from qgis.utils import iface
+
+    iface.activeLayer()
+```
+
+**`JOB002` - the job body reads a context capability.** A worker gets
+`progress` and `cancellation` only; anything else refuses by name on the first
+step. What you see: `job load reads ctx.layers in its body, which a
+WorkerContext refuses`.
+
+```python
+@app.job(id="load", title="Load")
+def load(ctx: WorkerContext) -> None:
+    ctx.layers.layer_ids()
+```
+
+**`JOB003` (warning) - the job body imports a module by name.** `check` cannot
+follow `importlib.import_module`, so it cannot promise the body reaches no GUI
+state. Import at module level or in a helper outside the job.
+
+```python
+@app.job(id="load", title="Load")
+def load(ctx: WorkerContext) -> None:
+    importlib.import_module("field_tools.extra")
+```
+
+### `check` refuses an import
+
+**`QGIS001` - QGIS is imported when the module loads.** Module scope, a class
+body, a `try`, a `with` and a module-level `if` all count; a function body and
+`if TYPE_CHECKING:` do not. What you see: `qgis.core is imported when the module
+loads, so field_tools.plugin cannot be imported or inspected without QGIS`.
+
+```python
+from qgis.core import QgsProject
+```
+
+**`ARCH001` - the native adapter package is imported when a pure module loads.**
+Let `host()` build the context, or import the adapter inside the function that
+runs in QGIS.
+
+```python
+from qgis_sdk.adapters.qgis import canvas
+```
+
+**`UI004` (warning) - a declared-native module still imports Qt at load time.**
+The exemption lifts `QGIS001`, not the cost: Qt at module level defeats the
+fakes and `check`'s own inspection of that module. Keep Qt inside `build()`.
+
+```python
+# declared native under [tool.qgis-sdk.check] native-modules
+from qgis.PyQt.QtWidgets import QLabel
+```
+
+A module that must import QGIS or Qt when it loads - a widget module, an
+adapter of your own - is declared native instead:
+
+```toml
+[tool.qgis-sdk.check]
+native-modules = ["field_tools.dialogs"]
+```
+
+### The ZIP is wrong, or the plugin misbehaves after installing
+
+**`DEP001` - an import root nobody provides.** Neither the standard library,
+QGIS, the SDK runtime, the plugin itself, a declared `vendor` distribution nor a
+declared `external` provides it, so the ZIP cannot carry it and the plugin fails
+on a clean QGIS. Two exits: vendor it, or declare it external when every target
+QGIS ships it.
+
+```python
+import mystery_package
+```
+
+**`DEP002` - the fakes are imported by the plugin.** `qgis_sdk.testing` is for
+the project's tests and is never carried in a built plugin; a module that
+imports it fails on a clean install.
+
+```python
+from qgis_sdk.testing import FakeProject
+```
+
+**`DEP003` - a vendored distribution ships a compiled extension.** A compiled
+package cannot be vendored, so it is an external with a startup probe.
+
+```toml
+[tool.qgis-sdk.build]
+vendor = ["pydantic-core"]
+```
+
+**`DEP004` - a vendored distribution is not installed here.** `build` copies the
+copy the build interpreter imports, so a name that resolves nowhere is caught
+before the ZIP exists.
+
+```toml
+[tool.qgis-sdk.build]
+vendor = ["not-installed-package"]
+```
+
+**`VERSION001` - the runtime pin is outside the range this release was tested
+with.** What you see: `pins qgis-sdk-runtime<0.5, outside the runtime range this
+qgis-sdk-tools release supports (>=0.11.0,<0.12)`. Move the pin, or use the
+`qgis-sdk-tools` release tested with the runtime you pin.
+
+```toml
+dependencies = ["qgis-sdk-runtime<0.5"]
+```
+
+**`VERSION003` (warning) - no runtime requirement at all.** `build` ships
+whatever the build interpreter imports, which may not be what the plugin was
+written for. Add the requirement `qgis-sdk new` writes.
+
+```toml
+[project]
+name = "field-tools"
+version = "0.1.0"
+# dependencies = ["qgis-sdk-runtime>=0.11,<0.12"]   <- removed
+```
+
+**`VERSION004` - the installed runtime does not satisfy the requirement.** The
+finding names both numbers and the `pip install` line. The tools never install
+on your behalf.
+
+```toml
+dependencies = ["qgis-sdk-runtime>=99"]
+```
+
+### The generated client is stale, or the page cannot call
+
+**`VERSION002` - a generated client was produced by another release.** The file
+starts with `// Generated by qgis-sdk. Do not edit.` and declares a schema
+version this release does not generate. Regenerate with `qgis-sdk bridge
+generate`, or install the release that generated it; do not edit the file.
+
+```typescript
+// Generated by qgis-sdk. Do not edit.
+export const HOST_SCHEMA_VERSION = 99;
+```
+
+**`GRANT001` - a grant names nothing.** What you see: `[tool.qgis-sdk.web]
+grants names layers.write_all, neither a host grant nor a host operation`. The
+remediation prints both vocabularies in full; `qgis-sdk check --grants` prints
+the matrix they come from.
+
+```toml
+[tool.qgis-sdk.web]
+grants = ["layers.write_all"]
+```
+
+**`CONFIG001` - a `[tool.qgis-sdk]` key has the wrong shape.** `plugin` not
+`pkg.module:app`, `placement` not `dock`/`dialog`, `grants` not a list of
+strings, an unknown key under `[tool.qgis-sdk.console]`, a passthrough value
+that is not a scalar. What you see: `[tool.qgis-sdk] hosts must be a list of
+host names`.
+
+```toml
+[tool.qgis-sdk]
+hosts = "desktop"
+```
+
+### Something compiled fine but is on its way out
+
+**`API001` (warning) - an import of a name carrying a deprecation mark.** The
+mark names the replacement and the release that removes the name, and `check`
+reports a use so it does not arrive as a surprise at that release. No shipped
+name carries a mark yet - choosing which names 1.0 drops is TASK-98's sweep - so
+this rule fires only once one does. See [Stability](#stability).
+
+## IDE, autocompletion and typing
+
+The runtime is plain Python with real annotations, so an editor reads it
+directly: a `qgis_sdk` installed into the project's environment gives
+completion on `ctx`, the declarations and the models, and hovering a name shows
+its signature. Nothing needs a plugin, a stub package or a `TYPE_CHECKING`
+import.
+
+What is not there is a `py.typed` marker, and that decides what a *type checker*
+does with the package:
+
+| Tool | `qgis_sdk` | `qgis` (PyQGIS) |
+| :-- | :-- | :-- |
+| Pylance / pyright | analysed from source: `Type of "app" is "QgisSdkPlugin"` | `reportMissingImports` - no stubs exist |
+| mypy | skipped: `Skipping analyzing "qgis_sdk": module is installed, but missing library stubs or py.typed marker [import-untyped]` | same `[import-not-found]` |
+| Completion, hover, go-to-definition | works | falls back to the editor's index |
+
+Those two tool rows are what this release was measured with (`mypy` 1.x,
+`pyright` 1.1.407, CPython 3.11), not a claim about every editor. mypy refuses
+an untyped package by design; `--ignore-missing-imports` silences the message
+and still treats the import as `Any`. pyright reads the source it can find and
+infers from it, which is why VS Code completes `ctx` even without a marker.
+
+A type checker therefore checks *your* code and not the SDK's internals. Two
+practices keep that useful:
+
+- Annotate the boundaries you own - action signatures, job bodies, service
+  implementations. They are what `@action` reads to generate a form and a
+  bridge schema, so the annotations are load-bearing at runtime, not only in an
+  editor.
+- Keep PyQGIS behind the adapter you wrote for it. `qgis.*` is untyped
+  everywhere, so code that touches it is where a checker stops being able to
+  help; the SDK's own adapters are the one place this repository accepts that.
+
+```python
+# mypy checks this file once the SDK import is silenced; the annotation is
+# what the SDK itself reads
+@app.action(id="buffer", title="Buffer")
+def buffer(ctx: PluginContext, layer_id: str, metres: float) -> VectorLayerInfo: ...
+```
+
+**Not yet.** A `py.typed` marker in `qgis-sdk-runtime` would let mypy analyse the
+package, and a stub distribution for PyQGIS would give `qgis.*` a type for the
+Desktop and server editions the matrix qualifies. Neither ships, and adding the
+marker is a decision about how much of the SDK's own typing becomes a promise -
+it is the question TASK-133 exists to answer, not something this page can
+assume. Until then, the honest recommendation is pyright or Pylance for
+completion and inference, and mypy with the import silenced for the code you own.
+
+## Going deeper: where this contract stops
+
+This SDK covers a few percent of PyQGIS on purpose - every capability it adds
+must behave the same on a fake, on Desktop, in an app window, on a server and on
+a web page, and be testable without QGIS. Everything else stays reachable,
+because the exit is part of the design. There are two.
+
+**`ctx.desktop.iface` - the Desktop escape hatch.** `DesktopAccess.iface` hands
+back the runtime-owned `QgisInterface`, opaque to pure code. It is the shortest
+path from a handler to raw PyQGIS.
+
+```python
+@app.action(id="zoom_home", title="Zoom home")
+def zoom_home(ctx: PluginContext) -> None:
+    ctx.desktop.iface.mapCanvas().zoomToFullExtent()
+```
+
+The cost is real: the line only runs on Desktop (on a server or in a test
+`ctx.desktop` refuses by name with `unsupported_capability`), it cannot cross
+the bridge - `iface` is never serialised - and no fake replaces it, so a test
+covering it needs a live QGIS. Use it for one call at the edge of a handler, not
+as the way the plugin works.
+
+**An adapter of your own.** The services are structural Protocols
+(`qgis_sdk.services`): implement `Layers`, `Styles` or `DesktopAccess` yourself,
+hand the instance to `host()` or to a context record, and the rest of the plugin
+- including its fakes and its bridge grants - is unchanged. This is how the
+repository itself supports Desktop, server and app hosts from one contract.
+
+```python
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
+
+
+class MyLayers:
+    """The four methods a `Layers` implementation owes the contract."""
+
+    def layer_ids(self) -> list[str]: ...
+    def layer(self, layer_id: str): ...
+    def geometry_of(self, layer_id: str): ...
+    def open_vector(self, path): ...
+
+
+ctx = PluginContext(
+    notifications=notifications,
+    scope=ResourceScope(),
+    services=PluginServices(layers=MyLayers()),
+)
+```
+
+The cost is the mirror of the first: you own both sides, and a capability the
+protocol does not name is still out of reach - Protocols describe shape, so
+adding a method to your adapter does not widen what a plugin may call.
+
+**Three the contract does cover, and where the corpus still goes further.** These
+are outside the table because the answer here is "yes, with a smaller surface":
+raster analysis (the Rasters section reads bands, statistics and pixel values, and
+`algorithms.run` reaches terrain and zonal tools - but no algorithm is typed, so
+a parameter map is raw PyQGIS) against [Raster analysis
+workflows](https://pyqgis.com/spatial-data-processing-automation/raster-analysis-workflows/);
+layouts (Print layouts and atlases exports a template and renders its atlas;
+it does not compose a layout item by item) against [Automated map layout
+generation](https://pyqgis.com/spatial-data-processing-automation/automated-map-layout-generation/)
+and [Automating atlas map
+series](https://pyqgis.com/spatial-data-processing-automation/automating-atlas-map-series/);
+and symbology (Symbology, labelling and the style manager carries four
+renderers, three symbols and one simple labelling, with no data-defined
+overrides) against [Programmatic layer
+styling](https://pyqgis.com/pyqgis-cartography-visualization/programmatic-layer-styling/)
+and [Labeling and
+annotations](https://pyqgis.com/pyqgis-cartography-visualization/labeling-and-annotations/).
+
+**Where to look instead.** For anything below, the SDK either has no surface or
+has one narrower than the corpus you probably arrived from. The linked page is
+the pyqgis.com hub that teaches the raw API for it; read it against the exit
+above.
+
+| Area | What this SDK has | Where the raw API is taught |
+| :-- | :-- | :-- |
+| Attribute forms, editor widgets, layer actions | nothing: a `Form` here is an action's *input window*, not a QGIS attribute form | [Attribute forms and layer actions](https://pyqgis.com/qgis-plugin-development/attribute-forms-and-layer-actions/) |
+| Custom classes - tree indicators, property pages, canvas items, renderers | nothing planned | [Extending QGIS with custom classes](https://pyqgis.com/qgis-plugin-development/extending-qgis-with-custom-classes/) |
+| Custom map tools - measure, identify, snapping, rubber bands, layer context menus | one shape: `@tool` captures a point, line or polygon | [QGIS plugin development](https://pyqgis.com/qgis-plugin-development/) |
+| Field management - add, rename, retype, calculate, join | `features` edits values, not the schema | [Attribute tables and field management](https://pyqgis.com/spatial-data-processing-automation/attribute-tables-and-field-management/) |
+| PostGIS, GeoPackage SQL, database transactions | `connections` lists and opens what the project already knows | [PostGIS and database workflows](https://pyqgis.com/spatial-data-processing-automation/postgis-and-database-workflows/) |
+| WMS, WFS, XYZ, vector tiles, OGC API, ArcGIS REST | `open_vector` takes a `Path`: local files only | [Web services and remote data](https://pyqgis.com/spatial-data-processing-automation/web-services-and-remote-data/) |
+| Temporal controllers, 3D views, mesh rendering, diagrams | nothing; layer kinds are read, not rendered in 3D | [Temporal and 3D visualization](https://pyqgis.com/pyqgis-cartography-visualization/temporal-and-3d-visualization/) |
+| Symbol-layer stacking, data-defined overrides, graduated and categorized classification | `symbology` reads and sets what a style declares; `styles.apply` takes a packaged QML | [Programmatic layer styling](https://pyqgis.com/pyqgis-cartography-visualization/programmatic-layer-styling/) |
+| Memory and scratch layers | no way to create one; a workflow that produces an intermediate table writes a file | [Features, geometries and memory layers](https://pyqgis.com/pyqgis-fundamentals-environment-setup/features-geometries-and-memory-layers/) |
+| pandas, GeoPandas, shapely, numpy interop | none: geometries cross as encoded payloads | [Python and the data stack](https://pyqgis.com/spatial-data-processing-automation/pyqgis-and-the-python-data-stack/) |
+| Map themes: creating one, layer visibility, scale-based visibility | reading and applying a theme works; authoring does not | [Map themes and layer visibility](https://pyqgis.com/pyqgis-cartography-visualization/) |
+| Publishing beyond a ZIP, private repositories | `build` produces a compliant ZIP; nothing uploads it | [Publishing to the plugin repository](https://pyqgis.com/qgis-plugin-development/publishing-to-the-qgis-plugin-repository/) |
+
+Two of those rows are close enough to be worth naming precisely, because they
+are the ones a reader tries first. `algorithms.run` reaches terrain, raster
+analysis, network analysis and the GDAL/GDAL-based tools wholesale - what the
+SDK does not model are *typed per-algorithm request classes*, so a raw
+`processing.run` with a parameter map is a legitimate call inside a job.
+`ctx.canvas` controls the map (extent, scale, CRS, themes, capture) but does not
+render to PDF, SVG or tiles: `layouts.export` does that for a layout template,
+and anything else is the raw API.
+
+**Out of scope by decision, not by omission.** Raw `iface` across the bridge,
+`eval`, arbitrary Qt objects as values, `QgsTaskManager` as public API, mobile
+hosts, and QGIS 3.4x beyond the 3.44 LTS row in [Supported
+targets](#supported-targets). A plugin that needs one of those is not badly
+built - it is a plugin this contract does not describe, and the two exits above
+are how it still ships.
 
 ## 0.1.0 experimental release and migration policy
 

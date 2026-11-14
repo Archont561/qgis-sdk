@@ -17,6 +17,13 @@ interpreter. `qgis-sdk test --target qgis`, `qgis-sdk dev` and `qgis-sdk build`
 find a QGIS through `QGIS_PREFIX_PATH`, `qgis` on `PATH`, the current
 environment, or `[tool.qgis-sdk] qgis-prefix` in the project.
 
+If your PyQGIS background says to use QGIS's own interpreter and avoid virtual
+environments, that advice is for scripts. A plugin built here carries its own
+runtime, so the environment you develop in is not the environment it runs in -
+[the installation section of the Python
+guide](/python/installation/#if-you-arrived-from-pyqgis-do-not-use-a-virtualenv)
+has the three places the coupling actually is.
+
 ## How do I install the Python kit?
 
 With pip, into any environment:

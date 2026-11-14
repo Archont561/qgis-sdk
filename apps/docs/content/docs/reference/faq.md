@@ -53,7 +53,16 @@ declaration, `UI003` for an action that cannot be run from a button,
 `VERSION004` for a version window that excludes the release. Every code is
 listed with what it refuses.
 
-[Project checks](/python/project-checks/) - the catalogue of codes.
+[Project checks](/python/project-checks/) - the catalogue of codes, and
+[troubleshooting](/python/troubleshooting/) - the same codes starting from the symptom.
+
+## Does the kit cover everything PyQGIS does?
+
+No, deliberately. A capability is added only if it behaves the same on a fake,
+Desktop, an app window, a server and a web page; attribute forms, custom map
+tools, PostGIS, web services, temporal and 3D have no surface at all.
+
+[Going deeper](/python/going-deeper-where-this-contract-stops/) - the two exits, and the raw-API guide behind each gap.
 
 ## Can an agent drive the toolchain?
 
