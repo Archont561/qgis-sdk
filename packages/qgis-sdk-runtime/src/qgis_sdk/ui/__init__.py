@@ -120,3 +120,5 @@ __all__ = [
     "wire_surface",
     "wires_of",
 ]
+
+__stability__ = "stable"

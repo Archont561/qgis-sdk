@@ -24,3 +24,5 @@ __all__ = [
     "core_catalogue",
     "load_catalogue",
 ]
+
+__stability__ = "stable"

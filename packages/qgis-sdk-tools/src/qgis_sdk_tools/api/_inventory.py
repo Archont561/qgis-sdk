@@ -42,6 +42,7 @@ PUBLIC_MODULES = (
     "qgis_sdk.console",
     "qgis_sdk.core",
     "qgis_sdk.declarations",
+    "qgis_sdk.deprecation",
     "qgis_sdk.environment",
     "qgis_sdk.exports",
     "qgis_sdk.files",
@@ -185,6 +186,28 @@ def _cli_surface(command: Any, prefix: str) -> Iterable[str]:
         yield f"{path} {flag}"
 
 
+def _deprecations() -> list[dict[str, str]]:
+    """Every public name carrying a `@deprecated` mark, with its window.
+
+    decision-56 point 3: the mark is the promise, and this is where the promise
+    is recorded - one entry per name, naming the replacement and the version the
+    name may be removed in. `release.py verify-api` refuses a removal before
+    that version, and `check` reports a use of one as ``API001``.
+    """
+    from importlib import import_module
+
+    from qgis_sdk.deprecation import deprecation_of
+
+    entries: list[dict[str, str]] = []
+    for name in PUBLIC_MODULES:
+        module = import_module(name)
+        for exported in getattr(module, "__all__", ()):
+            mark = deprecation_of(getattr(module, exported, None))
+            if mark is not None:
+                entries.append({"module": name, "name": exported, **mark.to_json()})
+    return sorted(entries, key=lambda entry: (entry["module"], entry["name"]))
+
+
 @dataclass(frozen=True, slots=True)
 class Inventory:
     """The public API of one tree: the four surfaces decision-56 names."""
@@ -193,6 +216,7 @@ class Inventory:
     rules: Sequence[str]
     operations: Sequence[str]
     cli: Sequence[str]
+    deprecations: Sequence[Mapping[str, str]] = ()
 
     def document(self) -> dict[str, Any]:
         """The JSON-ready document, every collection sorted."""
@@ -208,6 +232,9 @@ class Inventory:
             "rules": sorted(self.rules),
             "host_operations": sorted(self.operations),
             "cli": sorted(self.cli),
+            "deprecations": sorted(
+                self.deprecations, key=lambda entry: (entry["module"], entry["name"])
+            ),
         }
 
 
@@ -218,6 +245,7 @@ def inventory() -> Inventory:
         rules=_check_rules(),
         operations=_host_operations(),
         cli=_cli_commands(),
+        deprecations=_deprecations(),
     )
 
 

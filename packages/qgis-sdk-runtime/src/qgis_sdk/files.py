@@ -26,6 +26,8 @@ from qgis_sdk.models.files import FileRef
 
 __all__ = ["FilesService"]
 
+__stability__ = "stable"
+
 
 class FilesService:
     """``ctx.files``: mint refs for this owner and resolve the ones it holds.

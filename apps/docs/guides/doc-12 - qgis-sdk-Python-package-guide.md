@@ -117,6 +117,56 @@ detailed per-requirement evidence stays in [doc-14](doc-14%20-%20Workspace-devel
 
 The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
 
+## Stability
+
+A tier is what a name costs to change (decision-56). **Stable** names are the
+promise: renaming one, dropping an argument or changing what it returns breaks a
+plugin that used it, so after 1.0 it needs a major and before 1.0 a documented
+minor. **Internal** names - `qgis_sdk.adapters`, the inside of `qgis_sdk.bridge` and
+`qgis_sdk.core` (only what those packages re-export is listed below), and
+anything underscored - may change in any release, so pin exactly if you use one. **Evolving** names - the `dev.*` tools, the agent
+tool surface and `release.py` - may change in a minor and say so in the release
+notes; the table below covers the Python modules, which is what a plugin imports.
+
+Every public module declares its tier as `__stability__`, and this table is
+rendered from that declaration rather than written by hand: `qgis-sdk api
+stability` prints it, `qgis-sdk api dump` writes the inventory it comes from, and
+`release.py verify-api` diffs that inventory between releases. A tier claimed
+here that the code does not declare fails the build, so paste the command's
+output between the markers instead of editing the table.
+
+<!-- stability:begin -->
+| Module | Tier | Public names | Deprecated |
+| :-- | :-- | :-- | :-- |
+| `qgis_sdk` | stable | 10 | 0 |
+| `qgis_sdk.algorithms` | stable | 11 | 0 |
+| `qgis_sdk.app` | stable | 13 | 0 |
+| `qgis_sdk.batch` | stable | 10 | 0 |
+| `qgis_sdk.bindings` | stable | 14 | 0 |
+| `qgis_sdk.console` | stable | 6 | 0 |
+| `qgis_sdk.core` | stable | 24 | 0 |
+| `qgis_sdk.declarations` | stable | 50 | 0 |
+| `qgis_sdk.deprecation` | stable | 4 | 0 |
+| `qgis_sdk.environment` | stable | 5 | 0 |
+| `qgis_sdk.exports` | stable | 4 | 0 |
+| `qgis_sdk.files` | stable | 1 | 0 |
+| `qgis_sdk.http` | stable | 2 | 0 |
+| `qgis_sdk.jobs` | stable | 17 | 0 |
+| `qgis_sdk.models` | stable | 277 | 0 |
+| `qgis_sdk.network` | stable | 9 | 0 |
+| `qgis_sdk.processing` | stable | 8 | 0 |
+| `qgis_sdk.providers` | stable | 5 | 0 |
+| `qgis_sdk.server` | stable | 15 | 0 |
+| `qgis_sdk.services` | stable | 47 | 0 |
+| `qgis_sdk.testing` | stable | 40 | 0 |
+| `qgis_sdk.ui` | stable | 60 | 0 |
+<!-- stability:end -->
+
+A name on its way out keeps a window: `@deprecated(since=, removal=, use=)` names
+the replacement and the release that removes it, `check` reports a use as
+`API001`, and the release gate refuses the removal before that release. The last
+column counts the names in each module that carry such a mark.
+
 ## Declarations
 
 Declare an application and register ordinary functions. The first argument is

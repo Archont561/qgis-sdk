@@ -90,3 +90,5 @@ __all__ = [
     "fake_ui_context",
     "reply",
 ]
+
+__stability__ = "stable"

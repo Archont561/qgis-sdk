@@ -117,3 +117,5 @@ __all__ = [
     "validate_given",
     "validate_plugin_bindings",
 ]
+
+__stability__ = "stable"

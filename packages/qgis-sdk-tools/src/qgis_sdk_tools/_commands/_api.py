@@ -14,7 +14,7 @@ from typing import Annotated
 import typer
 
 from qgis_sdk_tools._commands._app import app
-from qgis_sdk_tools.api import inventory, write
+from qgis_sdk_tools.api import inventory, render_stability, write
 from qgis_sdk_tools.cli import CliRuntime
 
 api_app = typer.Typer(
@@ -56,3 +56,14 @@ def dump(
     target = runtime.resolve(out)
     write(document, target)
     typer.echo(f"{target}: {_summary(document)}", file=runtime.out)
+
+
+@api_app.command("stability")
+def stability(ctx: typer.Context) -> None:
+    """Print the tier table doc-12 carries; paste it between the markers.
+
+    The table is rendered from the same inventory `dump` writes, so the guide
+    cannot claim a tier the marks do not declare (decision-56).
+    """
+    runtime: CliRuntime = ctx.obj
+    typer.echo(render_stability(inventory().document()), file=runtime.out)

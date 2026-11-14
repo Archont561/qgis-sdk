@@ -20,3 +20,5 @@ __all__ = [
     "build_request",
     "origin_of",
 ]
+
+__stability__ = "stable"

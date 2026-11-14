@@ -79,3 +79,5 @@ __all__ = [
     "invoking_scope",
     "job",
 ]
+
+__stability__ = "stable"
