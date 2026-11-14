@@ -14,15 +14,15 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { API_MODULE_NOTES } from "../scripts/api-modules";
-import type { Inventory } from "../scripts/lib/api-index";
-import { renderApiIndex } from "../scripts/lib/api-index";
+import { type Inventory, renderApiIndex } from "../scripts/lib/api-index";
 import { GUIDES, splitGuide } from "../scripts/lib/guides";
+import { readInventory } from "../scripts/lib/inventory";
 
 const ROOT = join(import.meta.dir, "../../..");
 const INVENTORY = join(ROOT, "api/python.json");
 
 async function inventory(): Promise<Inventory> {
-	return (await Bun.file(INVENTORY).json()) as Inventory;
+	return readInventory(INVENTORY);
 }
 
 /** `guide id:heading` to the route the rendered guides put that heading on. */

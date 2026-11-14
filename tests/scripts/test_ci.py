@@ -1011,6 +1011,66 @@ def test_only_deploy_and_release_workflows_keep_a_main_push_trigger():
         assert "push" in triggers, f"{name} deploys or releases from main"
 
 
+# -- The site's build triggers -----------------------------------------------
+
+#: Every input `apps/docs/scripts/generate.ts` renders from, as a path in this
+#: checkout. `docs.yml` runs on a path filter, so an input missing from that
+#: filter builds nothing when it changes.
+DOCS_RENDER_INPUTS = (
+    "api/python.json",
+    "apps/docs/guides/doc-12 - qgis-sdk-Python-package-guide.md",
+    "apps/docs/scripts/generate.ts",
+    "backlog/decisions/decision-76 - Keep-AGENTS-md-part-generated.md",
+    "packages/qgis-sdk-python/pyproject.toml",
+    "packages/qgis-sdk-typescript/package.json",
+    "packages/qgis-sdk-ui/package.json",
+    "pixi.toml",
+    "bun.lock",
+    # Written by the `storybook` task, so it exists only after a UI build in the
+    # same run; matched, not required on disk.
+    "packages/qgis-sdk-ui/storybook-static/index.html",
+)
+
+DOCS_BUILT_INPUTS = frozenset({"packages/qgis-sdk-ui/storybook-static/index.html"})
+
+
+def _matches(path: str, patterns: list[str]) -> bool:
+    """Whether a GitHub `paths` filter rebuilds for `path`.
+
+    `fnmatch` treats `*` as crossing `/`, so it is lenient: `packages/*/x` also
+    matches `packages/a/b/x`, which GitHub would not. Leniency only ever misses
+    an exotic pattern; the gap this test exists for - a whole tree absent from
+    the list - is always caught.
+    """
+    from fnmatch import fnmatch
+
+    return any(fnmatch(path, pattern) for pattern in patterns)
+
+
+def test_docs_workflow_rebuilds_the_site_for_every_input_the_renderer_reads():
+    """A stale site is silent: no build, no deploy, no red check.
+
+    The pull request that renames a public name changes `api/python.json` and
+    nothing under `apps/docs`, so a filter without `api/**` builds neither the
+    site nor the deploy, and the reference index keeps the old names until an
+    unrelated docs change happens to run. `release_verify_api --check` cannot
+    stand in for this: it proves the committed inventory matches the tree, not
+    that the site was rendered from it.
+    """
+    import yaml
+
+    root = SCRIPT.parents[2]
+    triggers = yaml.safe_load((root / ".github/workflows/docs.yml").read_text())[True]
+    for event in ("push", "pull_request"):
+        patterns = triggers[event]["paths"]
+        for sample in DOCS_RENDER_INPUTS:
+            if sample not in DOCS_BUILT_INPUTS:
+                assert (root / sample).is_file(), f"{sample} moved; update the list"
+            assert _matches(sample, patterns), (
+                f"docs.yml {event} does not rebuild for {sample}"
+            )
+
+
 # -- Gherkin linting ---------------------------------------------------------
 
 FEATURES_ROOT = "packages/qgis-sdk-python/tests/features"
