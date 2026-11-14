@@ -83,7 +83,10 @@ def _module(
     for gone in sorted(set(before) - set(after)):
         changes.append(Change(BREAKING, name, f"removed {gone}"))
     for name_changed in sorted(set(before) & set(after)):
-        if before[name_changed] != after[name_changed]:
+        enumerations = _enum_changes(before[name_changed], after[name_changed])
+        if enumerations is not None:
+            changes.extend(enumerations)
+        elif before[name_changed] != after[name_changed]:
             changes.append(
                 Change(
                     BREAKING,
@@ -92,6 +95,29 @@ def _module(
                 )
             )
     return changes
+
+
+def _members(record: str) -> list[str] | None:
+    """An enumeration's member names, or ``None`` when the record is not one."""
+    if not (record.startswith("enum<") and record.endswith(">")):
+        return None
+    return record[len("enum<") : -1].split("|")
+
+
+def _enum_changes(before: str, after: str) -> list[Change] | None:
+    """A changed enumeration: a new member is additive, a lost one is not."""
+    old, new = _members(before), _members(after)
+    if old is None or new is None or before == after:
+        return None
+    added = [
+        Change(ADDITIVE, "", f"enum member {name}") for name in new if name not in old
+    ]
+    lost = [
+        Change(BREAKING, "", f"removed enum member {name}")
+        for name in old
+        if name not in new
+    ]
+    return added + lost
 
 
 def _key(entry: Mapping[str, str]) -> tuple[str, str]:

@@ -137,6 +137,41 @@ def test_a_recorded_signature_carries_no_module_path_and_no_class_repr():
             assert "qgis_sdk." not in rendered, rendered
 
 
+def test_an_enumeration_is_recorded_by_its_members_not_its_constructor():
+    """`inspect.signature(SomeEnum)` is the machinery's, and it moves between Pythons."""
+    import enum
+
+    from qgis_sdk_tools.api import _signatures
+
+    class Host(enum.Enum):
+        DESKTOP = "desktop"
+        SERVER = "server"
+
+    assert _signatures.enum_members(Host) == "enum<DESKTOP|SERVER>"
+
+
+def test_an_enumeration_gains_members_additively_and_loses_them_breaking():
+    grown = _with(
+        modules={
+            "qgis_sdk.ui": {
+                "tier": "stable",
+                "names": {"Dialog": "()", "Host": "enum<SERVER|APP|DESKTOP>"},
+            }
+        }
+    )
+    base = _with(
+        modules={
+            "qgis_sdk.ui": {
+                "tier": "stable",
+                "names": {"Dialog": "()", "Host": "enum<DESKTOP|SERVER>"},
+            }
+        }
+    )
+
+    assert _kinds(grown, base) == ["additive"]
+    assert _kinds(base, grown) == ["breaking"]
+
+
 def test_a_name_added_is_additive_and_a_name_removed_is_breaking():
     grown = _with(
         modules={
