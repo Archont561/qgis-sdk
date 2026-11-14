@@ -102,6 +102,38 @@ def test_a_signature_names_parameters_without_the_interpreters_own_forms():
     assert "self" not in inventory_module._signature(Inherited)
 
 
+def test_an_annotation_reads_the_same_however_the_interpreter_prints_it():
+    """A source string, an evaluated class and a lazy re-render collapse alike.
+
+    Which shape arrives depends on whether the module uses
+    ``from __future__ import annotations`` and on how the interpreter reads
+    annotations - so the contract records the short name, and a release on one
+    Python cannot disagree with a release on another.
+    """
+    import typing
+    from pathlib import Path as PathType
+
+    text = inventory_module._text
+
+    assert text("qgis_sdk.models.files.FileRef") == "FileRef"
+    assert text(PathType) == "Path"
+    assert text(int | None) == "int | None"
+    # The legacy spelling is the point: an evaluated old-style alias must
+    # record the same short name a source annotation would.
+    assert text(typing.Optional[PathType]) == "Optional[Path]"  # noqa: UP045
+    assert text("dict[str, Any]") == "dict[str, Any]"
+    assert text(None) == "None"
+
+
+def test_a_recorded_signature_carries_no_module_path_and_no_class_repr():
+    signatures = inventory().document()["modules"]
+
+    for entry in signatures.values():
+        for rendered in entry["names"].values():
+            assert "<class" not in rendered, rendered
+            assert "qgis_sdk." not in rendered, rendered
+
+
 def test_a_name_added_is_additive_and_a_name_removed_is_breaking():
     grown = _with(
         modules={
