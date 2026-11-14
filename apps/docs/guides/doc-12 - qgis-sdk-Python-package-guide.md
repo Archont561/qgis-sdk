@@ -135,6 +135,15 @@ stability` prints it, `qgis-sdk api dump` writes the inventory it comes from, an
 here that the code does not declare fails the build, so paste the command's
 output between the markers instead of editing the table.
 
+The same list is the documentation's boundary. These pages document the modules
+in that table: every snippet they show imports something it carries, and a gate
+reads this file and the site on every pull request to keep it that way. An
+internal name may still appear in prose - where it moved, which adapter the
+framework calls for you, what the bridge does behind a host - because a reference
+section that hid those would send you to the source. Contributor material, from
+the harnesses to the release tooling, is [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
+and carries no promise.
+
 <!-- stability:begin -->
 | Module | Tier | Public names | Deprecated |
 | :-- | :-- | :-- | :-- |

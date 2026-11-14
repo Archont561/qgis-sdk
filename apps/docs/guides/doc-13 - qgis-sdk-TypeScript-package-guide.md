@@ -50,6 +50,14 @@ and the [stores](#stores-the-framework-free-core). Everything under `./bridge`
 is also exported from the root; the subpath stays for code that already uses
 it.
 
+The subpaths below are the whole public surface, and they are what this page
+imports: `@archont561/qgis-sdk`, `./bridge`, `./host`, `./react`, `./vue`,
+`./svelte` and `./testing`. A gate reads the package's `exports` map and these
+pages on every pull request, so a path that is not declared there cannot appear
+in a snippet here. `./bridge` and `./host` are the two halves of the wire
+protocol: `./host` is the Python side's counterpart, and its shape follows the
+contract rather than the page.
+
 ```ts
 import {
 	BridgeClient,
