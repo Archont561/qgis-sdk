@@ -84,6 +84,14 @@ _COMMANDS = {
         ),
     ),
     "ui_diff": ("ui diff", "Compare two captures; exits 1 on a structural change."),
+    "api_dump": (
+        "api dump",
+        "Write the public API of this tree as JSON; may overwrite the tracked inventory.",
+    ),
+    "api_stability": (
+        "api stability",
+        "Print the stability tier table doc-12 carries; changes nothing.",
+    ),
 }
 
 DEVELOPER_ONLY = frozenset({"ui_act"})

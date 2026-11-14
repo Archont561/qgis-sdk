@@ -1,82 +1,23 @@
-"""The public API inventory, and the release gate that reads it.
+"""The public API gates a pull request and a release have to pass.
 
-decision-56 makes a generated JSON document the 1.0 contract: `qgis-sdk api
-dump` writes it, `release.py verify-api` diffs two of them and refuses a
-breaking change that the version cannot carry. Four properties are worth a test,
-because the gate is only as good as them: the document is deterministic, the
-tracked copy still describes this tree, the classifier tells additive from
-breaking, and the refusal fires only where the promise says it should.
+The inventory's *behaviour* - what counts as additive or breaking, when a
+version may carry a change, what a deprecation mark does - is unit-tested in
+`packages/qgis-sdk-python/tests/test_api_contract.py`, where the coverage the
+release reports is measured. What is tested here is the wiring that makes it a
+gate: the tracked file describes this tree, every public module declares the
+tier the guide shows, the guide's table is the rendered one, and the workflows
+call the command that refuses a wrong release.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-
-BASE = {
-    "api_version": 1,
-    "modules": {
-        "qgis_sdk.ui": {
-            "tier": "stable",
-            "names": {"Button": "(text: str)", "Dialog": "()"},
-        }
-    },
-    "rules": ["UI001", "UI002"],
-    "host_operations": ["canvas.capture"],
-    "cli": ["build", "check", "check --json"],
-}
-
-
-def _with(**sections) -> dict:
-    """``BASE`` with one or more top-level sections replaced."""
-    document = copy.deepcopy(BASE)
-    document.update(sections)
-    return document
-
-
-def _kinds(document: dict, baseline: dict | None = None) -> list[str]:
-    """The kinds ``diff`` reports, in order."""
-    from qgis_sdk_tools.api import diff
-
-    return [change.kind for change in diff(baseline or BASE, document)]
-
-
-def test_two_dumps_of_one_tree_are_byte_identical(tmp_path: Path):
-    """A gate diffs files, so the same tree must always write the same bytes.
-
-    This compares two dumps in one process; the cross-process case is decided by
-    CI, which dumps the tree and diffs it against the committed copy.
-    """
-    from qgis_sdk_tools.api import inventory, write
-
-    first, second = tmp_path / "first.json", tmp_path / "second.json"
-    write(inventory().document(), first)
-    write(inventory().document(), second)
-
-    assert first.read_bytes() == second.read_bytes()
-
-
-def test_the_inventory_is_complete_for_every_public_module():
-    """Every public module is listed, and every name it exports is described."""
-    from importlib import import_module
-
-    from qgis_sdk_tools.api import PUBLIC_MODULES, inventory
-
-    modules = inventory().document()["modules"]
-
-    assert set(PUBLIC_MODULES) == set(modules)
-    for name in PUBLIC_MODULES:
-        exported = set(import_module(name).__all__)
-        described = set(modules[name]["names"])
-        assert exported, f"{name} exports no name to promise"
-        assert exported == described, f"{name} exports {exported - described} unlisted"
-    for internal in ("qgis_sdk.adapters", "qgis_sdk.bridge"):
-        assert internal not in modules
+GUIDE = ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
 
 
 def test_the_tracked_inventory_describes_this_tree():
@@ -88,140 +29,6 @@ def test_the_tracked_inventory_describes_this_tree():
     assert tracked == inventory().document(), (
         "api/python.json is stale; run `qgis-sdk api dump` and commit the result"
     )
-
-
-def test_a_name_added_is_additive_and_a_name_removed_is_breaking():
-    names = {"Button": "(text: str)", "Dialog": "()", "Panel": "()"}
-    added = copy.deepcopy(BASE["modules"]["qgis_sdk.ui"]["names"])
-    added["Panel"] = "()"
-    grown = _with(modules={"qgis_sdk.ui": {"tier": "stable", "names": added}})
-    shrunk = _with(
-        modules={
-            "qgis_sdk.ui": {
-                "tier": "stable",
-                "names": {"Button": names["Button"]},
-            }
-        }
-    )
-
-    assert _kinds(grown) == ["additive"]
-    assert _kinds(shrunk) == ["breaking"]
-
-
-def test_a_changed_signature_is_breaking_and_says_old_from_new():
-    from qgis_sdk_tools.api import diff
-
-    changed = copy.deepcopy(BASE["modules"]["qgis_sdk.ui"]["names"])
-    changed["Button"] = "(text: str, kind: str)"
-    document = _with(modules={"qgis_sdk.ui": {"tier": "stable", "names": changed}})
-
-    (change,) = diff(BASE, document)
-
-    assert change.kind == "breaking"
-    assert "(text: str) -> (text: str, kind: str)" in change.detail
-
-
-def test_an_internal_module_is_not_a_promise():
-    internal = _with(
-        modules={"qgis_sdk.adapter": {"tier": "internal", "names": {"Gone": "()"}}}
-    )
-
-    assert _kinds(_with()) == []
-    assert _kinds(internal, _with(modules={})) == ["additive"]
-
-
-def test_a_removed_rule_or_cli_flag_is_breaking():
-    assert _kinds(_with(rules=["UI001"])) == ["breaking"]
-    assert _kinds(_with(cli=["build", "check"])) == ["breaking"]
-
-
-@pytest.mark.parametrize(
-    ("version", "verdict", "refused"),
-    [
-        ("0.12.0", "breaking", False),
-        ("1.0.0", "breaking", False),
-        ("1.2.0", "breaking", True),
-    ],
-)
-def test_a_breaking_change_is_refused_only_after_1_0_and_by_a_major(
-    version: str, verdict: str, refused: bool
-):
-    from qgis_sdk_tools.api import diff, refusals
-    from qgis_sdk_tools.api import verdict as classify
-
-    document = _with(modules={"qgis_sdk.ui": {"tier": "stable", "names": {}}})
-    changes = diff(BASE, document)
-
-    assert classify(changes) == verdict
-    assert bool(refusals(changes, version)) is refused
-
-
-def test_an_additive_release_is_never_refused():
-    from qgis_sdk_tools.api import diff, refusals
-
-    names = {**BASE["modules"]["qgis_sdk.ui"]["names"], "Panel": "()"}
-    document = _with(modules={"qgis_sdk.ui": {"tier": "stable", "names": names}})
-
-    assert refusals(diff(BASE, document), "1.2.0") == []
-
-
-def test_verify_api_check_fails_only_when_the_tracked_copy_is_stale(tmp_path: Path):
-    from automation.release import _api
-    from automation.release._history import QgisSdkReleaseError
-
-    stale = _with(rules=["UI001"])
-    assert _api._stale(BASE, stale) is True
-    assert _api._stale(BASE, copy.deepcopy(BASE)) is False
-    with pytest.raises(QgisSdkReleaseError, match="does not describe this tree"):
-        _api.cmd_verify_api(
-            _arguments(_api, tmp_path, stale, copy.deepcopy(BASE), check=True)
-        )
-
-
-def _arguments(_api, tmp_path: Path, baseline: dict, current: dict, **flags):
-    """The namespace ``release verify-api`` builds, over two written documents."""
-    old, new = tmp_path / "old.json", tmp_path / "new.json"
-    old.write_text(json.dumps(baseline), encoding="utf-8")
-    new.write_text(json.dumps(current), encoding="utf-8")
-    return _api.argparse.Namespace(
-        baseline=str(old),
-        current=str(new),
-        tag="",
-        version=flags.get("version", ""),
-        check=flags.get("check", False),
-        json=flags.get("json", False),
-    )
-
-
-def test_verify_api_refuses_a_breaking_minor_and_passes_a_breakless_one(tmp_path: Path):
-    from automation.release import _api
-    from automation.release._history import QgisSdkReleaseError
-
-    broken = _with(modules={"qgis_sdk.ui": {"tier": "stable", "names": {}}})
-    with pytest.raises(QgisSdkReleaseError, match="cannot ship as 1.2.0"):
-        _api.cmd_verify_api(_arguments(_api, tmp_path, BASE, broken, version="1.2.0"))
-    assert (
-        _api.cmd_verify_api(_arguments(_api, tmp_path, BASE, broken, version="0.12.0"))
-        == 0
-    )
-
-
-def test_the_release_parser_offers_verify_api():
-    from automation.release._verify import build_parser
-
-    args = build_parser().parse_args(["verify-api", "--check", "--version", "0.12.0"])
-
-    assert args.handler.__name__ == "cmd_verify_api"
-    assert args.check is True
-    assert args.version == "0.12.0"
-
-
-def test_the_release_train_gates_the_api_against_the_previous_python_tag():
-    """The refusal is only a gate when the release workflow runs it."""
-    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-
-    assert "release_verify_api" in workflow
-    assert "git tag --sort=-creatordate --list 'python-v*'" in workflow
 
 
 def test_every_public_module_declares_its_tier():
@@ -250,10 +57,7 @@ def test_the_guide_renders_the_tiers_the_code_declares():
     """doc-12's table is pasted from `qgis-sdk api stability`, not written."""
     from qgis_sdk_tools.api import inventory, render_stability
 
-    guide = (
-        ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
-    )
-    text = guide.read_text(encoding="utf-8")
+    text = GUIDE.read_text(encoding="utf-8")
     begin, end = "<!-- stability:begin -->", "<!-- stability:end -->"
     assert begin in text and end in text, "doc-12 must carry the rendered tier table"
     rendered = text.split(begin, 1)[1].split(end, 1)[0].strip()
@@ -262,3 +66,132 @@ def test_the_guide_renders_the_tiers_the_code_declares():
         "doc-12's tier table drifted from the marks; "
         "paste `qgis-sdk api stability` between the markers"
     )
+
+
+def _document(**sections) -> dict:
+    """A minimal inventory document, with one name that a mark retires."""
+    document = {
+        "api_version": 1,
+        "modules": {
+            "qgis_sdk.ui": {"tier": "stable", "names": {"OldPanel": "()"}},
+            "qgis_sdk.models": {"tier": "stable", "names": {"Legacy": "()"}},
+        },
+        "rules": [],
+        "host_operations": [],
+        "cli": [],
+        "deprecations": [
+            {
+                "module": "qgis_sdk.ui",
+                "name": "OldPanel",
+                "since": "0.12.0",
+                "removal": "1.0.0",
+                "use": "Panel",
+            }
+        ],
+    }
+    document.update(sections)
+    return document
+
+
+def _arguments(tmp_path: Path, baseline: dict, current: dict, **flags):
+    """The namespace ``release verify-api`` builds, over two written documents."""
+    from automation.release import _api
+
+    old, new = tmp_path / "old.json", tmp_path / "new.json"
+    old.write_text(json.dumps(baseline), encoding="utf-8")
+    new.write_text(json.dumps(current), encoding="utf-8")
+    return _api.argparse.Namespace(
+        baseline=str(old),
+        current=str(new),
+        tag="",
+        version=flags.get("version", ""),
+        check=flags.get("check", False),
+        json=flags.get("json", False),
+    )
+
+
+def test_verify_api_check_fails_only_when_the_tracked_copy_is_stale(tmp_path: Path):
+    from automation.release import _api
+    from automation.release._history import QgisSdkReleaseError
+
+    stale = _document(rules=["UI001"])
+
+    assert _api._stale(_document(), stale) is True
+    assert _api._stale(_document(), _document()) is False
+    with pytest.raises(QgisSdkReleaseError, match="does not describe this tree"):
+        _api.cmd_verify_api(_arguments(tmp_path, _document(), stale, check=True))
+
+
+def test_verify_api_refuses_a_breaking_minor_and_passes_a_breakless_one(tmp_path: Path):
+    from automation.release import _api
+    from automation.release._history import QgisSdkReleaseError
+
+    # No marks in these documents: this is the SemVer rule on its own.
+    plain = _document(deprecations=[])
+    broken = _document(
+        modules={"qgis_sdk.ui": {"tier": "stable", "names": {}}}, deprecations=[]
+    )
+
+    with pytest.raises(QgisSdkReleaseError, match="cannot ship as 1.2.0"):
+        _api.cmd_verify_api(_arguments(tmp_path, plain, broken, version="1.2.0"))
+    assert (
+        _api.cmd_verify_api(_arguments(tmp_path, plain, broken, version="0.12.0")) == 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "reason"),
+    [
+        ("0.13.0", "announced for removal in 1.0.0"),
+        # The SemVer rule fires first here: a removal after 1.0 is a major
+        # whatever its window says, so the two refusals stay independent.
+        ("1.1.0", "cannot ship as 1.1.0"),
+        ("2.0.0", ""),
+    ],
+)
+def test_verify_api_refuses_removing_a_name_before_its_window_closes(
+    tmp_path: Path, version: str, reason: str
+):
+    from automation.release import _api
+    from automation.release._history import QgisSdkReleaseError
+
+    removed = _document(
+        modules={
+            "qgis_sdk.ui": {"tier": "stable", "names": {}},
+            "qgis_sdk.models": {"tier": "stable", "names": {"Legacy": "()"}},
+        }
+    )
+    arguments = _arguments(tmp_path, _document(), removed, version=version)
+
+    if not reason:
+        assert _api.cmd_verify_api(arguments) == 0
+        return
+    with pytest.raises(QgisSdkReleaseError, match=reason):
+        _api.cmd_verify_api(arguments)
+
+
+def test_the_release_parser_offers_verify_api():
+    from automation.release._verify import build_parser
+
+    args = build_parser().parse_args(["verify-api", "--check", "--version", "0.12.0"])
+
+    assert args.handler.__name__ == "cmd_verify_api"
+    assert args.check is True
+    assert args.version == "0.12.0"
+
+
+def test_the_release_train_gates_the_api_against_the_previous_python_tag():
+    """The refusal is only a gate when the release workflow runs it."""
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "release_verify_api" in workflow
+    assert "git tag --sort=-creatordate --list 'python-v*'" in workflow
+
+
+def test_a_pull_request_keeps_the_inventory_current():
+    """`api/python.json` only gates a change if CI compares it to the tree."""
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "release_verify_api --check" in workflow
