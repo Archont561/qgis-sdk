@@ -23,6 +23,7 @@
 			"!!examples/*/web/src/bridge.schema.ts",
 			"!!examples/*/web/src/processing.schema.ts",
 			"!!packages/qgis-sdk-runtime/src/qgis_sdk/processing/catalogue.json",
+			"!!api",
 			"!!**/.pixi",
 			"!!**/.tox",
 			"!!**/.bun",
