@@ -55,9 +55,14 @@ def test_the_tracked_inventory_describes_this_tree():
     tracked = json.loads((ROOT / "api/python.json").read_text(encoding="utf-8"))
     dumped = inventory().document()
 
+    difference = _difference(tracked, dumped)
+    if difference != "no difference":
+        # A GitHub annotation, so a CI failure says which name moved even when
+        # the runner's log is not readable from where the failure is triaged.
+        print(f"::error title=api inventory::{difference}")
     assert tracked == dumped, (
         "api/python.json is stale; run `qgis-sdk api dump` and commit the result. "
-        + _difference(tracked, dumped)
+        + difference
     )
 
 
