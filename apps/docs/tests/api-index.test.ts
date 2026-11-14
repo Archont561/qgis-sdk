@@ -10,6 +10,7 @@
  * signature that would break the table it is rendered into.
  */
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { API_MODULE_NOTES } from "../scripts/api-modules";
@@ -255,15 +256,15 @@ describe("the guides behind the notes", () => {
 		}
 	});
 
-	test("the generated reference folder keeps the index in its sidebar order", async () => {
-		const meta = (await Bun.file(
-			join(ROOT, "apps/docs/content/docs/reference/meta.json"),
-		).json()) as { pages: string[] };
-		// Present only after `bun run generate`; the CI docs job runs it first.
-		if (!meta.pages.includes("api-index")) {
-			expect(meta.pages.length).toBeGreaterThan(0);
+	test("the reference sidebar puts the index first when the generator has run", async () => {
+		// `content/docs/` holds generated files and is ignored by git, so this
+		// reads it only when `bun run generate` has run in this checkout - the
+		// coverage job does not run it, and a test may not need it to exist.
+		const path = join(ROOT, "apps/docs/content/docs/reference/meta.json");
+		if (!existsSync(path)) {
 			return;
 		}
+		const meta = (await Bun.file(path).json()) as { pages: string[] };
 		expect(meta.pages[0]).toBe("api-index");
 	});
 });
