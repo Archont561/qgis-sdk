@@ -270,6 +270,77 @@ def test_roadmap_inventory_matches_the_board() -> None:
     assert not problems, "\n".join(problems)
 
 
+COVERAGE_MAP = BACKLOG / "docs" / "plans" / "doc-22 - Service-coverage-map.md"
+ROW_TASK = re.compile(r"\[TASK-(\d+)\]")
+
+
+def coverage_map_section(name: str) -> str:
+    text = COVERAGE_MAP.read_text(encoding="utf-8")
+    assert f"## {name}" in text, f"doc-22 has no '## {name}' section"
+    return text.split(f"## {name}", 1)[1].split("\n## ", 1)[0]
+
+
+def coverage_map_rows(name: str) -> list[list[str]]:
+    """The body rows of the tables in one section, cells stripped."""
+    rows: list[list[str]] = []
+    for line in coverage_map_section(name).splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if all(set(cell) <= set(":- ") for cell in cells):
+            continue  # the `| --- |` separator
+        if cells[0] in {"Area", "Task"}:
+            continue  # the header
+        rows.append(cells)
+    return rows
+
+
+def first_task(row: list[str]) -> str | None:
+    """The task a row is *about*: the first one it links."""
+    for cell in row:
+        match = ROW_TASK.search(cell)
+        if match:
+            return f"TASK-{match.group(1)}"
+    return None
+
+
+@pytest.mark.parametrize("section", ["Planned", "Proposals awaiting a decision"])
+def test_a_row_that_claims_open_work_names_an_open_task(section: str) -> None:
+    """`Planned` and `Proposals` are open work; their first task may not be Done.
+
+    A proposal closes by becoming a decision or a shipped row, and a planned row
+    closes by moving to *Shipped* - never by staying where it is once the board
+    says the work is finished. TASK-159 sat in *Proposals awaiting a decision*
+    for a day after it shipped, which is the drift this catches: the map is the
+    1.0 gate's source of truth (decision-54 point 5), so a finished row left in
+    the open lists overstates what is left to do.
+    """
+    statuses = task_statuses()
+    finished = []
+    for row in coverage_map_rows(section):
+        if section == "Planned" and not row[-1].lower().startswith("planned"):
+            continue
+        task = first_task(row)
+        if task is not None and statuses.get(task) == SHIPPED:
+            finished.append(f"{row[0]}: {task} is {SHIPPED}")
+    assert not finished, (
+        "doc-22 lists finished work as outstanding in "
+        f"'## {section}':\n" + "\n".join(finished)
+    )
+
+
+def test_every_task_the_coverage_map_cites_exists() -> None:
+    """A cited id that no record answers is a row nobody can follow."""
+    cited = {
+        f"TASK-{number}"
+        for number in re.findall(
+            r"TASK-(\d+)", COVERAGE_MAP.read_text(encoding="utf-8")
+        )
+    }
+    missing = sorted(cited - set(task_statuses()))
+    assert not missing, f"doc-22 cites {', '.join(missing)}, which the board lacks"
+
+
 def test_no_broken_relative_links() -> None:
     """A renamed record must not leave a dangling link anywhere in the backlog."""
     broken: list[str] = []

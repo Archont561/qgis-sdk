@@ -13,11 +13,20 @@ host operation appears here landed with [TASK-84](../../tasks/task-84%20-%20Unif
 scope by decision, not by omission; explicitly marked proposals below still
 require a decision before being added to the committed service scope.
 
-**Safety warning:** the existing vector export and generic Processing entries
-below have known data-safety gaps: [TASK-118](../../tasks/task-118%20-%20Prevent-layer-exports-from-replacing-their-source-dataset.md)
-and [TASK-119](../../tasks/task-119%20-%20Enforce-honest-Processing-output-safety-for-explicit-destinations.md).
-Their presence in the matrix records implemented components, not proof that
-their documented non-destructive guarantees hold in every case.
+**Safety note:** the matrix records what is implemented; it is not by itself
+proof that a guarantee holds for every driver. The two data-safety defects the
+PyQGIS comparison found are closed - [TASK-118](../../tasks/task-118%20-%20Prevent-layer-exports-from-replacing-their-source-dataset.md)
+(an export could replace its source dataset) and [TASK-119](../../tasks/task-119%20-%20Enforce-honest-Processing-output-safety-for-explicit-destinations.md)
+(a failed Processing run could leave a partial file at a caller's destination) -
+so the vector export and generic Processing rows below describe the fail-closed
+policy rather than a known gap: a source whose identity cannot be established is
+refused instead of guessed at, the qualified native source drivers are GeoJSON,
+GeoPackage and ESRI Shapefile, and an explicit Processing destination is written
+through a staged commit. Three limits remain outside that promise: a third-party
+provider may have side effects of its own, a path that moves between the final
+check and the commit is outside what a check can promise, and the native evidence
+is Linux-only until [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md)
+has a Windows host.
 
 Legend — contract: Protocol in `services/`; models: plain models, no native
 handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
@@ -46,7 +55,7 @@ newest last.
 | Network | get/post/request, blocking + async, limits | ✓ | ✓ | ✓ | ✓ | `network.fetch` stream | ✓ | complete |
 | Blobs (decision-59) | `HostAuthority.mint_blob`/`inline_or_blob`/`read_blob` | ✓ | `BlobRef`, `BlobChunk` | ✓ (authority over fakes) | ✓ (same code: the authority holds no Qt) | `blob.get` | `blob.read` | complete; the 256 KiB inline cap and the chunk size are measured in a real `QWebEngineView` by the native suite |
 | Notifications | `info` | ✓ | — | ✓ | ✓ | `notifications.info` | ✓ | levels in 0.7.0 (TASK-68) |
-| Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | existing step model; worker-first named jobs and lint planned for 0.9.0 (TASK-115–117; decision-65) |
+| Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | complete at 0.9.0 ([TASK-115](../../tasks/task-115%20-%20Run-whole-jobs-on-workers-with-a-restricted-context.md)–[TASK-117](../../tasks/task-117%20-%20Check-worker-job-safety-with-source-only-lint-rules.md), decision-65): a job body runs whole on a worker with a `WorkerContext`, named jobs are owner-scoped, and the lint rules that catch a job reaching GUI state are `JOB001`–`JOB003` |
 | Desktop | `desktop.iface` (opaque) | ✓ | — | ✓ | ✓ | never | n/a | escape hatch by design |
 | Layer kinds (0.11.0) | `layers.open_mesh`, `open_point_cloud`, `open_vector_tile`, `open_annotation`, `open_tiled_scene` | ✓ | `MeshLayerInfo`, `PointCloudLayerInfo`, `VectorTileLayerInfo`, `AnnotationLayerInfo`, `TiledSceneLayerInfo` | ✓ (`FakeLayers.open_*`) | ✓ | `layers.open_mesh/open_point_cloud/open_vector_tile/open_annotation/open_tiled_scene` | `layers.open` | complete ([TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md)); all five open natively - mesh over the checked-in `lagoon.2dm`, annotation by creation, and point cloud, vector tile and tiled scene over files `tests/layer_kind_fixtures.py` builds (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles `tileset.json`) rather than committing binaries the review cannot read |
 | Connections / auth (0.11.0) | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only), `auth.attach` | ✓ | `ConnectionInfo`, `ConnectionItem`, `ConnectionTest`, `AuthConfiguration` | ✓ (`FakeConnections`, `declare_connection`/`declare_table`/`declare_auth_configuration`) | ✓ (the provider registry QGIS keeps in its settings) | `connections.list/describe/browse/open_layer/test`, `auth.configurations`, `auth.attach` | `connections.read`, `auth.read`, `auth.write` | complete ([TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md)); a GeoPackage connection answers provider `ogr` because QGIS implements the GeoPackage connection methods in OGR, the fixture file is built by `tests/connection_fixtures.py` rather than committed, a registered password is proven never to cross a description, and the PostGIS row runs against a server `QGIS_SDK_TEST_POSTGIS` names holding `public.points` or is recorded as **blocked by environment** |
@@ -235,14 +244,21 @@ These are exploratory tasks, not accepted APIs or release commitments.
 | Data sources | Provider plus datasource parameters behind `open_vector`, so PostGIS, WMS/WFS, XYZ, vector tiles and virtual layers are expressible | [TASK-156](../../tasks/task-156%20-%20Decide-how-the-SDK-opens-non-file-and-remote-data-sources.md) | unassigned |
 | Map themes / visibility | Theme authoring and layer visibility, placed between the project and style services | [TASK-157](../../tasks/task-157%20-%20Place-map-theme-authoring-and-layer-visibility-between-project-and-styles.md) | unassigned |
 | Temporal / 3D / diagrams | Explicit accept-or-decline for time filtering, 3D views and diagram renderers | [TASK-158](../../tasks/task-158%20-%20Decide-the-temporal-3D-and-diagram-surface.md) | unassigned |
-| Documentation exit path | A going-deeper page, the two places the SDK contradicts PyQGIS advice, a troubleshooting page and a migration narrative | [TASK-159](../../tasks/task-159%20-%20Add-the-going-deeper-exit-pages-and-the-two-places-the-SDK-contradicts-PyQGIS-advice.md) | unassigned |
 
-The eleven rows from `TASK-149` to `TASK-159` came out of the
+The ten rows from `TASK-149` to `TASK-158` came out of the
 [PyQGIS corpus coverage review](doc-31%20-%20PyQGIS-corpus-coverage-review.md),
 which compares pyqgis.com's guide corpus with this map: each row is a capability
 the corpus teaches that had no surface here *and* no task. None has a milestone,
 an owner or a release; each closes with a recommendation, and a declined one
 should end as a decision record rather than as silence.
+
+The review's eleventh finding needed no service row and has left the table:
+[TASK-159](../../tasks/task-159%20-%20Add-the-going-deeper-exit-pages-and-the-two-places-the-SDK-contradicts-PyQGIS-advice.md)
+was documentation, and it shipped as documentation - a troubleshooting page, an
+IDE and typing page and a going-deeper page in doc-12, plus the two places the
+SDK contradicts PyQGIS advice. A proposal that turns out not to be a capability
+leaves this map the same way a declined one does: recorded, not silently
+dropped.
 
 See the [session synthesis](doc-28%20-%20Session-synthesis-worker-jobs-API-ergonomics-and-PyQGIS-safety.md)
 for UI, dependency injection and other proposals and their status.
