@@ -56,6 +56,13 @@ listed with what it refuses.
 [Project checks](/python/project-checks/) - the catalogue of codes, and
 [troubleshooting](/python/troubleshooting/) - the same codes starting from the symptom.
 
+## Which names can I rely on?
+
+The stable ones. `api/python.json` records every module's tier and every name's
+shape, `release verify-api` diffs it between releases, and the
+[API index](/reference/api-index/) lists every stable name with the signature it
+has.
+
 ## Does the kit cover everything PyQGIS does?
 
 No, deliberately. A capability is added only if it behaves the same on a fake,
