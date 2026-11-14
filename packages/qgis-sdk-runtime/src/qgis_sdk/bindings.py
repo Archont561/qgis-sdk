@@ -104,6 +104,7 @@ __all__ = [
     "toolbar",
 ]
 
+__stability__ = "stable"
 T = TypeVar("T")
 
 #: The plugin class attribute listing its surfaces (decision-55).

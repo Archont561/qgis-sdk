@@ -3,6 +3,7 @@
   "cli": [
     "api dump",
     "api dump --out",
+    "api stability",
     "bridge generate",
     "bridge generate --check",
     "bridge generate --description",
@@ -128,6 +129,7 @@
     "ui snapshot --qgis-prefix",
     "ui snapshot --screenshot"
   ],
+  "deprecations": [],
   "host_operations": [
     "algorithms.batch",
     "algorithms.describe",
@@ -336,7 +338,7 @@
         "WorkerContext": "(progress: Progress, cancellation: Cancellation) -> None",
         "Yield": "()"
       },
-      "tier": "internal"
+      "tier": "stable"
     },
     "qgis_sdk.declarations": {
       "names": {
@@ -390,6 +392,15 @@
         "type_name": "(annotation: Any) -> str",
         "validate_given": "(id: str | None, title: str | None) -> None",
         "validate_plugin_bindings": "(cls: type) -> None"
+      },
+      "tier": "stable"
+    },
+    "qgis_sdk.deprecation": {
+      "names": {
+        "Deprecation": "(since: str, removal: str, use: str = ) -> None",
+        "MARK": "str",
+        "deprecated": "(*, since: str, removal: str, use: str = )",
+        "deprecation_of": "(value: Any) -> Deprecation | None"
       },
       "tier": "stable"
     },
@@ -950,6 +961,7 @@
     }
   },
   "rules": [
+    "API001",
     "ARCH001",
     "CONFIG001",
     "DEP004",

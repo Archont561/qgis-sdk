@@ -113,6 +113,8 @@ __all__ = [
     "run",
 ]
 
+__stability__ = "stable"
+
 
 class _RunningSession:
     """The session running right now, so ``quit()`` can reach its backend."""

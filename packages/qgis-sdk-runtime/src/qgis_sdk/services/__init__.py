@@ -90,3 +90,5 @@ __all__ = [
     "WorkItem",
     "Workers",
 ]
+
+__stability__ = "stable"

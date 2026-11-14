@@ -55,3 +55,5 @@ __all__ = [
     "WorkerContext",
     "Yield",
 ]
+
+__stability__ = "stable"

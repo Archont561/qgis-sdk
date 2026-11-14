@@ -222,3 +222,43 @@ def test_the_release_train_gates_the_api_against_the_previous_python_tag():
 
     assert "release_verify_api" in workflow
     assert "git tag --sort=-creatordate --list 'python-v*'" in workflow
+
+
+def test_every_public_module_declares_its_tier():
+    """decision-56 point 1: the tier lives in code, not in a table beside it."""
+    from importlib import import_module
+
+    from qgis_sdk_tools.api import PUBLIC_MODULES
+
+    for name in PUBLIC_MODULES:
+        declared = getattr(import_module(name), "__stability__", None)
+        assert declared in {"stable", "evolving", "internal"}, (
+            f"{name} declares {declared!r}"
+        )
+
+
+def test_the_inventory_records_the_tier_each_module_declares():
+    from importlib import import_module
+
+    from qgis_sdk_tools.api import inventory
+
+    for name, entry in inventory().document()["modules"].items():
+        assert entry["tier"] == import_module(name).__stability__
+
+
+def test_the_guide_renders_the_tiers_the_code_declares():
+    """doc-12's table is pasted from `qgis-sdk api stability`, not written."""
+    from qgis_sdk_tools.api import inventory, render_stability
+
+    guide = (
+        ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
+    )
+    text = guide.read_text(encoding="utf-8")
+    begin, end = "<!-- stability:begin -->", "<!-- stability:end -->"
+    assert begin in text and end in text, "doc-12 must carry the rendered tier table"
+    rendered = text.split(begin, 1)[1].split(end, 1)[0].strip()
+
+    assert rendered == render_stability(inventory().document()), (
+        "doc-12's tier table drifted from the marks; "
+        "paste `qgis-sdk api stability` between the markers"
+    )

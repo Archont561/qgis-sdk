@@ -19,3 +19,5 @@ __all__ = [
     "connect",
     "dev_session",
 ]
+
+__stability__ = "stable"

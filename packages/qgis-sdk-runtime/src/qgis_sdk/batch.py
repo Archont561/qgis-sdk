@@ -48,6 +48,7 @@ __all__ = [
     "run_batch_items",
 ]
 
+__stability__ = "stable"
 BATCH_JOB_ID = "algorithms.batch"
 """The job id one batch registers under, ``algorithms.batch``."""
 

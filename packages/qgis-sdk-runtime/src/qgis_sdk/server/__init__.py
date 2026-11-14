@@ -67,3 +67,5 @@ __all__ = [
     "filter",
     "service",
 ]
+
+__stability__ = "stable"
