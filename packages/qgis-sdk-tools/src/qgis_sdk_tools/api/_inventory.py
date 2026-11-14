@@ -75,11 +75,33 @@ their shape survives a release.
 INTERNAL_PREFIXES = ("qgis_sdk.adapters", "qgis_sdk.bridge", "qgis_sdk.core")
 
 
+UNIONS = frozenset({"Union", "UnionType", "Optional"})
+"""What a union alias calls itself: `types.UnionType` on 3.11, `Union` on 3.14."""
+
+
+def _kind(value: Any) -> str:
+    """What kind of value one name holds, in terms no interpreter renames.
+
+    ``type(...).__name__`` is the obvious answer and the wrong one: a union is
+    ``UnionType`` on one release and ``Union`` on another, and a ``typing``
+    alias hides behind an underscored class whose name is not a promise either.
+    What the document needs is the shape - ``Union``, ``list``, ``dict``,
+    ``frozenset`` - read from the alias's own origin where it has one.
+    """
+    named = type(value).__name__.lstrip("_")
+    if named in UNIONS:
+        return "Union"
+    origin = getattr(value, "__origin__", None)
+    if origin is not None and hasattr(origin, "__name__"):
+        return origin.__name__
+    return named
+
+
 def _describe(value: Any) -> str:
-    """One exported name: its signature, its members, or the type it is."""
+    """One exported name: its signature, its members, or the kind of value it is."""
     if isinstance(value, enum.EnumMeta):
         return enum_members(value)
-    return signature_of(value) if callable(value) else type(value).__name__
+    return signature_of(value) if callable(value) else _kind(value)
 
 
 def _describe_module(module: Any) -> dict[str, str]:
