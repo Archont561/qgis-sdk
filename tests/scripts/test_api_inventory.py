@@ -34,23 +34,28 @@ def _difference(tracked: dict, dumped: dict) -> str:
     return "no difference"
 
 
+def _name_difference(where: str, before: dict, after: dict) -> list[str]:
+    """Every name whose record differs, one line each."""
+    return [
+        f"{where}.{name}: committed {before.get(name)!r} / tree {after.get(name)!r}"
+        for name in sorted(set(before) | set(after))
+        if before.get(name) != after.get(name)
+    ]
+
+
 def _module_difference(section: str, before: dict, after: dict) -> str:
     """Up to five names, tiers or signatures the two module maps disagree on."""
     found: list[str] = []
     for module in sorted(set(before) | set(after)):
         old, new = before.get(module), after.get(module)
-        if old == new:
-            continue
         if old is None or new is None:
-            found.append(
-                f"{section}.{module}: present only in {old and 'the tree' or 'the file'}"
-            )
+            found.append(f"{section}.{module}: absent from one side")
             continue
-        for key in sorted(set(old) | set(new)):
-            if old.get(key) != new.get(key):
-                found.append(
-                    f"{section}.{module}.{key}: committed {old.get(key)!r} / tree {new.get(key)!r}"
-                )
+        if old.get("tier") != new.get("tier"):
+            found.append(f"{section}.{module}: {old.get('tier')} / {new.get('tier')}")
+        found += _name_difference(
+            f"{section}.{module}", old.get("names", {}), new.get("names", {})
+        )
     return " | ".join(found[:5]) or f"{section}: differs"
 
 
