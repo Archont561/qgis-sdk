@@ -28,7 +28,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { REPOSITORY } from "../site";
 import { versions } from "../versions";
+import { API_MODULE_NOTES } from "./api-modules";
 import { DECISION_SUMMARIES } from "./decision-summaries";
+import { type Inventory, renderApiIndex } from "./lib/api-index";
 import { collectCompat } from "./lib/compat";
 import { parseDecision, renderDecisionsPage } from "./lib/decisions";
 import {
@@ -45,6 +47,8 @@ const ROOT = resolve(DOCS_DIR, "../../..");
 const GUIDES_DIR = join(ROOT, "apps/docs/guides");
 const DECISIONS_DIR = join(ROOT, "backlog/decisions");
 const DECISIONS_PAGE = "reference/design-decisions.mdx";
+const INVENTORY = join(ROOT, "api/python.json");
+const API_INDEX_PAGE = "reference/api-index.md";
 const CONTENT_DIR = join(DOCS_DIR, "../content/docs");
 const GENERATED_DIR = join(DOCS_DIR, "../lib/generated");
 const STORYBOOK_SOURCE = join(ROOT, "packages/qgis-sdk-ui/storybook-static");
@@ -189,9 +193,40 @@ async function main(): Promise<void> {
 	await mkdir(join(CONTENT_DIR, dirname(DECISIONS_PAGE)), { recursive: true });
 	await writeFile(join(CONTENT_DIR, DECISIONS_PAGE), table.content);
 	console.log(`generate: ${DECISIONS_PAGE} from ${decisions.length} records`);
+	// The API index is the inventory with prose: the section routes are taken
+	// from the pages rendered above, so a renamed heading breaks the generator's
+	// input rather than the site's links.
+	const routes = new Map<string, string>();
+	for (const guide of GUIDES) {
+		const split = splitGuide(
+			inputs.find((input) => input.guide.id === guide.id)?.markdown ?? "",
+		);
+		for (const section of split.sections) {
+			routes.set(
+				`${guide.id}:${section.heading}`,
+				`/${guide.section}/${section.slug}`,
+			);
+		}
+	}
+	const inventory = (await Bun.file(INVENTORY).json()) as Inventory;
+	const index = renderApiIndex({ inventory, notes: API_MODULE_NOTES, routes });
+	for (const name of index.unresolved) {
+		console.warn(
+			`generate: api index cites ${name}, which no rendered page holds`,
+		);
+	}
+	for (const name of index.undescribed) {
+		console.warn(
+			`generate: ${name} is in the inventory and has no note in scripts/api-modules.ts`,
+		);
+	}
+	await writeFile(join(CONTENT_DIR, API_INDEX_PAGE), index.content);
+	console.log(
+		`generate: ${API_INDEX_PAGE} from ${index.names} names in ${Object.keys(inventory.modules).length} modules`,
+	);
 	await writeJson(join(CONTENT_DIR, "reference/meta.json"), {
 		title: "Reference",
-		pages: ["design-decisions", "faq"],
+		pages: ["api-index", "design-decisions", "faq"],
 	});
 
 	// What the layout needs to know about pages it did not author: the version

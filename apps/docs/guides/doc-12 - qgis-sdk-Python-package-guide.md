@@ -206,6 +206,11 @@ the replacement and the release that removes it, `check` reports a use as
 `API001`, and the release gate refuses the removal before that release. The last
 column counts the names in each module that carry such a mark.
 
+The table counts; [the API index](https://archont561.github.io/qgis-sdk/reference/api-index/)
+lists. It is rendered from the same inventory, so every name above appears there
+with the signature it has, and a name the code adds cannot be missing from it -
+which is what makes "stable" checkable rather than aspirational.
+
 ## Declarations
 
 Declare an application and register ordinary functions. The first argument is
