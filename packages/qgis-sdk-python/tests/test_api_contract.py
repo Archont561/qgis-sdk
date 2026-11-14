@@ -617,6 +617,13 @@ def test_a_signature_read_through_annotationlib_falls_back_when_it_refuses(monke
     with pytest.raises(TypeError):
         _signatures._read_signature(3)
 
+    # The other side of the same branch, on the interpreters that have no
+    # `Format` to ask for. Pinning it means both paths are read on every
+    # version rather than whichever one the runner happens to be.
+    monkeypatch.setattr(_signatures, "_Format", None)
+    assert _signatures._read_signature(describe).parameters["width"].default == 3
+    assert _signatures.signature_of(3) == ""
+
 
 def test_the_api_commands_write_the_inventory_and_print_the_tier_table(tmp_path):
     """`qgis-sdk api dump` and `api stability`, over the real tree."""
