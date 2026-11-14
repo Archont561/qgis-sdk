@@ -73,13 +73,69 @@ their shape survives a release.
 INTERNAL_PREFIXES = ("qgis_sdk.adapters", "qgis_sdk.bridge", "qgis_sdk.core")
 
 
+SIMPLE_DEFAULTS = (str, int, float, bool, type(None))
+"""Default values rendered literally; anything else renders as ``...``.
+
+A repr that a release can reword (an enum, a Path, a sentinel) is not something
+a contract should depend on, so the document says "there is a default" and stops
+there.
+"""
+
+
+def _default(value: Any) -> str:
+    """One parameter's default: its literal, or ``...`` when it is not one."""
+    return repr(value) if isinstance(value, SIMPLE_DEFAULTS) else "..."
+
+
+def _parameter(parameter: Any, keyword_only: bool) -> str:
+    """One parameter, in the syntax a reader expects to see."""
+    marker = {
+        inspect.Parameter.VAR_POSITIONAL: "*",
+        inspect.Parameter.VAR_KEYWORD: "**",
+        inspect.Parameter.KEYWORD_ONLY: "*" if keyword_only else "",
+    }.get(parameter.kind, "")
+    rendered = f"{marker}{parameter.name}"
+    if parameter.annotation is not inspect.Parameter.empty:
+        rendered += f": {parameter.annotation}"
+    if parameter.default is not inspect.Parameter.empty:
+        rendered += f" = {_default(parameter.default)}"
+    return rendered
+
+
+def _parameters(signature: inspect.Signature) -> str:
+    """The parameter list, in the syntax a reader expects to see."""
+    parts: list[str] = []
+    keyword_only = variadic = False
+    for parameter in signature.parameters.values():
+        if parameter.name in {"self", "cls"}:
+            continue
+        named = parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        # The ``*`` is written once, before the first keyword-only parameter,
+        # and not at all when ``*args`` already introduced it.
+        parts.append(_parameter(parameter, named and not keyword_only and not variadic))
+        keyword_only = keyword_only or named
+        variadic = variadic or parameter.kind is inspect.Parameter.VAR_POSITIONAL
+    return ", ".join(parts)
+
+
 def _signature(value: Any) -> str:
-    """One callable's signature, normalised so two runs compare equal."""
+    """One callable's signature, normalised so two runs and two Pythons agree.
+
+    Built from the parameters rather than from ``str(inspect.signature(...))``:
+    that string embeds the interpreter's own forms - an inherited ``__init__``
+    reads ``(*args, **kwargs)`` on one release and ``(self, /, *args, **kwargs)``
+    on the next, and ``self`` is dropped here either way. A contract that
+    changes with the interpreter is not a contract.
+    """
     try:
-        rendered = str(inspect.signature(value))
+        signature = inspect.signature(value)
     except (TypeError, ValueError):
         return ""
-    return rendered.replace("'", "").replace('"', "")
+    rendered = "(" + _parameters(signature) + ")"
+    returns = signature.return_annotation
+    if returns is inspect.Signature.empty:
+        return rendered
+    return f"{rendered} -> {returns}"
 
 
 def _describe_module(module: Any) -> dict[str, str]:

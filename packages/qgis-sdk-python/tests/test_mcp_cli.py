@@ -63,6 +63,8 @@ EXPECTED_TOOLS = {
     "qgis_sdk_ui_snapshot",
     "qgis_sdk_ui_act",
     "qgis_sdk_ui_diff",
+    "qgis_sdk_api_dump",
+    "qgis_sdk_api_stability",
 }
 
 
