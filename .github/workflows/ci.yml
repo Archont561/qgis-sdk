@@ -128,6 +128,14 @@ jobs:
         id: s10
         run: pixi run -e default automation -- release_verify_versions
 
+      # `api/python.json` is the tracked public API (decision-56). A pull
+      # request that adds, changes or removes a name has to say so in that
+      # file, which makes the shape change reviewable in the diff instead of
+      # discovered at release time.
+      - name: Check the public API inventory is current
+        id: s33
+        run: pixi run -e default automation -- release_verify_api --check
+
       # The Processing provider modules are generated from catalogue.json
       # (pure Python, no QGIS needed) and never committed; the bridge
       # generator and the suites import them, so they are generated here first.

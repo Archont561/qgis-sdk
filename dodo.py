@@ -707,6 +707,43 @@ def task_release_publish():
     }
 
 
+def task_release_verify_api():
+    """Classify what a release changes in the public API."""
+    return {
+        "actions": [action(tasks.release_verify_api)],
+        "params": [
+            {
+                "name": "check",
+                "long": "check",
+                "default": False,
+                "type": bool,
+                "help": "fail when the tracked inventory no longer describes this tree",
+            },
+            {
+                "name": "tag",
+                "long": "tag",
+                "default": "",
+                "type": str,
+                "help": "compare against the inventory this tag committed",
+            },
+            {
+                "name": "version",
+                "long": "version",
+                "default": "",
+                "type": str,
+                "help": "version being released; refuses a breaking change it cannot carry",
+            },
+            {
+                "name": "json",
+                "long": "json",
+                "default": False,
+                "type": bool,
+                "help": "machine-readable output",
+            },
+        ],
+    }
+
+
 def task_release_rehearsal():
     """Rehearse the publish step on a fabricated artifact tree."""
     return {
