@@ -15,6 +15,7 @@ exports, and it is cheap enough to run in the release train.
 from __future__ import annotations
 
 import enum
+import inspect
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -101,7 +102,11 @@ def _describe(value: Any) -> str:
     """One exported name: its signature, its members, or the kind of value it is."""
     if isinstance(value, enum.EnumMeta):
         return enum_members(value)
-    return signature_of(value) if callable(value) else _kind(value)
+    # Not `callable(value)`: 3.14 makes some generic aliases callable, so that
+    # question is answered differently by two interpreters reading one tree.
+    if isinstance(value, type) or inspect.isroutine(value):
+        return signature_of(value)
+    return _kind(value)
 
 
 def _describe_module(module: Any) -> dict[str, str]:

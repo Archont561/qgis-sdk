@@ -137,6 +137,35 @@ def test_a_recorded_signature_carries_no_module_path_and_no_class_repr():
             assert "qgis_sdk." not in rendered, rendered
 
 
+def test_a_type_variable_loses_the_tilde_and_an_inherited_init_is_blank():
+    """Two more interpreter habits the recorded text must not inherit."""
+    from qgis_sdk_tools.api import _signatures
+
+    class Wide:
+        """Takes anything, and says so in the only way the record cannot use."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.args = args
+
+    class Inherited(Wide):
+        """No ``__init__`` of its own."""
+
+    assert _signatures.text_of("Callable[[type[~T]], type[~T]]") == (
+        "Callable[[type[T]], type[T]]"
+    )
+    assert _signatures.signature_of(Inherited) == ""
+
+
+def test_an_alias_is_recorded_by_shape_even_where_it_is_callable():
+    """3.14 makes some aliases callable; the record must not depend on that."""
+    import typing
+
+    from qgis_sdk_tools.api import _inventory
+
+    assert _inventory._describe(typing.Sequence[int]) == "Sequence"
+    assert _inventory._describe(tuple[int, ...]) == "tuple"
+
+
 def test_an_enumeration_is_recorded_by_its_members_not_its_constructor():
     """`inspect.signature(SomeEnum)` is the machinery's, and it moves between Pythons."""
     import enum

@@ -43,6 +43,9 @@ CLASS_REPR = re.compile(r"<class '([\w.]+)'>")
 """How an evaluated annotation prints a class: ``<class 'pathlib.Path'>``."""
 
 DOTTED = re.compile(r"\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+")
+
+TYPEVAR = re.compile(r"~([A-Za-z_]\w*)")
+"""A type variable prints as ``~T`` on some interpreters and ``T`` on others."""
 """A dotted name: ``qgis_sdk.models.files.FileRef``, ``typing.Any``."""
 
 
@@ -126,7 +129,7 @@ def text_of(annotation: Any) -> str:
     if annotation is inspect.Parameter.empty:
         return ""
     text = CLASS_REPR.sub(_short, str(annotation))
-    return _unions(DOTTED.sub(_short, text))
+    return _unions(TYPEVAR.sub(r"\1", DOTTED.sub(_short, text)))
 
 
 def _parameter(parameter: Any, keyword_only: bool) -> str:
@@ -182,6 +185,10 @@ def _parameters(signature: inspect.Signature) -> str:
     return ", ".join(parts)
 
 
+INHERITED = "(*args, **kwargs)"
+"""What a class with no `__init__` of its own reports, where it reports at all."""
+
+
 def signature_of(value: Any) -> str:
     """One callable's signature, normalised so two runs and two Pythons agree.
 
@@ -196,6 +203,8 @@ def signature_of(value: Any) -> str:
     except (TypeError, ValueError):
         return ""
     rendered = "(" + _parameters(signature) + ")"
+    if rendered == INHERITED:
+        return ""
     returns = text_of(signature.return_annotation)
     if not returns:
         return rendered
