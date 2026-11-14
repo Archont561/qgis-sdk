@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from automation import release
 
@@ -17,6 +17,7 @@ __all__ = [
     "release_rehearsal",
     "release_stamp",
     "release_tag",
+    "release_verify_api",
     "release_verify_python",
     "release_verify_versions",
 ]
@@ -100,6 +101,23 @@ def release_tag(
 def release_stamp(version: str, scope: str = "all") -> int:
     """Stamp one version into the manifests of a scope."""
     return _release_command("stamp", version=version, scope=scope)
+
+
+@dataclass(frozen=True)
+class _ApiCheck:
+    """The six verify-api options, as one record (decision-81)."""
+
+    tag: str = ""
+    baseline: str = ""
+    current: str = ""
+    version: str = ""
+    check: bool = False
+    json: bool = False
+
+
+def release_verify_api(**options) -> int:
+    """Classify what a release changes in the public API."""
+    return _release_command("verify-api", **asdict(_ApiCheck(**options)))
 
 
 def release_verify_versions(

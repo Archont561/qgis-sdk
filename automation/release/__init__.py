@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._api import INVENTORY, cmd_verify_api
 from ._build import (
     checksums,
     compute_plan,
@@ -90,6 +91,7 @@ from ._version import (
 
 __all__ = [
     "ASSET_PATTERNS",
+    "INVENTORY",
     "LOG_FORMAT",
     "ChangelogOptions",
     "Commit",
@@ -104,6 +106,7 @@ __all__ = [
     "classify",
     "cmd_publish",
     "cmd_rehearsal",
+    "cmd_verify_api",
     "commit_packages",
     "commit_scopes",
     "commits_for_scope",
