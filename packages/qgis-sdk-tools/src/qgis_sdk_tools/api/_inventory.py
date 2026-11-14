@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -87,6 +88,36 @@ def _default(value: Any) -> str:
     return repr(value) if isinstance(value, SIMPLE_DEFAULTS) else "..."
 
 
+CLASS_REPR = re.compile(r"<class '([\w.]+)'>")
+"""How an evaluated annotation prints a class: ``<class 'pathlib.Path'>``."""
+
+DOTTED = re.compile(r"\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+")
+"""A dotted name: ``qgis_sdk.models.files.FileRef``, ``typing.Any``."""
+
+
+def _short(match: re.Match[str]) -> str:
+    """The last segment of one dotted name, in either spelling."""
+    found = match.group(1) if match.re.groups else match.group(0)
+    return found.rsplit(".", 1)[-1]
+
+
+def _text(annotation: Any) -> str:
+    """One annotation, as the short name its source would have written.
+
+    The same annotation reaches this function in three shapes - a source string
+    when the module uses ``from __future__ import annotations``, an evaluated
+    object when it does not, and a re-rendered string on an interpreter that
+    reads annotations lazily - and each shape prints differently:
+    ``FileRef``, ``<class 'qgis_sdk.models.files.FileRef'>`` and
+    ``qgis_sdk.models.files.FileRef``. A contract cannot depend on which shape a
+    release happens to produce, so all three collapse to the short name.
+    """
+    if annotation is inspect.Parameter.empty:
+        return ""
+    text = CLASS_REPR.sub(_short, str(annotation))
+    return DOTTED.sub(_short, text)
+
+
 def _parameter(parameter: Any, keyword_only: bool) -> str:
     """One parameter, in the syntax a reader expects to see."""
     marker = {
@@ -95,11 +126,25 @@ def _parameter(parameter: Any, keyword_only: bool) -> str:
         inspect.Parameter.KEYWORD_ONLY: "*" if keyword_only else "",
     }.get(parameter.kind, "")
     rendered = f"{marker}{parameter.name}"
-    if parameter.annotation is not inspect.Parameter.empty:
-        rendered += f": {parameter.annotation}"
+    annotation = _text(parameter.annotation)
+    if annotation:
+        rendered += f": {annotation}"
     if parameter.default is not inspect.Parameter.empty:
         rendered += f" = {_default(parameter.default)}"
     return rendered
+
+
+try:  # Python 3.14 reads annotations lazily; ask it for the source text.
+    from annotationlib import Format as _Format
+except ImportError:  # older interpreters keep the source text already.
+    _Format = None
+
+
+def _read_signature(value: Any) -> inspect.Signature:
+    """One callable's signature with its annotations left as written."""
+    if _Format is None:
+        return inspect.signature(value)
+    return inspect.signature(value, annotation_format=_Format.STRING)
 
 
 def _parameters(signature: inspect.Signature) -> str:
@@ -128,12 +173,12 @@ def _signature(value: Any) -> str:
     changes with the interpreter is not a contract.
     """
     try:
-        signature = inspect.signature(value)
+        signature = _read_signature(value)
     except (TypeError, ValueError):
         return ""
     rendered = "(" + _parameters(signature) + ")"
-    returns = signature.return_annotation
-    if returns is inspect.Signature.empty:
+    returns = _text(signature.return_annotation)
+    if not returns:
         return rendered
     return f"{rendered} -> {returns}"
 
