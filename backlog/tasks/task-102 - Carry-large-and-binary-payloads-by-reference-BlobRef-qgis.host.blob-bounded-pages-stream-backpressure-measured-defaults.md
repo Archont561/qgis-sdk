@@ -37,3 +37,12 @@ starting values decision-59 declared (256 KiB inline cap, 1000-item pages) have
 not been measured in a real `QWebEngineView`, and the decision has no status
 review to record the timings in. Measuring them is the rest of this task, not a
 new one.
+
+**Deferred by the 0.10.0 gate, and still open on purpose.** The behaviour
+shipped: `BlobRef`, the blob fetch, bounded pages, backpressure and `ack` are
+all in 0.10.0, and `BRIDGE_PROTOCOL_VERSION` moved to 2 with them. What is
+missing is one measurement - the inline cap and the page defaults have not been
+timed in a `QWebEngineView`, and decision-59 has no status review holding those
+timings - so AC 3 stays unticked and this task stays `In Progress`. m-9 shipped
+without it; its `## Exit` section names that as the milestone's one deferred
+criterion rather than claiming every criterion met.
