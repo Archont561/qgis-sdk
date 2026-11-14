@@ -242,6 +242,11 @@ def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -
             top = module.split(".")[0]
             allowed = top in {"qgis_sdk", "qgis_sdk_tools"}
             allowed = allowed or top in sys.stdlib_module_names
+            # `annotationlib` is the 3.14 addition to the standard library that
+            # `qgis_sdk_tools.api` imports under a guard: it exists there and
+            # nowhere earlier, and `sys.stdlib_module_names` cannot vouch for a
+            # module this interpreter does not ship.
+            allowed = allowed or top == "annotationlib"
             allowed = allowed or top in TOOLS_DEPENDENCIES
             # The optional MCP SDK is confined to its lazy entrypoint/adapter.
             optional_mcp_files = {
