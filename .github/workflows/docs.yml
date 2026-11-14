@@ -6,28 +6,45 @@ name: docs
 # checks every internal link. Pull requests build it; pushes to main build it
 # the same way and deploy it to GitHub Pages at
 # https://archont561.github.io/qgis-sdk/.
+#
+# The path lists below are every input the renderer reads, not only the files it
+# lives beside: `scripts/generate.ts` renders the API index from
+# `api/python.json`, the version badges and the compatibility notice from the
+# workspace manifests, and copies `packages/qgis-sdk-ui/storybook-static`. An
+# input missing here ships a stale site - the pull request that renames a public
+# name rebuilds nothing, and `main` deploys the old names until some later docs
+# change happens to run. `tests/scripts/test_ci.py` fails when this list stops
+# covering one of them.
+#
+# `packages/*/src/**` is deliberately absent. An API change is only green once
+# `api/python.json` is re-dumped (`release_verify_api --check`), so matching
+# `api/**` is enough to rebuild, and an internal refactor does not redeploy.
 on:
   push:
     branches: [main]
     paths:
       - "apps/docs/**"
+      - "api/**"
       - "backlog/decisions/**"
       - "packages/qgis-sdk-ui/**"
       - "packages/qgis-sdk-typescript/**"
       - "packages/*/package.json"
       - "packages/qgis-sdk-python/pyproject.toml"
       - "bun.lock"
+      - "pixi.toml"
       - "pixi.lock"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "apps/docs/**"
+      - "api/**"
       - "backlog/decisions/**"
       - "packages/qgis-sdk-ui/**"
       - "packages/qgis-sdk-typescript/**"
       - "packages/*/package.json"
       - "packages/qgis-sdk-python/pyproject.toml"
       - "bun.lock"
+      - "pixi.toml"
       - "pixi.lock"
       - ".github/workflows/docs.yml"
   workflow_dispatch:

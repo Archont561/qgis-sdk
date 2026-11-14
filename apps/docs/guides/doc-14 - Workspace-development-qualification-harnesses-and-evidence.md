@@ -275,8 +275,13 @@ tracked:
   lychee) and keeps the landing page generated: `bun run readme` renders
   `README.md` from `automation/readme/template.ejs`.
 - `.github/workflows/docs.yml` builds and link-checks the site on pull
-  requests that touch it, the guides or the UI package, and deploys it from
-  `main` with `actions/deploy-pages`. The Pixi `bun` environment pins Bun
+  requests that touch it, the guides, the UI package or anything it renders
+  from - `api/python.json`, a workspace manifest, the built Storybook, the
+  lock files - and deploys it from `main` with `actions/deploy-pages`. That
+  list is a claim, so `tests/scripts/test_ci.py` samples every input the
+  renderer reads against it: an input missing there builds nothing when it
+  changes, which is how a renamed public name reached `main` without the
+  reference index being re-rendered. The Pixi `bun` environment pins Bun
   alone, so the job also runs `actions/setup-node`: Next builds and renders
   with Node, Bun installs and drives the workspace, and both end up on
   `PATH`. Locally the same split holds - a Node runtime has to be on `PATH`

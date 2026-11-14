@@ -30,7 +30,7 @@ import { REPOSITORY } from "../site";
 import { versions } from "../versions";
 import { API_MODULE_NOTES } from "./api-modules";
 import { DECISION_SUMMARIES } from "./decision-summaries";
-import { type Inventory, renderApiIndex } from "./lib/api-index";
+import { renderApiIndex } from "./lib/api-index";
 import { collectCompat } from "./lib/compat";
 import { parseDecision, renderDecisionsPage } from "./lib/decisions";
 import {
@@ -40,6 +40,7 @@ import {
 	renderGuides,
 	splitGuide,
 } from "./lib/guides";
+import { readInventory } from "./lib/inventory";
 import { collectStats } from "./lib/stats";
 
 const DOCS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -208,7 +209,7 @@ async function main(): Promise<void> {
 			);
 		}
 	}
-	const inventory = (await Bun.file(INVENTORY).json()) as Inventory;
+	const inventory = await readInventory(INVENTORY);
 	const index = renderApiIndex({ inventory, notes: API_MODULE_NOTES, routes });
 	for (const name of index.unresolved) {
 		console.warn(
