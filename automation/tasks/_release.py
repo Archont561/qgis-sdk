@@ -13,6 +13,8 @@ __all__ = [
     "release_classify",
     "release_github_release",
     "release_plan",
+    "release_publish",
+    "release_rehearsal",
     "release_stamp",
     "release_tag",
     "release_verify_python",
@@ -130,6 +132,24 @@ def release_checksums(paths: Sequence[str], out: str = "SHA256SUMS") -> int:
     release failed after PyPI had already accepted the wheels.
     """
     return release.main(["checksums", "--out", out, *paths])
+
+
+def release_publish(
+    tag: str,
+    body_file: str = "",
+    out: str = "SHA256SUMS",
+    root: str = "",
+    dry_run: bool = False,
+) -> int:
+    """Hash the release artifacts and publish the GitHub Release."""
+    return _release_command(
+        "publish", tag=tag, body_file=body_file, out=out, root=root, dry_run=dry_run
+    )
+
+
+def release_rehearsal(root: str = "") -> int:
+    """Rehearse the publish step on a fabricated artifact tree."""
+    return _release_command("rehearsal", root=root)
 
 
 def release_github_release(

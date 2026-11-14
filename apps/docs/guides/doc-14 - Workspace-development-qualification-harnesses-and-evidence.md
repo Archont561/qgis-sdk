@@ -144,6 +144,7 @@ because Rude has no exclude setting of its own.
 | Docs dev | `pixi run -e bun docs-dev` | The site from source with reload on `0.0.0.0:4321` |
 | Python compatibility | `tox -e py311` | The QGIS-free suite on one Python version, in its own venv (`tox.ini`) |
 | Agent instructions | `pixi run -e bun bun run agents` | Regenerate the marked regions of `AGENTS.md` (`agents:check` in CI) |
+| Release rehearsal | `pixi run -e build automation -- release_rehearsal` | The release's publish step over a fabricated artifact tree: glob, hash, describe. No token, no network, no version space |
 
 The Alint policy requires the root README and license, byte-identical scoped and alias READMEs with the alias installation commands, immutable external GitHub Actions and container references, and no merge-conflict markers or bidirectional override controls in non-ignored files. The README mirror rules also run with `pixi run -e default automation test_scripts`, alongside the remaining README-shape tests. Alint complements Ruff, Biome, actionlint, typechecking, generated-file checks and the built-site link checker; it does not replace them. CI runs the policy and its fixture tests, subject to the existing workflow path filters.
 
@@ -2677,3 +2678,19 @@ generated, and states that the artifacts are on PyPI and in the channel rather
 than attached to it - no wheels, no `.conda` files, no `SHA256SUMS` are attached
 there. Nothing was re-tagged: the wheels PyPI accepted are the ones built from
 `f3fd460`.
+
+**What closed the gap (TASK-169).** Repairing the command left the reason it had
+survived: the step was nine lines of shell inside `release.yml`, and no pull
+request ran it. It is now one command - `automation -- release_publish` - which
+globs the artifacts, hashes them into `dist/SHA256SUMS` and attaches every file
+plus the sums; the workflow names it and expands nothing itself. Two properties
+make it rehearsable: `--dry-run` resolves the same globs and prints the same
+attachment list with no token and no network call, and `--rehearsal` fabricates
+the artifact tree a release downloads (three wheels, a Conda package, both npm
+tarballs) before doing that. The `Release rehearsal` job runs it on every pull
+request in the `build` environment the release publishes from, and `checks`
+requires it, so a broken publish step is a red pull request rather than a
+release that half-succeeded. Three tests hold the line: the workflow must call
+the task and carry no `--paths` or shell loop of its own, the rehearsal must be
+a required job, and the publish path must attach `SHA256SUMS` beside the
+artifacts.

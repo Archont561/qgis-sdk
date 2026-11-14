@@ -663,6 +663,66 @@ def task_release_checksums():
     }
 
 
+def task_release_publish():
+    """Hash the release artifacts and publish the GitHub Release."""
+    return {
+        "actions": [action(tasks.release_publish)],
+        "params": [
+            {
+                "name": "tag",
+                "long": "tag",
+                "default": "",
+                "type": str,
+                "help": "tag the release is for",
+            },
+            {
+                "name": "body_file",
+                "long": "body-file",
+                "default": "",
+                "type": str,
+                "help": "file holding the notes",
+            },
+            {
+                "name": "out",
+                "long": "out",
+                "default": "SHA256SUMS",
+                "type": str,
+                "help": "checksums file to write",
+            },
+            {
+                "name": "root",
+                "long": "root",
+                "default": "",
+                "type": str,
+                "help": "tree the artifact globs are read from",
+            },
+            {
+                "name": "dry_run",
+                "long": "dry-run",
+                "default": False,
+                "type": bool,
+                "help": "describe the upload instead of making it",
+            },
+        ],
+    }
+
+
+def task_release_rehearsal():
+    """Rehearse the publish step on a fabricated artifact tree."""
+    return {
+        "actions": [action(tasks.release_rehearsal)],
+        "params": [
+            {
+                "name": "root",
+                "long": "root",
+                "default": "",
+                "type": str,
+                "help": "where the fabricated tree is written",
+            },
+        ],
+    }
+
+
 def task_release_github_release():
     """Publish the GitHub Release for a tag."""
     return {

@@ -69,6 +69,15 @@ from ._pins import (
     stamp_scaffold_ui_pin,
     ui_peer_range_includes,
 )
+from ._publish import (
+    ASSET_PATTERNS,
+    PublishRequest,
+    cmd_publish,
+    cmd_rehearsal,
+    matched_assets,
+    publish_release,
+    release_body,
+)
 from ._version import (
     Version,
     normalize_scope,
@@ -80,17 +89,21 @@ from ._version import (
 )
 
 __all__ = [
+    "ASSET_PATTERNS",
     "LOG_FORMAT",
     "ChangelogOptions",
     "Commit",
     "ManifestSources",
     "PlanOptions",
+    "PublishRequest",
     "QgisSdkReleaseError",
     "QgisSdkReleaseVersionError",
     "ReleaseDraft",
     "Version",
     "checksums",
     "classify",
+    "cmd_publish",
+    "cmd_rehearsal",
     "commit_packages",
     "commit_scopes",
     "commits_for_scope",
@@ -101,6 +114,7 @@ __all__ = [
     "detect_scope_from_files",
     "main",
     "manifest_versions",
+    "matched_assets",
     "next_minor",
     "normalize_scope",
     "parse_log",
@@ -110,6 +124,7 @@ __all__ = [
     "parse_versionrc",
     "plan_base_tag",
     "plan_changelog_directory",
+    "publish_release",
     "read_alias_versions",
     "read_example_windows",
     "read_kit_pins",
@@ -122,6 +137,7 @@ __all__ = [
     "read_tools_runtime_range",
     "read_typescript_contract_version",
     "read_ui_peer_range",
+    "release_body",
     "render_changelog",
     "resolve_dry_run",
     "runtime_range_includes",

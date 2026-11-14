@@ -2,20 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 from ._build import build_wheel, twine_check
 from ._contracts import (
-    ReleaseDraft,
     contract_versions,
-    create_release,
-    delete_release_asset,
-    get_release_by_tag,
     kit_pins_behind_or_at,
     require_one_version,
     step_summary,
-    upload_asset,
     write_output,
 )
 from ._history import (
@@ -33,6 +27,13 @@ from ._pins import (
     ManifestVersions,
     manifest_versions,
     scoped_manifest_versions,
+)
+from ._publish import (
+    cmd_publish,
+    cmd_rehearsal,
+    credentials,
+    publish_release,
+    release_body,
 )
 from ._stamp import (
     check_expected_version,
@@ -124,52 +125,12 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     return 0
 
 
-def _release_or_existing(draft: ReleaseDraft) -> dict:
-    """Create the release, or reuse one a retried run already published."""
-    try:
-        return create_release(draft)
-    except QgisSdkReleaseError as exc:
-        if "already_exists" not in str(exc):
-            raise
-    return get_release_by_tag(draft.slug, draft.token, draft.tag)
-
-
-def _upload_assets(release: dict, slug: str, token: str, assets) -> None:
-    """Replace same-named assets, then upload every asset the run produced."""
-    upload_url = release.get("upload_url")
-    if not upload_url:
-        raise QgisSdkReleaseError(f"release response lacked upload_url: {release}")
-    existing_assets = {
-        item.get("name"): item.get("id")
-        for item in release.get("assets", ())
-        if isinstance(item, dict) and item.get("name") and item.get("id")
-    }
-    for asset in assets:
-        asset_path = Path(asset)
-        existing_id = existing_assets.get(asset_path.name)
-        if existing_id is not None:
-            delete_release_asset(slug, token, int(existing_id))
-        upload_asset(upload_url, token, asset_path)
-        print(f"uploaded {asset_path.name}")
-
-
 def _cmd_github_release(args: argparse.Namespace) -> int:
-    slug = args.repo or os.environ.get("GITHUB_REPOSITORY")
-    token = args.token or os.environ.get("GITHUB_TOKEN")
-    if not slug or not token:
-        raise QgisSdkReleaseError(
-            "github-release needs --repo/GITHUB_REPOSITORY and --token/GITHUB_TOKEN"
-        )
-    version = version_from_tag(args.tag)
-    body = (
-        Path(args.body_file).read_text(encoding="utf-8")
-        if args.body_file
-        else f"Release {args.tag}"
-    )
-    draft = ReleaseDraft(slug, token, args.tag, args.tag, body, version.is_prerelease)
-    release = _release_or_existing(draft)
-    _upload_assets(release, slug, token, args.asset)
-    html_url = release.get("html_url", "")
+    """Publish one release page for an explicit asset list."""
+    slug, token = credentials(args.repo or "", args.token or "")
+    body = release_body(args.tag, args.body_file or "")
+    assets = [Path(item) for item in args.asset]
+    html_url = publish_release(args.tag, body, assets, slug, token)
     print(f"release {args.tag}: {html_url}")
     step_summary(
         f"- GitHub Release [{args.tag}]({html_url}) with {len(args.asset)} asset(s)"
@@ -264,6 +225,26 @@ def _add_build_parsers(sub) -> None:
     verify.set_defaults(handler=_cmd_verify_python)
 
 
+def _add_publish_parser(sub) -> None:
+    publish = sub.add_parser(
+        "publish", help="hash the release artifacts and publish the release page"
+    )
+    publish.add_argument("--tag", required=True)
+    publish.add_argument("--body-file")
+    publish.add_argument("--out", default="SHA256SUMS")
+    publish.add_argument("--root", default="")
+    publish.add_argument("--repo")
+    publish.add_argument("--token")
+    publish.add_argument("--dry-run", action="store_true")
+    publish.set_defaults(handler=cmd_publish)
+
+    rehearsal = sub.add_parser(
+        "rehearsal", help="rehearse the publish step on a fabricated artifact tree"
+    )
+    rehearsal.add_argument("--root", default="")
+    rehearsal.set_defaults(handler=cmd_rehearsal)
+
+
 def _add_publish_parsers(sub) -> None:
     sums = sub.add_parser("checksums", help="write a SHA256SUMS file")
     sums.add_argument("--out", default="SHA256SUMS")
@@ -277,6 +258,8 @@ def _add_publish_parsers(sub) -> None:
     release.add_argument("--repo")
     release.add_argument("--token")
     release.set_defaults(handler=_cmd_github_release)
+
+    _add_publish_parser(sub)
 
 
 def build_parser() -> argparse.ArgumentParser:
