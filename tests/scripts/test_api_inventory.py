@@ -35,17 +35,23 @@ def _difference(tracked: dict, dumped: dict) -> str:
 
 
 def _module_difference(section: str, before: dict, after: dict) -> str:
-    """The first name, tier or signature two module maps disagree on."""
+    """Up to five names, tiers or signatures the two module maps disagree on."""
+    found: list[str] = []
     for module in sorted(set(before) | set(after)):
         old, new = before.get(module), after.get(module)
         if old == new:
             continue
         if old is None or new is None:
-            return f"{section}.{module}: present only in {old and 'the tree' or 'the file'}"
+            found.append(
+                f"{section}.{module}: present only in {old and 'the tree' or 'the file'}"
+            )
+            continue
         for key in sorted(set(old) | set(new)):
             if old.get(key) != new.get(key):
-                return f"{section}.{module}.{key}: committed {old.get(key)!r} / tree {new.get(key)!r}"
-    return f"{section}: differs"
+                found.append(
+                    f"{section}.{module}.{key}: committed {old.get(key)!r} / tree {new.get(key)!r}"
+                )
+    return " | ".join(found[:5]) or f"{section}: differs"
 
 
 def test_the_tracked_inventory_describes_this_tree():

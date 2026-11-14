@@ -150,6 +150,20 @@ def test_an_enumeration_is_recorded_by_its_members_not_its_constructor():
     assert _signatures.enum_members(Host) == "enum<DESKTOP|SERVER>"
 
 
+def test_a_value_records_its_kind_not_its_interpreters_class_name():
+    """`X | Y` is `UnionType` on 3.11 and `Union` on 3.14; both record `Union`."""
+    import typing
+
+    from qgis_sdk_tools.api import _inventory
+
+    assert _inventory._kind(int | str) == "Union"
+    # The legacy alias is the point: it is a `typing` object on every release.
+    assert _inventory._kind(typing.Optional[int]) == "Union"  # noqa: UP045
+    assert _inventory._kind(list[int]) == "list"
+    assert _inventory._kind(typing.Sequence[int]) == "Sequence"
+    assert _inventory._kind(frozenset()) == "frozenset"
+
+
 def test_an_enumeration_gains_members_additively_and_loses_them_breaking():
     grown = _with(
         modules={
