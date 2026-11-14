@@ -17,7 +17,7 @@ import inspect
 import re
 from typing import Any
 
-__all__ = ["signature_of", "text_of"]
+__all__ = ["enum_members", "signature_of", "text_of"]
 
 try:  # 3.14 reads annotations lazily; its module is absent before that.
     from annotationlib import Format as _Format
@@ -200,3 +200,15 @@ def signature_of(value: Any) -> str:
     if not returns:
         return rendered
     return f"{rendered} -> {returns}"
+
+
+def enum_members(value: Any) -> str:
+    """An enumeration's members, in declaration order.
+
+    Not the class's signature: `inspect.signature(SomeEnum)` is the constructor
+    the ``Enum`` machinery happens to expose, and that changed shape between
+    3.11 and 3.14 (``(value, names = None, ...)`` became ``(*values)``). What a
+    plugin author depends on is which members exist, so that is what is
+    recorded - and adding one reads as additive, removing one as breaking.
+    """
+    return "enum<" + "|".join(member.name for member in value) + ">"

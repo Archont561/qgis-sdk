@@ -14,13 +14,14 @@ exports, and it is cheap enough to run in the release train.
 
 from __future__ import annotations
 
+import enum
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ._signatures import signature_of
+from ._signatures import enum_members, signature_of
 
 __all__ = [
     "API_VERSION",
@@ -74,6 +75,13 @@ their shape survives a release.
 INTERNAL_PREFIXES = ("qgis_sdk.adapters", "qgis_sdk.bridge", "qgis_sdk.core")
 
 
+def _describe(value: Any) -> str:
+    """One exported name: its signature, its members, or the type it is."""
+    if isinstance(value, enum.EnumMeta):
+        return enum_members(value)
+    return signature_of(value) if callable(value) else type(value).__name__
+
+
 def _describe_module(module: Any) -> dict[str, str]:
     """Every name a module exports, mapped to its signature (``""`` if not one)."""
     names = getattr(module, "__all__", None) or [
@@ -81,10 +89,7 @@ def _describe_module(module: Any) -> dict[str, str]:
     ]
     described: dict[str, str] = {}
     for name in sorted(names):
-        value = getattr(module, name, None)
-        described[name] = (
-            signature_of(value) if callable(value) else type(value).__name__
-        )
+        described[name] = _describe(getattr(module, name, None))
     return described
 
 
