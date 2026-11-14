@@ -283,6 +283,7 @@ def _assert_aggregate_gate(jobs: dict) -> None:
         "coverage",
         "layers",
         "lts",
+        "release",
     }
     assert aggregate["if"] == "${{ always() }}"
     gate = aggregate["steps"][-1]
@@ -290,7 +291,8 @@ def _assert_aggregate_gate(jobs: dict) -> None:
         "${{ needs.fast.result != 'success' || needs.linux.result != 'success'"
         " || needs.coverage.result != 'success'"
         " || needs.layers.result != 'success'"
-        " || needs.lts.result != 'success' }}"
+        " || needs.lts.result != 'success'"
+        " || needs.release.result != 'success' }}"
     )
     assert gate["run"] == "exit 1"
 

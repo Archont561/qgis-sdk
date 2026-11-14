@@ -838,41 +838,17 @@ jobs:
           name: release-notes
           path: notes
 
+      # One command, and the same one a pull request rehearses (TASK-169):
+      # it globs the artifacts, hashes them into dist/SHA256SUMS and attaches
+      # every file plus the sums. The shell names no flag twice and expands
+      # nothing itself - adding an `assets=(...)` array back here is how this
+      # step broke `python-v0.11.0` after PyPI had already accepted the wheels.
       - name: Write SHA256SUMS and publish the GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.build.outputs.tag_name }}
-        run: |
-          shopt -s nullglob
-          # The npm-tgz artifact carries two tarballs under their pack
-          # directories (bridge/, alias/) since the alias shipped; ts-v0.3.0
-          # published both and then found no asset under npm/*.tgz. A ui-v*
-          # tag downloads ui-npm-tgz (ui/, ui-alias/) into the same place.
-          # Wheels sit one directory per distribution (dist/pypi/<name>/).
-          assets=(dist/pypi/*/*.whl dist/conda/*.conda npm/*.tgz npm/*/*.tgz)
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "::error::no release assets found under dist/ or npm/"
-            exit 1
-          fi
-          # A TypeScript-only tag downloads no wheel, so dist/ does not exist
-          # yet; ts-v0.2.0 failed here after npm had already published.
-          mkdir -p dist
-          # `doit` builds a list parameter from a repeated flag, one value each
-          # (`--paths a --paths b`), so the assets are expanded into flags here
-          # rather than passed as `--paths a b`: the second form is read as a
-          # task name and doit exits 3 before anything is hashed. python-v0.11.0
-          # failed in this step for exactly that reason, after PyPI had already
-          # accepted the wheels.
-          asset_flags=()
-          for asset in "${assets[@]}"; do
-            asset_flags+=(--asset "$asset")
-          done
-          path_flags=()
-          for asset in "${assets[@]}"; do
-            path_flags+=(--paths "$asset")
-          done
-          pixi run -e build automation -- release_checksums --out dist/SHA256SUMS "${path_flags[@]}"
-          pixi run -e build automation -- release_github_release \
-            --tag "$RELEASE_TAG" \
-            --body-file notes/release-notes.md \
-            "${asset_flags[@]}" --asset dist/SHA256SUMS
+        run: >-
+          pixi run -e build automation -- release_publish
+          --tag "$RELEASE_TAG"
+          --body-file notes/release-notes.md
+          --out dist/SHA256SUMS

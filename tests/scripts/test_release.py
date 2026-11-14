@@ -30,6 +30,7 @@ from automation.release import (
     Version,
     _build,
     _contracts,
+    _publish,
     _stamp,
     _verify,
     _version,
@@ -210,7 +211,7 @@ def _raise_already_exists(*args, **kwargs):
 def _patch_upload_asset(monkeypatch, uploaded):
 
     monkeypatch.setattr(
-        _verify,
+        _publish,
         "upload_asset",
         lambda url, token, path, opener=None: uploaded.append(path),
     )
@@ -220,7 +221,7 @@ def _patch_new_release_api(monkeypatch, created, uploaded):
     """A release that does not exist yet: one create call, then uploads."""
 
     monkeypatch.setattr(
-        _verify,
+        _publish,
         "create_release",
         lambda draft, opener=None: (
             created.append((draft.slug, draft.tag, draft.body, draft.prerelease))
@@ -233,9 +234,9 @@ def _patch_new_release_api(monkeypatch, created, uploaded):
 def _patch_existing_release_api(monkeypatch, deleted, uploaded):
     """A release that already exists: replace its assets instead of creating it."""
 
-    monkeypatch.setattr(_verify, "create_release", _raise_already_exists)
+    monkeypatch.setattr(_publish, "create_release", _raise_already_exists)
     monkeypatch.setattr(
-        _verify,
+        _publish,
         "get_release_by_tag",
         lambda slug, token, tag, opener=None: {
             "upload_url": "https://u{?name}",
@@ -244,7 +245,7 @@ def _patch_existing_release_api(monkeypatch, deleted, uploaded):
         },
     )
     monkeypatch.setattr(
-        _verify,
+        _publish,
         "delete_release_asset",
         lambda slug, token, asset_id, opener=None: deleted.append(asset_id),
     )
@@ -2172,6 +2173,163 @@ def test_github_release_needs_repo_and_token(tmp_path, monkeypatch):
     from automation.release import main
 
     assert main(["github-release", "--tag", "v0.1.0"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# The publish step and its rehearsal (TASK-169)
+# ---------------------------------------------------------------------------
+
+
+def _artifact_tree(root: Path) -> list[Path]:
+    """The artifact set a release downloads, in the shape the globs describe."""
+    files = [
+        root / "dist/pypi/runtime/qgis_sdk_runtime-0.11.0-py3-none-any.whl",
+        root / "dist/pypi/tools/qgis_sdk_tools-0.11.0-py3-none-any.whl",
+        root / "dist/pypi/kit/qgis_sdk-0.11.0-py3-none-any.whl",
+        root / "dist/conda/qgis-sdk-0.11.0-pyh0000000_0.conda",
+        root / "npm/bridge/archont561-qgis-sdk-0.11.0.tgz",
+        root / "npm/alias/qgis-sdk-0.11.0.tgz",
+    ]
+    for path in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(path.name.encode("utf-8"))
+    return files
+
+
+def _publish_dry(tmp_path, *extra: str) -> int:
+    """Rehearse the publish step over a fabricated tree."""
+    return _cli(
+        "publish",
+        "--tag",
+        "python-v0.11.0",
+        "--root",
+        str(tmp_path),
+        "--out",
+        str(tmp_path / "SHA256SUMS"),
+        "--dry-run",
+        *extra,
+    )
+
+
+def test_publish_dry_run_hashes_every_artifact_and_attaches_the_sums(
+    tmp_path, monkeypatch, capsys
+):
+    """The step the release runs, executed with no token and no network."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    files = _artifact_tree(tmp_path)
+
+    assert _publish_dry(tmp_path) == 0
+
+    out = capsys.readouterr().out
+    for path in files:
+        assert f"would attach {path}" in out
+    assert "SHA256SUMS" in out
+    assert "would publish the GitHub release python-v0.11.0" in out
+    sums = (tmp_path / "SHA256SUMS").read_text(encoding="utf-8")
+    assert len(sums.strip().splitlines()) == len(files)
+    assert "qgis_sdk-0.11.0-py3-none-any.whl" in sums
+
+
+def test_publish_refuses_a_tree_with_no_matching_artifact(tmp_path, capsys):
+    assert _publish_dry(tmp_path) == 1
+    assert "no release assets matched" in capsys.readouterr().out
+
+
+def test_publish_uploads_the_checksums_file_beside_the_artifacts(tmp_path, monkeypatch):
+    """The real path: one release created, and every artifact plus the sums on it."""
+    files = _artifact_tree(tmp_path)
+    body = tmp_path / "notes.md"
+    body.write_text("# Changelog\n", encoding="utf-8")
+    created, uploaded = [], []
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    _patch_new_release_api(monkeypatch, created, uploaded)
+
+    assert (
+        _cli(
+            "publish",
+            "--tag",
+            "python-v0.11.0",
+            "--root",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "SHA256SUMS"),
+            "--body-file",
+            str(body),
+        )
+        == 0
+    )
+    assert created == [("owner/repo", "python-v0.11.0", "# Changelog\n", False)]
+    assert sorted(uploaded[:-1]) == sorted(files)
+    assert uploaded[-1].resolve() == (tmp_path / "SHA256SUMS").resolve()
+
+
+def test_publish_needs_repo_and_token_only_when_it_really_publishes(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _artifact_tree(tmp_path)
+    assert (
+        _cli(
+            "publish",
+            "--tag",
+            "python-v0.11.0",
+            "--root",
+            str(tmp_path),
+            "--out",
+            str(tmp_path / "SHA256SUMS"),
+        )
+        == 1
+    )
+
+
+def test_the_rehearsal_fabricates_the_artifacts_and_publishes_nothing(tmp_path, capsys):
+    """One command a pull request can run: the same path, a made-up tree."""
+    assert _cli("rehearsal", "--root", str(tmp_path)) == 0
+
+    out = capsys.readouterr().out
+    assert "would publish the GitHub release" in out
+    assert (tmp_path / "SHA256SUMS").is_file()
+    wheels = list((tmp_path / "dist/pypi").glob("*/*.whl"))
+    assert len(wheels) == 3
+    assert (tmp_path / "dist/conda").glob("*.conda")
+    assert len(list((tmp_path / "npm").glob("*/*.tgz"))) == 2
+
+
+def _release_workflow_step(name: str) -> str:
+    return _steps("github-release")[name]["run"]
+
+
+def test_the_workflow_publishes_through_the_task_not_its_own_shell():
+    """A release must run the code a pull request rehearsed.
+
+    The step that failed on `python-v0.11.0` built its own `--paths` command
+    line and repeated `--asset` flags in shell, so a `doit` or argparse change
+    could only be discovered by cutting a release. The shell now names one
+    task and nothing else.
+    """
+    script = _release_workflow_step("Write SHA256SUMS and publish the GitHub Release")
+
+    assert "automation -- release_publish" in script
+    assert "--paths" not in script, "the paths belong to the task, not the shell"
+    assert "for asset in" not in script, "the shell must not expand flags itself"
+    assert script.count("release_publish") == 1
+
+
+def test_the_pull_request_rehearses_the_publish_step():
+    """The rehearsal is a required check, not a workflow somebody remembers."""
+    root = Path(__file__).resolve().parents[2]
+    import yaml
+
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    jobs = workflow["jobs"]
+    rehearsal = [job for job in jobs.values() if job.get("name") == "Release rehearsal"]
+    assert rehearsal, "ci.yml has no Release rehearsal job"
+    runs = [step.get("run", "") for step in rehearsal[0]["steps"]]
+    assert any("release_rehearsal" in run for run in runs)
+    assert "release" in jobs["checks"]["needs"], "checks must require the rehearsal"
 
 
 # ---------------------------------------------------------------------------
