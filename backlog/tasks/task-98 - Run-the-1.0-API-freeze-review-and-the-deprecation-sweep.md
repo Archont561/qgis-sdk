@@ -76,9 +76,25 @@ no `api/python.json`; the first tag that carries one is the first that can be
 diffed" - the inventory entered the tree after that tag (TASK-97). The first
 diffable baseline is therefore this tree, which is AC 3 rather than a gap.
 
-**AC 2, doc-22 and the 1.0 migration notes: open.** The service-coverage map
-still carries rows without a completion or an out-of-scope decision, and the 1.0
-migration notes are the release's document, not this slice's.
+**AC 2, the doc-22 half: the map is now gated against the board, and two rows
+were wrong.** `test_backlog.py` gained three tests: a row in *Planned* or
+*Proposals awaiting a decision* whose own task is Done fails, every task id the
+map cites must exist, and the map's tables are read as data rather than by eye.
+Writing the gate found the drift it was written for - [TASK-159] sat in
+*Proposals awaiting a decision* after it shipped - and two smaller errors: the
+safety warning still called TASK-118 and TASK-119 "known data-safety gaps" a
+release after both were fixed and merged (the paragraph now says what the
+fail-closed policy guarantees and which three limits remain outside it), and the
+Jobs row still described worker-first jobs as "planned for 0.9.0" when
+TASK-115-117 are Done. What stays open in the map is genuine: two 1.0.0 areas
+(`ctx.log` and i18n) are planned with open tasks, and ten PyQGIS-corpus
+proposals await a decision. "Every row complete or out of scope by decision" is
+therefore still not true, and it will not be until those twelve rows move - the
+gate now makes sure none of them moves by accident or stays after it has.
+
+**AC 2, the 1.0 migration notes: open, and they belong to the release.** A
+1.0 migration note written before the sweep would describe a set of names
+the sweep has not chosen yet.
 
 **AC 3, the reviewed inventory: present.** `api/python.json` (22 modules, 632
 names, 25 rules, 84 host operations, 127 CLI entries, `API_VERSION` 1) is
