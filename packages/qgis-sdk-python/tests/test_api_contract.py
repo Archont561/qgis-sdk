@@ -256,6 +256,28 @@ def test_an_internal_module_is_not_a_promise():
     assert _kinds(internal, _with(modules={})) == ["additive"]
 
 
+def test_a_change_inside_an_internal_module_is_not_reported():
+    """The tier is read from the *old* side: what was never promised cannot break."""
+    before = _with(
+        modules={
+            "qgis_sdk.adapters.qt": {
+                "tier": "internal",
+                "names": {"Helper": "()", "Gone": "()"},
+            }
+        }
+    )
+    after = _with(
+        modules={
+            "qgis_sdk.adapters.qt": {
+                "tier": "internal",
+                "names": {"Helper": "(width: int)"},
+            }
+        }
+    )
+
+    assert diff(before, after) == []
+
+
 def test_a_removed_rule_or_cli_flag_is_breaking():
     assert _kinds(_with(rules=["UI001"])) == ["breaking"]
     assert _kinds(_with(cli=["build", "check"])) == ["breaking"]
@@ -333,6 +355,20 @@ def test_a_removal_before_its_announced_window_is_reported():
     assert early_removals(marked, removed, "1.0.0") == []
     assert early_removals(marked, removed, "1.10.0") == []
     assert early_removals(marked, removed, "") == []
+
+
+def test_a_removal_announced_inside_a_module_that_is_gone_is_still_early():
+    """The names are compared inside the module; a vanished module loses them all."""
+    mark = {
+        "module": "qgis_sdk.ui",
+        "name": "Dialog",
+        "since": "0.12.0",
+        "removal": "1.0.0",
+        "use": "",
+    }
+    marked = _with(deprecations=[mark])
+
+    assert early_removals(marked, _with(modules={}, deprecations=[]), "0.13.0")
 
 
 def test_the_rendered_table_lists_every_module_with_its_tier():
@@ -452,3 +488,155 @@ def test_the_installed_sdk_offsets_its_marks_by_module_and_name():
 
     assert all(isinstance(key, tuple) and len(key) == 2 for key in marks)
     assert all(key[0].startswith("qgis_sdk") for key in marks)
+
+
+def _marked_probe(monkeypatch, module_name: str = "qgis_sdk.probe"):
+    """A module holding one deprecated name, registered under ``module_name``."""
+    import sys
+    import types
+
+    from qgis_sdk import deprecation
+
+    @deprecation.deprecated(since="0.12.0", removal="1.0.0", use="Panel")
+    def OldPanel() -> str:
+        """A retired panel."""
+        return "panel"
+
+    probe = types.ModuleType(module_name)
+    probe.OldPanel = OldPanel
+    probe.__all__ = ["OldPanel"]
+    monkeypatch.setitem(sys.modules, module_name, probe)
+    return probe, OldPanel
+
+
+def test_the_document_records_a_mark_where_the_checker_reads_it(monkeypatch):
+    """The inventory and `check` read the same marks off the same modules."""
+    from qgis_sdk import deprecation
+    from qgis_sdk_tools.api import _inventory
+    from qgis_sdk_tools.check.api import _table, deprecated_names
+
+    name = "qgis_sdk.probe"
+    _, marked = _marked_probe(monkeypatch, name)
+    monkeypatch.setattr(_table, "PUBLIC_MODULES", (name,))
+    monkeypatch.setattr(_inventory, "PUBLIC_MODULES", (name,))
+
+    assert deprecated_names() == {
+        (name, "OldPanel"): deprecation.deprecation_of(marked)
+    }
+    assert _inventory._deprecations() == [
+        {
+            "module": name,
+            "name": "OldPanel",
+            "since": "0.12.0",
+            "removal": "1.0.0",
+            "use": "Panel",
+        }
+    ]
+
+
+def test_a_tier_without_a_declaration_is_read_from_where_the_module_lives():
+    """No `__stability__`, so the prefix decides: the internal trees are internal."""
+    import types
+
+    from qgis_sdk_tools.api import _inventory
+
+    plain = types.SimpleNamespace()
+    assert _inventory._tier(plain, "qgis_sdk.ui") == "stable"
+    assert _inventory._tier(plain, "qgis_sdk.adapters.qt") == "internal"
+    declared = types.SimpleNamespace(__stability__="evolving")
+    assert _inventory._tier(declared, "qgis_sdk.ui") == "evolving"
+
+
+def test_a_written_inventory_round_trips_and_an_unknown_version_is_refused(tmp_path):
+    from qgis_sdk_tools.api import read, write
+
+    nested = tmp_path / "api" / "python.json"
+    write(BASE, nested)
+
+    assert read(nested) == BASE
+    assert json.loads(nested.read_text(encoding="utf-8")) == BASE
+    nested.write_text(json.dumps({**BASE, "api_version": 99}), encoding="utf-8")
+    with pytest.raises(ValueError, match="api_version 99"):
+        read(nested)
+
+
+def test_a_change_prints_as_a_line_and_as_a_record():
+    from qgis_sdk_tools.api import Change
+
+    change = Change("additive", "qgis_sdk.ui", "ScrollArea")
+
+    assert change.line() == "additive    qgis_sdk.ui: ScrollArea"
+    assert change.to_json() == {
+        "kind": "additive",
+        "where": "qgis_sdk.ui",
+        "detail": "ScrollArea",
+    }
+
+
+def test_a_removed_module_loses_every_name_it_carried():
+    """Nothing to compare against, so every name it had counts as gone."""
+    gone = _with(modules={})
+    changes = diff(BASE, gone)
+
+    assert sorted(change.detail for change in changes) == [
+        "removed Button",
+        "removed Dialog",
+    ]
+    assert {change.kind for change in changes} == {"breaking"}
+
+
+def test_a_change_is_described_by_the_version_it_would_need():
+    from qgis_sdk_tools.api import consequence
+
+    assert "major" in consequence("breaking", "1.1.0")
+    assert "minor" in consequence("deprecating", "0.12.0")
+    assert "minor or patch" in consequence("additive", "0.12.0")
+    assert consequence("none", "0.12.0") == "0.12.0: no change to the public API"
+
+
+def test_an_unbalanced_bracket_leaves_the_annotation_as_the_source_wrote_it():
+    """A truncated `Optional[` is not a union the rewriter can prove, so it stops."""
+    from qgis_sdk_tools.api import _signatures
+
+    assert _signatures._matching("Optional[int", 8) == -1
+    assert _signatures._expand("Optional[int") == "Optional[int"
+
+
+def test_a_signature_read_through_annotationlib_falls_back_when_it_refuses(monkeypatch):
+    """3.14's `Format.STRING` path, and the fallback for what it will not take."""
+    import types
+
+    from qgis_sdk_tools.api import _signatures
+
+    monkeypatch.setattr(_signatures, "_Format", types.SimpleNamespace(STRING=object()))
+
+    def describe(width: int = 3) -> str:
+        return ""
+
+    assert _signatures._read_signature(describe).parameters["width"].default == 3
+    with pytest.raises(TypeError):
+        _signatures._read_signature(3)
+
+
+def test_the_api_commands_write_the_inventory_and_print_the_tier_table(tmp_path):
+    """`qgis-sdk api dump` and `api stability`, over the real tree."""
+    from qgis_sdk_tools.__main__ import app
+    from qgis_sdk_tools.testing import FakeCliRuntime
+    from typer.testing import CliRunner
+
+    runtime = FakeCliRuntime(cwd=tmp_path)
+    result = CliRunner().invoke(app, ["api", "dump"], obj=runtime)
+
+    assert result.exit_code == 0, runtime.stderr + result.output
+    written = tmp_path / "api" / "python.json"
+    assert written.is_file()
+    summary = inventory().document()
+    names = sum(len(entry["names"]) for entry in summary["modules"].values())
+    assert f"{len(summary['modules'])} modules, {names} names" in runtime.stdout
+
+    table = FakeCliRuntime(cwd=tmp_path)
+    shown = CliRunner().invoke(app, ["api", "stability"], obj=table)
+
+    assert shown.exit_code == 0, table.stderr + shown.output
+    assert "qgis_sdk.ui" in table.stdout
+    assert "| stable |" in table.stdout
