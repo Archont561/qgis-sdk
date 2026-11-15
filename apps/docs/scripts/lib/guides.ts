@@ -15,6 +15,8 @@
  * Pure functions only: the CLI in `../generate.ts` does the file system work.
  */
 import { posix } from "node:path";
+import { directiveText, expandDirectives } from "./directives";
+import { escapeMdx } from "./mdx-text";
 
 export interface Guide {
 	/** The backlog document id, e.g. `doc-12`. */
@@ -153,11 +155,18 @@ export interface RenderOptions {
 }
 
 export interface Page {
-	/** Relative to the content directory, e.g. `python/installation.md`. */
+	/** Relative to the content directory, e.g. `python/installation.mdx`. */
 	readonly path: string;
 	readonly content: string;
 	/** For a migration note, its place in the sidebar: newest first. */
 	readonly order?: number;
+	/**
+	 * The components the page renders, by the name of the directive that
+	 * expanded into them. `generate.ts` writes the map to
+	 * `lib/generated/components.json` and the build gate checks each name's
+	 * marker in the exported HTML.
+	 */
+	readonly components?: readonly string[];
 }
 
 export interface RenderWarning {
@@ -390,6 +399,8 @@ function frontmatter(fields: Record<string, string | undefined>): string {
 class Renderer {
 	private readonly split = new Map<string, SplitGuide>();
 	private readonly byId = new Map<string, Guide>();
+	/** The components each page renders, keyed by the page path it renders to. */
+	private readonly componentUse = new Map<string, readonly string[]>();
 	readonly warnings: RenderWarning[] = [];
 
 	constructor(
@@ -468,19 +479,25 @@ class Renderer {
 		return this.route(targetGuide, target);
 	}
 
-	/** Rewrite links and demote headings in prose; leave fenced code untouched. */
+	/**
+	 * Rewrite links, demote headings and expand directives in prose; leave
+	 * fenced code untouched. Directives expand last, so a link inside a
+	 * `:::steps` item is rewritten like any other.
+	 */
 	private prose(
 		guide: Guide,
 		page: string,
 		body: string,
 		demote: boolean,
-	): string {
-		return segments(body)
+	): { markdown: string; components: readonly string[] } {
+		const rewritten = segments(body)
 			.map((segment) => {
 				if (segment.code) {
 					return segment.text;
 				}
-				let text = segment.text.replace(
+				// `escapeMdx` first: an autolink becomes the link syntax the rewrite
+				// understands, and a brace a reader sees stays a brace in MDX.
+				let text = escapeMdx(segment.text).replace(
 					LINK,
 					(whole: string, image: string, label: string, url: string) => {
 						if (image) {
@@ -498,6 +515,13 @@ class Renderer {
 				return text;
 			})
 			.join("\n");
+		const expanded = expandDirectives(rewritten);
+		if (expanded.components.length > 0) {
+			// A directive the layer does not know throws here, with its line, so a
+			// typo in a guide fails the build instead of rendering as text.
+			this.componentUse.set(page, expanded.components);
+		}
+		return { markdown: expanded.markdown, components: expanded.components };
 	}
 
 	render(): Page[] {
@@ -508,8 +532,9 @@ class Renderer {
 				continue;
 			}
 			const title = guide.title ?? split.title;
+			const intro = this.prose(guide, "index", split.intro, false);
 			const index = [
-				this.prose(guide, "index", split.intro, false),
+				intro.markdown,
 				"",
 				"## Sections",
 				"",
@@ -520,30 +545,39 @@ class Renderer {
 				"",
 			].join("\n");
 			pages.push({
-				path: `${guide.section}/index.md`,
+				path: `${guide.section}/index.mdx`,
 				content:
 					frontmatter({
 						title,
-						description: describe(split.intro, title),
+						description: describe(directiveText(split.intro), title),
 					}) + index,
+				...(intro.components.length > 0
+					? { components: intro.components }
+					: {}),
 			});
 			split.sections.forEach((section) => {
 				const draft = draftNotice(section.heading);
 				const { migration } = section;
 				const pageTitle = migration?.title ?? plainText(section.heading);
+				const body = this.prose(guide, section.slug, section.body, true);
 				const head = frontmatter({
 					title: pageTitle,
-					description: describe(section.body, `${title}: ${pageTitle}`),
+					description: describe(
+						directiveText(section.body),
+						`${title}: ${pageTitle}`,
+					),
 				});
-				const body = this.prose(guide, section.slug, section.body, true);
 				// A migration note lives in a `migration/` folder of its guide, so
 				// the sidebar groups the notes under one label; `order` decides
 				// where inside that folder the note sits (newest first).
-				const path = `${guide.section}/${section.slug}.md`;
+				const path = `${guide.section}/${section.slug}.mdx`;
 				pages.push({
 					path,
-					content: `${head}${draft ? `${draft}\n` : ""}${body}\n`,
+					content: `${head}${draft ? `${draft}\n` : ""}${body.markdown}\n`,
 					...(migration ? { order: migration.order } : {}),
+					...(body.components.length > 0
+						? { components: body.components }
+						: {}),
 				});
 			});
 		}

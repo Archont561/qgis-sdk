@@ -1,4 +1,3 @@
-import defaultMdxComponents from "fumadocs-ui/mdx";
 import {
 	DocsBody,
 	DocsDescription,
@@ -7,11 +6,8 @@ import {
 } from "fumadocs-ui/page";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CliWalkthrough } from "@/components/cli-walkthrough";
-import { CompatNotice } from "@/components/compat-notice";
-import { RegistryStats } from "@/components/registry-stats";
-import { Versions } from "@/components/versions";
 import edits from "@/lib/generated/pages.json";
+import { mdxComponents } from "@/lib/mdx";
 import { source } from "@/lib/source";
 import { REPOSITORY } from "@/site";
 
@@ -47,15 +43,7 @@ export default async function Page({ params }: Props) {
 			<DocsTitle>{page.data.title}</DocsTitle>
 			<DocsDescription>{page.data.description}</DocsDescription>
 			<DocsBody>
-				<MDX
-					components={{
-						...defaultMdxComponents,
-						CliWalkthrough,
-						CompatNotice,
-						RegistryStats,
-						Versions,
-					}}
-				/>
+				<MDX components={mdxComponents} />
 			</DocsBody>
 		</DocsPage>
 	);
