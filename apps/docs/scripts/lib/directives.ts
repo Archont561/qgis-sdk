@@ -287,17 +287,6 @@ function bodyOf(block: Block): string {
 	return block.text.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
 }
 
-/** A block that holds text must not also hold a directive. */
-function assertNoChildren(block: Block): void {
-	const child = block.children[0];
-	if (child !== undefined) {
-		throw new DirectiveError(
-			child.line,
-			`:::${child.name} cannot sit inside :::${block.name}`,
-		);
-	}
-}
-
 function required(block: Block, name: string, hint: string): string {
 	const value = parseAttributes(block.argument).values.get(name);
 	if (value === undefined || value === "") {
@@ -309,7 +298,6 @@ function required(block: Block, name: string, hint: string): string {
 const CALLOUT_TYPES = ["info", "warning", "error", "success", "idea"];
 
 function renderCallout(block: Block): string {
-	assertNoChildren(block);
 	const attributes = parseAttributes(block.argument);
 	const type = attributes.values.get("type") ?? "info";
 	if (CALLOUT_TYPES.includes(type) === false) {
@@ -364,7 +352,6 @@ function numberedItems(block: Block): readonly string[] {
 }
 
 function renderSteps(block: Block): string {
-	assertNoChildren(block);
 	const steps = numberedItems(block).map(
 		(step) => `<Step>\n\n${step}\n\n</Step>`,
 	);
@@ -436,7 +423,6 @@ function renderTree(cursor: TreeCursor, depth: number): readonly string[] {
 }
 
 function renderFiles(block: Block): string {
-	assertNoChildren(block);
 	const entries = parseTree(block);
 	const rendered = renderTree({ entries, block, index: 0 }, 0);
 	return tagged("files", `<Files>\n${rendered.join("\n")}\n</Files>`);
@@ -456,7 +442,6 @@ function labelOf(block: Block, name: string): string {
 }
 
 function renderTab(block: Block): string {
-	assertNoChildren(block);
 	const label = labelOf(block, "label");
 	return `<Tab value=${quoted(label)}>\n\n${bodyOf(block)}\n\n</Tab>`;
 }
@@ -499,7 +484,6 @@ function anchor(value: string): string {
 }
 
 function renderAccordion(block: Block): string {
-	assertNoChildren(block);
 	const title = required(
 		block,
 		"title",
