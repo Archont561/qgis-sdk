@@ -156,6 +156,48 @@ describe("expandDirectives", () => {
 		});
 	});
 
+	test("rejects an empty steps block", () => {
+		expect(() => expandDirectives(":::steps\n\n:::\n")).toThrow(
+			/:::steps has no steps/,
+		);
+	});
+
+	test("rejects an empty files block", () => {
+		expect(() => expandDirectives(":::files\n\n:::\n")).toThrow(
+			/:::files is empty/,
+		);
+	});
+
+	test("rejects a file tree that indents by something other than two", () => {
+		expect(() => expandDirectives(":::files\n- a\n   - b\n:::\n")).toThrow(
+			/:::files indents by two spaces/,
+		);
+	});
+
+	test("rejects a file tree that skips a level", () => {
+		expect(() => expandDirectives(":::files\n- a\n    - b\n:::\n")).toThrow(
+			/:::files indents b too deep/,
+		);
+	});
+
+	test("rejects a tab with no label", () => {
+		expect(() => expandDirectives(":::tabs\n:::tab\nx\n:::\n:::\n")).toThrow(
+			/:::tab needs a label/,
+		);
+	});
+
+	test("rejects an empty tabs block", () => {
+		expect(() => expandDirectives(":::tabs\n\n:::\n")).toThrow(
+			/:::tabs has no :::tab blocks/,
+		);
+	});
+
+	test("rejects an empty accordions block", () => {
+		expect(() => expandDirectives(":::accordions\n\n:::\n")).toThrow(
+			/:::accordions has no :::accordion blocks/,
+		);
+	});
+
 	test("points at the line of a bad nested marker", () => {
 		expect(() =>
 			expandDirectives(":::callout\n:::steps\n1. x\n:::\n:::\n"),
