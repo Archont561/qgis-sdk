@@ -10,7 +10,6 @@
  */
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { mdxComponents } from "../lib/mdx";
 import {
 	jsxInMarkdown,
 	markerOf,
@@ -138,11 +137,14 @@ describe("the site as generated", () => {
 		);
 		if ((await file.exists()) === false) return;
 		const use = (await file.json()) as Record<string, readonly string[]>;
+		// The registry's source, not the module: importing it would load React
+		// and every Fumadocs component into the coverage run.
+		const registry = await Bun.file(join(ROOT, "apps/docs/lib/mdx.tsx")).text();
 		for (const names of Object.values(use)) {
 			for (const name of names) {
 				// `callout` -> `Callout`: the expander names the block, the
 				// registry names the component.
-				expect(mdxComponents).toHaveProperty(capitalise(name));
+				expect(registry).toMatch(new RegExp(`^\\t${capitalise(name)},$`, "m"));
 			}
 		}
 	});

@@ -38,6 +38,7 @@ import { CompatNotice } from "@/components/compat-notice";
 import { RegistryStats } from "@/components/registry-stats";
 import { Versions } from "@/components/versions";
 
+export { COMPONENT_NAMES } from "./mdx-names";
 export {
 	Accordion,
 	Accordions,
@@ -62,26 +63,6 @@ export {
 	TypeTable,
 	Versions,
 };
-
-/** The names the registry must carry; the phases of TASK-170 name them. */
-export const COMPONENT_NAMES = [
-	"Callout",
-	"Card",
-	"Cards",
-	"Steps",
-	"Step",
-	"Tabs",
-	"Tab",
-	"Files",
-	"Folder",
-	"File",
-	"TypeTable",
-	"Accordion",
-	"Accordions",
-	"Banner",
-	"InlineTOC",
-	"ImageZoom",
-] as const;
 
 /**
  * What `<MDXContent components={...}>` receives.
