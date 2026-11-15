@@ -18,6 +18,8 @@ export interface ContentPage {
 	readonly description?: string;
 	/** The page body without its frontmatter. */
 	readonly body: string;
+	/** The file, relative to `content/docs`: `python/scoped-jobs.mdx`. */
+	readonly source: string;
 	/** Directory under `content/docs` holding the page, `.` for the root. */
 	readonly section: string;
 }
@@ -114,6 +116,7 @@ export async function collectPages(
 				title,
 				...(description === undefined ? {} : { description }),
 				body: body.trim(),
+				source: relative(contentDir, path).split("\\").join("/"),
 				section: section === "" ? "." : section,
 			});
 		}

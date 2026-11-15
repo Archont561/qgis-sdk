@@ -9,13 +9,21 @@
  * 3. the compatibility pages for routes published before the guides were
  *    reorganised;
  * 4. the checks: every page has its markdown and is listed, every legacy
- *    route still redirects to a page that exists, and no compatibility page
- *    leaks into the sitemap or the llms index.
+ *    route still redirects to a page that exists, no compatibility page
+ *    leaks into the sitemap or the llms index, no `.md` page holds JSX that
+ *    the build dropped, and every page a directive gave a component to
+ *    carries that component in the exported HTML.
  */
 
 import { fileURLToPath } from "node:url";
 import { BASE, DESCRIPTION, REPOSITORY, SITE, TITLE } from "../site";
 import { collectPages, sectionLabels, sectionPages } from "./lib/content";
+import {
+	type GateProblem,
+	type HtmlReader,
+	jsxInMarkdown,
+	missingComponentMarkup,
+} from "./lib/gate";
 import { publishedRoutes, verifyLlms, writeLlmsExports } from "./lib/llms";
 import {
 	LEGACY_ROUTES,
@@ -27,6 +35,30 @@ import { writeSitemap } from "./lib/sitemap";
 const DOCS = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${DOCS}/out`;
 const CONTENT = `${DOCS}/content/docs`;
+const COMPONENT_USE = `${DOCS}/lib/generated/components.json`;
+
+/** The generator's record of which pages carry which directive components. */
+async function componentUse(): Promise<
+	Readonly<Record<string, readonly string[]>>
+> {
+	try {
+		return JSON.parse(await Bun.file(COMPONENT_USE).text()) as Record<
+			string,
+			readonly string[]
+		>;
+	} catch {
+		// No record means no page carries a directive; the generator always
+		// writes the file, so this only happens for a hand-run postbuild.
+		return {};
+	}
+}
+
+/** The exported HTML of a route, or `null` when the route was not written. */
+const htmlOf: HtmlReader = async (route) => {
+	const path = `${OUT}${route === "/" ? "" : route}/index.html`;
+	const file = Bun.file(path);
+	return (await file.exists()) ? await file.text() : null;
+};
 
 const pages = await collectPages(CONTENT);
 const sections = sectionPages(pages, await sectionLabels(CONTENT));
@@ -66,6 +98,19 @@ for (const problem of report.broken) {
 console.log(
 	`postbuild: ${report.routes} routes, ${report.markdown} pages, ${report.broken.length} unresolved`,
 );
-if (report.broken.length > 0) {
+// The component gate: a `.md` page holding JSX, and a page whose directive
+// produced no component, are both failures the build itself cannot see.
+const use = await componentUse();
+const problems: GateProblem[] = [
+	...jsxInMarkdown(pages),
+	...(await missingComponentMarkup(use, htmlOf)),
+];
+for (const problem of problems) {
+	console.error(`postbuild: ${problem.where}: ${problem.message}`);
+}
+console.log(
+	`postbuild: component gate over ${Object.keys(use).length} pages with directives, ${problems.length} problems`,
+);
+if (report.broken.length > 0 || problems.length > 0) {
 	process.exit(1);
 }

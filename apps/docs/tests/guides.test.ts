@@ -160,19 +160,19 @@ describe("renderGuides", () => {
 
 	test("writes an index per guide and one page per section", () => {
 		expect([...byPath.keys()].sort()).toEqual([
-			"python/desktop-host-host-and-the-project-manifest.md",
-			"python/index.md",
-			"python/installation.md",
-			"python/scoped-jobs.md",
-			"typescript/index.md",
-			"typescript/migration/v0-4.md",
-			"typescript/transport-client.md",
+			"python/desktop-host-host-and-the-project-manifest.mdx",
+			"python/index.mdx",
+			"python/installation.mdx",
+			"python/scoped-jobs.mdx",
+			"typescript/index.mdx",
+			"typescript/migration/v0-4.mdx",
+			"typescript/transport-client.mdx",
 		]);
 	});
 
 	test("carries the frontmatter Fumadocs reads, and nothing else", () => {
 		const page =
-			byPath.get("python/desktop-host-host-and-the-project-manifest.md") ?? "";
+			byPath.get("python/desktop-host-host-and-the-project-manifest.mdx") ?? "";
 		expect(page.startsWith("---\n")).toBe(true);
 		expect(page).toContain(
 			'title: "Desktop host: host() and the project manifest"',
@@ -183,7 +183,7 @@ describe("renderGuides", () => {
 		expect(page).not.toContain("sidebar:");
 		expect(page).not.toContain("editUrl:");
 		expect(page).not.toContain("lastUpdated:");
-		const index = byPath.get("python/index.md") ?? "";
+		const index = byPath.get("python/index.mdx") ?? "";
 		expect(index).toContain('title: "qgis-sdk Python package guide"');
 		expect(index).not.toContain("lastUpdated");
 	});
@@ -201,14 +201,14 @@ describe("renderGuides", () => {
 				reason: "no heading #nowhere in doc-12",
 			},
 		]);
-		expect(broken.find((p) => p.path === "python/a.md")?.content).toContain(
+		expect(broken.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"[x](#nowhere)",
 		);
 	});
 
 	test("demotes the section's subheadings so the page title is the only H1", () => {
 		const page =
-			byPath.get("python/desktop-host-host-and-the-project-manifest.md") ?? "";
+			byPath.get("python/desktop-host-host-and-the-project-manifest.mdx") ?? "";
 		expect(page).toContain("\n## Layer picker\n");
 		expect(page).toContain("\n### Deeper\n");
 		expect(page).not.toContain("\n#### ");
@@ -216,7 +216,7 @@ describe("renderGuides", () => {
 	});
 
 	test("rewrites same-guide anchors to the page that now holds the heading", () => {
-		const page = byPath.get("python/installation.md") ?? "";
+		const page = byPath.get("python/installation.mdx") ?? "";
 		expect(page).toContain("[Scoped jobs](/qgis-sdk/python/scoped-jobs/)");
 		expect(page).toContain(
 			"[the picker](/qgis-sdk/python/desktop-host-host-and-the-project-manifest/#layer-picker)",
@@ -224,13 +224,13 @@ describe("renderGuides", () => {
 	});
 
 	test("rewrites cross-guide links, with or without an anchor", () => {
-		expect(byPath.get("python/index.md")).toContain(
+		expect(byPath.get("python/index.mdx")).toContain(
 			"[doc-13](/qgis-sdk/typescript/transport-client/)",
 		);
-		expect(byPath.get("python/scoped-jobs.md")).toContain(
+		expect(byPath.get("python/scoped-jobs.mdx")).toContain(
 			"[0.4.0 notes](/qgis-sdk/typescript/migration/v0-4/)",
 		);
-		expect(byPath.get("typescript/index.md")).toContain(
+		expect(byPath.get("typescript/index.mdx")).toContain(
 			"[doc-12](/qgis-sdk/python/)",
 		);
 	});
@@ -240,7 +240,7 @@ describe("renderGuides", () => {
 		// works, not what it ships: the site never links them (the prose that
 		// cites them is edited at the source; this is the safety net).
 		const page =
-			byPath.get("python/desktop-host-host-and-the-project-manifest.md") ?? "";
+			byPath.get("python/desktop-host-host-and-the-project-manifest.mdx") ?? "";
 		expect(page).toContain("Intro paragraph with a task and a\nplan.");
 		expect(page).not.toContain("backlog/tasks");
 		expect(page).not.toContain("backlog/docs/plans");
@@ -260,17 +260,17 @@ describe("renderGuides", () => {
 			],
 			{ base: "", repository: "https://github.com/o/r" },
 		);
-		expect(rules.find((p) => p.path === "python/a.md")?.content).toContain(
+		expect(rules.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"See AGENTS.md, skills and m-6.",
 		);
 		expect(rules.warnings).toHaveLength(3);
 	});
 
 	test("points a decision at its row on the design-decisions page", () => {
-		expect(byPath.get("python/index.md")).toContain(
+		expect(byPath.get("python/index.mdx")).toContain(
 			"[decision-29](/qgis-sdk/reference/design-decisions/#decision-29)",
 		);
-		expect(byPath.get("python/index.md")).not.toContain("backlog/decisions");
+		expect(byPath.get("python/index.mdx")).not.toContain("backlog/decisions");
 	});
 
 	test("points other backlog records the site does not render at the repository", () => {
@@ -284,15 +284,15 @@ describe("renderGuides", () => {
 			],
 			{ base: "", repository: "https://github.com/o/r" },
 		);
-		expect(other.find((p) => p.path === "python/a.md")?.content).toContain(
+		expect(other.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"[doc-26](https://github.com/o/r/blob/main/backlog/docs/specifications/doc-26%20-%20Authority.md#assets)",
 		);
 	});
 
 	test("leaves absolute links and code alone", () => {
-		const page = byPath.get("python/scoped-jobs.md") ?? "";
+		const page = byPath.get("python/scoped-jobs.mdx") ?? "";
 		expect(page).toContain("[external](https://example.com/x)");
-		expect(byPath.get("python/installation.md")).toContain(
+		expect(byPath.get("python/installation.mdx")).toContain(
 			"pip install qgis-sdk\n# or in a Pixi",
 		);
 	});
@@ -314,23 +314,23 @@ describe("renderGuides", () => {
 			{ base: "", repository: "https://github.com/o/r" },
 		);
 		const draft =
-			drafts.find((p) => p.path === "python/migration/v0-7.md")?.content ?? "";
+			drafts.find((p) => p.path === "python/migration/v0-7.mdx")?.content ?? "";
 		expect(draft).toContain(
 			"---\n:::warn\n\n**Draft.** These notes describe the unreleased 0.7.0 line. Content changes as the release is cut.\n\n:::\n\nBody.\n",
 		);
 		const next =
-			drafts.find((p) => p.path === "typescript/migration/next-minor.md")
+			drafts.find((p) => p.path === "typescript/migration/next-minor.mdx")
 				?.content ?? "";
 		expect(next).toContain(
 			"These notes describe the unreleased next minor. Content changes as the release is cut.",
 		);
 		const released =
-			drafts.find((p) => p.path === "python/migration/v0-6.md")?.content ?? "";
+			drafts.find((p) => p.path === "python/migration/v0-6.mdx")?.content ?? "";
 		expect(released).not.toContain(":::warn");
 	});
 
 	test("the index lists the guide's sections", () => {
-		const index = byPath.get("python/index.md") ?? "";
+		const index = byPath.get("python/index.mdx") ?? "";
 		expect(index).toContain("- [Installation](/qgis-sdk/python/installation/)");
 		expect(index).toContain(
 			"- [Desktop host: `host()` and the project manifest](/qgis-sdk/python/desktop-host-host-and-the-project-manifest/)",
@@ -380,51 +380,51 @@ describe("migration notes", () => {
 
 	test("live in the guide's own migration folder", () => {
 		expect([...byPath.keys()].sort()).toEqual([
-			"python/index.md",
-			"python/installation.md",
-			"python/migration/v0-1-experimental-policy.md",
-			"python/migration/v0-4.md",
-			"python/migration/v0-7.md",
-			"typescript/exports.md",
-			"typescript/index.md",
-			"typescript/migration/v0-3.md",
+			"python/index.mdx",
+			"python/installation.mdx",
+			"python/migration/v0-1-experimental-policy.mdx",
+			"python/migration/v0-4.mdx",
+			"python/migration/v0-7.mdx",
+			"typescript/exports.mdx",
+			"typescript/index.mdx",
+			"typescript/migration/v0-3.mdx",
 		]);
 		// The route follows the path: /python/migration/v0-4/.
-		expect(byPath.get("python/migration/v0-4.md")).not.toContain("slug:");
+		expect(byPath.get("python/migration/v0-4.mdx")).not.toContain("slug:");
 	});
 
 	test("carry a human title and sort newest first", () => {
-		expect(byPath.get("python/migration/v0-7.md")).toContain(
+		expect(byPath.get("python/migration/v0-7.mdx")).toContain(
 			'title: "0.7.0 migration notes"',
 		);
 		expect(
-			byPath.get("python/migration/v0-1-experimental-policy.md"),
+			byPath.get("python/migration/v0-1-experimental-policy.mdx"),
 		).toContain('title: "0.1.0 experimental release and migration policy"');
 		const order = (path: string): number =>
 			pages.find((page) => page.path === path)?.order ?? Number.NaN;
-		expect(order("python/migration/v0-7.md")).toBeLessThan(
-			order("python/migration/v0-4.md"),
+		expect(order("python/migration/v0-7.mdx")).toBeLessThan(
+			order("python/migration/v0-4.mdx"),
 		);
-		expect(order("python/migration/v0-4.md")).toBeLessThan(
-			order("python/migration/v0-1-experimental-policy.md"),
+		expect(order("python/migration/v0-4.mdx")).toBeLessThan(
+			order("python/migration/v0-1-experimental-policy.mdx"),
 		);
 	});
 
 	test("are reached by the anchors the guides already use", () => {
-		const installation = byPath.get("python/installation.md") ?? "";
+		const installation = byPath.get("python/installation.mdx") ?? "";
 		expect(installation).toContain(
 			"[the 0.4 notes](/qgis-sdk/python/migration/v0-4/)",
 		);
 		expect(installation).toContain(
 			"[the policy](/qgis-sdk/python/migration/v0-1-experimental-policy/)",
 		);
-		expect(byPath.get("python/migration/v0-4.md")).toContain(
+		expect(byPath.get("python/migration/v0-4.mdx")).toContain(
 			"[kinds](/qgis-sdk/python/migration/v0-7/#parameter-kinds)",
 		);
-		expect(byPath.get("typescript/exports.md")).toContain(
+		expect(byPath.get("typescript/exports.mdx")).toContain(
 			"[doc-12 0.4](/qgis-sdk/python/migration/v0-4/)",
 		);
-		expect(byPath.get("python/index.md")).toContain(
+		expect(byPath.get("python/index.mdx")).toContain(
 			"- [0.4.0 migration notes](/qgis-sdk/python/migration/v0-4/)",
 		);
 		expect(pages.warnings).toHaveLength(0);
@@ -472,7 +472,7 @@ describe("a guide with a title of its own", () => {
 
 	test("titles the index with the override and nests the pages", () => {
 		const index = pages.find(
-			(p) => p.path === "contributing/workspace/index.md",
+			(p) => p.path === "contributing/workspace/index.mdx",
 		);
 		expect(index?.content).toContain(
 			'title: "Workspace, harnesses, and evidence"',
@@ -481,13 +481,13 @@ describe("a guide with a title of its own", () => {
 			"- [Quick start](/qgis-sdk/contributing/workspace/quick-start/)",
 		);
 		expect(
-			pages.find((p) => p.path === "contributing/workspace/quick-start.md")
+			pages.find((p) => p.path === "contributing/workspace/quick-start.mdx")
 				?.content,
 		).toContain('description: "Run it."');
 	});
 
 	test("routes cross-guide links at the nested directory", () => {
-		expect(pages.find((p) => p.path === "python/a.md")?.content).toContain(
+		expect(pages.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"[the harness](/qgis-sdk/contributing/workspace/quick-start/)",
 		);
 	});

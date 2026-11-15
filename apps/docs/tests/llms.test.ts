@@ -33,12 +33,14 @@ const INSTALL: ContentPage = {
 	title: "Install the QGIS SDK",
 	description: "Two minutes.",
 	body: "Install it.\n",
+	source: "start/installation.md",
 	section: "start",
 };
 const PYTHON: ContentPage = {
 	url: "/python",
 	title: "Python package",
 	body: "The guide.\n",
+	source: "python/index.mdx",
 	section: "python",
 };
 

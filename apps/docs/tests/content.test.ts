@@ -84,8 +84,14 @@ describe("sectionPages", () => {
 	test("puts the collection's own pages before the folders", () => {
 		const sections = sectionPages(
 			[
-				{ url: "/", title: "Home", body: "", section: "." },
-				{ url: "/a", title: "A", body: "", section: "a" },
+				{ url: "/", title: "Home", body: "", source: "index.md", section: "." },
+				{
+					url: "/a",
+					title: "A",
+					body: "",
+					source: "a/index.mdx",
+					section: "a",
+				},
 			],
 			{ a: "Section A" },
 		);

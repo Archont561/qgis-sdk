@@ -274,6 +274,30 @@ tracked:
   checked by `.github/workflows/docs-check.yml` (markdownlint-cli2, Vale,
   lychee) and keeps the landing page generated: `bun run readme` renders
   `README.md` from `automation/readme/template.ejs`.
+- Components are written as plain text, not JSX. The guides are read on
+  GitHub as the canonical explanation, so a tag there is a wall of markup in
+  the file, and the same tag in a `.md` page is dropped by the build without
+  an error. `apps/docs/scripts/lib/directives.ts` expands `:::` blocks into
+  the components registered once, in `apps/docs/lib/mdx.tsx`:
+
+  ```text
+  :::steps
+  1. First step, with a fence of its own if it needs one.
+  2. Second step.
+  :::
+  ```
+
+  The set is `:::callout`, `:::steps`, `:::tabs` holding `:::tab`, `:::files`
+  and `:::accordions` holding `:::accordion`; an unknown name, an unclosed
+  block or a block in the wrong parent fails the generate step with its line
+  number, because a marker left alone renders as text. Each expansion wraps
+  its component in `data-qgis-sdk="<name>"`, and `scripts/lib/gate.ts` looks
+  for that marker in the exported HTML of every page the generator recorded a
+  directive for - the check that catches a page rendered without its
+  components, which a passing build does not. The generator also rewrites
+  prose MDX would misread: `{` and `}` outside code, an HTML comment, an
+  autolink, a `<` in a version range, and a code span the author wrapped onto
+  a second line.
 - `.github/workflows/docs.yml` builds and link-checks the site on pull
   requests that touch it, the guides, the UI package or anything it renders
   from - `api/python.json`, a workspace manifest, the built Storybook, the

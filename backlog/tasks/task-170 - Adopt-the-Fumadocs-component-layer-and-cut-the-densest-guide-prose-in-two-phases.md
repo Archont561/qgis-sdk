@@ -4,6 +4,7 @@ title: Adopt the Fumadocs component layer and cut the densest guide prose in two
 status: To Do
 assignee: []
 created_date: '2026-10-28 22:40'
+updated_date: '2026-11-15 09:10'
 labels: []
 dependencies: []
 references:
@@ -27,10 +28,10 @@ The site already runs on Fumadocs (fumadocs-ui 16.18.4, fumadocs-core, fumadocs-
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One component registry in apps/docs (lib/mdx.tsx) supplies Callout, Card/Cards, Steps, Tabs/Tab, Files/Folder/File, TypeTable, Accordion/Accordions, Banner, InlineTOC and ImageZoom to both app/[...slug]/page.tsx and app/page.tsx, so a page needs no import of its own; a test asserts the registry is the only components map either route passes.
-- [ ] #2 The generator emits .mdx for every guide-derived page (apps/docs/content/docs/{python,typescript,contributing}), the .md export URLs stay byte-identical because postbuild writes them independently, and the docs suite plus next build pass with no page renamed.
-- [ ] #3 A generated-page component gate fails the build when a page whose source carries a component directive renders without that component's markup; the gate is proven against a deliberately unregistered component and against JSX placed in a .md page, so the silent-drop failure mode cannot ship.
-- [ ] #4 Guide sources stay readable on GitHub: components are introduced through a documented, plain-text directive layer expanded by the generator (remark plugin or directive blocks), and a test asserts no JSX tag appears in apps/docs/guides/*.md.
+- [x] #1 One component registry in apps/docs (lib/mdx.tsx) supplies Callout, Card/Cards, Steps, Tabs/Tab, Files/Folder/File, TypeTable, Accordion/Accordions, Banner, InlineTOC and ImageZoom to both app/[...slug]/page.tsx and app/page.tsx, so a page needs no import of its own; a test asserts the registry is the only components map either route passes.
+- [x] #2 The generator emits .mdx for every guide-derived page (apps/docs/content/docs/{python,typescript,contributing}), the .md export URLs stay byte-identical because postbuild writes them independently, and the docs suite plus next build pass with no page renamed.
+- [x] #3 A generated-page component gate fails the build when a page whose source carries a component directive renders without that component's markup; the gate is proven against a deliberately unregistered component and against JSX placed in a .md page, so the silent-drop failure mode cannot ship.
+- [x] #4 Guide sources stay readable on GitHub: components are introduced through a documented, plain-text directive layer expanded by the generator (remark plugin or directive blocks), and a test asserts no JSX tag appears in apps/docs/guides/*.md.
 - [ ] #5 Five guide-derived pages carry components instead of paragraphs - python/scoped-jobs (question headings as Accordions), typescript/host-namespaces (one service per Tab), python/desktop-bindings-and-native-surfaces (catalogue as TypeTable, tree as Files), python/project-scaffold (Files) and python/desktop-host-host-and-the-project-manifest (Steps or Files, whichever the section is) - with no page's link count falling and no heading anchor lost.
 - [ ] #6 The two hand-written guides (guides/test-a-plugin, guides/web-plugin) use Steps, and start/installation.mdx uses Tabs for the pip, pixi and from-source paths, each tab carrying a copyable command and its working directory.
 - [ ] #7 TypeTable content is generated from api/python.json (name, shape, tier, the guide section that explains it) rather than typed by hand or produced through fumadocs-typescript, and the docs suite fails when a stable name in the inventory has no row.
@@ -55,3 +56,78 @@ Four phases in this order; each ends green before the next starts.
 
 Ordering rationale: AC 3 before AC 5 because the silent-drop probe showed a green build with no component rendered; AC 4 before AC 5 because retrofitting directives onto converted pages would repeat the work; AC 7 after AC 5 because the TypeTable rows only make sense once each page's sections have their final shape.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+### P0 shipped (AC 1-4)
+
+- **AC 1** - `apps/docs/lib/mdx.tsx` is the registry: it spreads the Fumadocs
+  defaults (code blocks, headings, links) and adds Callout, Card/Cards,
+  Steps/Step, Tabs/Tab, Files/Folder/File, TypeTable, Accordion/Accordions,
+  Banner, InlineTOC, ImageZoom plus the four site components. Both routes take
+  it - `app/[...slug]/page.tsx` passes `components={mdxComponents}` and nothing
+  else, `app/page.tsx` imports `Card, Cards, Step, Steps` from it.
+  `tests/mdx-registry.test.ts` asserts the contents and that no route imports
+  `fumadocs-ui/components/*`.
+- **AC 2** - `guides.ts` emits `index.mdx` and `<slug>.mdx`; `generate.ts`
+  strips `.mdx` where it stripped `.md`, for the sidebar order, the migration
+  folders and the edit links. `postbuild` still writes one `.md` per route: the
+  build reports 109 routes, 108 markdown exports and 0 unresolved, unchanged
+  from the baseline, and `check-links` found 11,346 internal links on 150 pages
+  (baseline 11,128). No page was renamed.
+- **AC 3** - `scripts/lib/gate.ts` runs in `postbuild`, so `bun run build`
+  fails on either of the two silent failures. Arm one rejects JSX in a `.md`
+  page; arm two compares `lib/generated/components.json` (route to directive
+  names, written by the generator) against `data-qgis-sdk="<name>"` markers in
+  the exported HTML.
+
+  ```text
+  probe 1  :::callout + :::steps in doc-12's Installation section
+           generate: 1 pages carry components
+           postbuild: component gate over 1 pages with directives, 0 problems
+           out/python/installation/index.html:
+             data-qgis-sdk="callout"  data-qgis-sdk="steps"
+
+  probe 2  same page renamed to installation.md, postbuild without generate
+           postbuild: python/installation.md:2: <Callout> is JSX in a .md page,
+             which markdown drops; rename the page to .mdx or write a directive
+           postbuild: /python/installation: :::callout produced no
+             data-qgis-sdk="callout" in the page; the component was dropped
+             instead of rendered
+           postbuild: /python/installation: :::steps produced no
+             data-qgis-sdk="steps" in the page; ...
+           exit 1, and the page carried 0 markers
+
+  probe 3  Step and Steps removed from the registry map, map intact elsewhere
+           Error: Expected component `Step` to be defined: you likely forgot
+             to import, pass, or provide it.
+  ```
+
+- **AC 4** - `scripts/lib/directives.ts` expands `:::callout`, `:::steps`,
+  `:::tabs`/`:::tab`, `:::files` and `:::accordions`/`:::accordion` into JSX
+  between the link rewrite and the write. Fences are literal, `tabs` and
+  `accordions` are the only parents, and an unknown name, unclosed block or
+  misplaced block raises `DirectiveError` with its line. The documentation is
+  in doc-14's Documentation site section, with the syntax in a fence.
+  `tests/directives.test.ts` asserts no JSX appears in `apps/docs/guides/*.md`
+  and that every guide expands without an error.
+
+### What `.mdx` cost, and the one module that pays it
+
+A `.mdx` page is parsed as MDX, and 97 pages written as GitHub markdown were
+not. Four constructs broke the build on the first run and are rewritten by
+`scripts/lib/mdx-text.ts`: a brace outside code, an HTML comment, an autolink,
+and a `<` in a version range. A fifth is a code span the author wrapped onto a
+second line - MDX does not honour it, so the span is joined onto one line,
+which is what markdown was rendering anyway. After that the build is clean. The
+rewrites show up in 2 `\{` and 2 `\<` across the 108 exported `.md` files;
+everything else is byte-identical.
+
+### Still open
+
+P1 (AC 5, 6), P2 (AC 7) and P3 (AC 8-11) are untouched: no page has been
+converted yet, so `lib/generated/components.json` is `{}` and the gate has
+nothing to check beyond the `.md` arm. The registry, the emission, the gate and
+the directive layer are all in place for those phases.
+<!-- SECTION:NOTES:END -->

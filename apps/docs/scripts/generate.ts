@@ -99,10 +99,12 @@ async function main(): Promise<void> {
 		inputs.push({ guide, markdown, lastUpdated });
 		const split = splitGuide(markdown);
 		for (const page of [
-			`${guide.section}/index.md`,
-			...split.sections.map((section) => `${guide.section}/${section.slug}.md`),
+			`${guide.section}/index.mdx`,
+			...split.sections.map(
+				(section) => `${guide.section}/${section.slug}.mdx`,
+			),
 		]) {
-			sources.set(`/${page.slice(0, -".md".length)}`, {
+			sources.set(`/${page.slice(0, -".mdx".length)}`, {
 				edit: editPathOf(guide),
 				...(lastUpdated === undefined ? {} : { lastUpdated }),
 			});
@@ -142,8 +144,8 @@ async function main(): Promise<void> {
 			...entries
 				.filter((page) => page.order === undefined)
 				.map((page) => page.path.slice(page.path.lastIndexOf("/") + 1))
-				.filter((name) => name !== "index.md")
-				.map((name) => name.replace(/\.md$/, "")),
+				.filter((name) => name !== "index.mdx")
+				.map((name) => name.replace(/\.mdx$/, "")),
 			...(byDirectory.has(`${guide.section}/migration`) ? ["migration"] : []),
 		];
 		await writeJson(join(CONTENT_DIR, guide.section, "meta.json"), {
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
 		const migration = (byDirectory.get(`${guide.section}/migration`) ?? [])
 			.slice()
 			.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-			.map((page) => page.path.replace(/^.*\//, "").replace(/\.md$/, ""));
+			.map((page) => page.path.replace(/^.*\//, "").replace(/\.mdx$/, ""));
 		if (migration.length > 0) {
 			await writeJson(join(CONTENT_DIR, guide.section, "migration/meta.json"), {
 				title: "Migration notes",
@@ -233,6 +235,24 @@ async function main(): Promise<void> {
 	// What the layout needs to know about pages it did not author: the version
 	// badges, the edit link back to the guide, and the guide's last commit.
 	await writeJson(join(GENERATED_DIR, "versions.json"), versions);
+
+	// Which components each guide-derived page renders, by directive name.
+	// `scripts/lib/gate.ts` reads this against `out/`: a page that names a
+	// component and does not render it is the failure mode a green build used
+	// to hide, because JSX in a `.md` page is dropped without an error.
+	const componentUse: Record<string, readonly string[]> = Object.fromEntries(
+		pages
+			.filter((page) => (page.components ?? []).length > 0)
+			.map((page): [string, readonly string[]] => [
+				`/${page.path.replace(/\.mdx$/, "")}`.replace(/\/index$/, "") || "/",
+				page.components ?? [],
+			])
+			.sort(([a], [b]) => a.localeCompare(b)),
+	);
+	await writeJson(join(GENERATED_DIR, "components.json"), componentUse);
+	console.log(
+		`generate: ${Object.keys(componentUse).length} pages carry components`,
+	);
 	const compat = collectCompat(
 		await Bun.file(join(GUIDES_DIR, GUIDES[0]?.file ?? "")).text(),
 	);
