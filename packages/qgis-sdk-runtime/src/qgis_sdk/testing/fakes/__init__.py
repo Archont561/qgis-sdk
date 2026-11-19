@@ -19,13 +19,13 @@ from ._layers import (
     FakeLayers,
     FakeSettings,
 )
-from ._styles import (
+from ._recording import (
     FakeProcessing,
     FakeProviderRegistration,
-    FakeStyles,
     RecordingLog,
     RecordingNotifications,
 )
+from ._styles import FakeStyles
 
 __all__ = [
     "ConnectionDeclaration",

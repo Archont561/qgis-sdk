@@ -31,6 +31,11 @@ class BufferRequest:
     insist on is that the caller supplied it at all: an empty value means the
     distance would be interpreted in whatever CRS the layer happens to have,
     which is the silent-degrees failure decision-19 rejects.
+
+    Attributes:
+        layer_id: The layer whose features are buffered.
+        distance_metres: The buffer width, in metres.
+        working_crs: The projected CRS the distance is measured in.
     """
 
     layer_id: LayerInput
@@ -52,7 +57,11 @@ class BufferRequest:
 
 @dataclass(frozen=True, slots=True)
 class CentroidRequest:
-    """Replace each geometry with its centroid; no distance, so no working CRS."""
+    """Replace each geometry with its centroid; no distance, so no working CRS.
+
+    Attributes:
+        layer_id: The layer whose geometries are replaced by their centroids.
+    """
 
     layer_id: LayerInput
 

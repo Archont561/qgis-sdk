@@ -35,6 +35,14 @@ class FakeLayer:
     that approximated it would let a round-trip test pass for a conversion QGIS
     would have refused - so a test declares the encodings it wants to read back
     and asking for another one is refused by name.
+
+    Attributes:
+        fields: The attribute field names, in order.
+        rows: The stored features, by feature id.
+        geometries: The geometry each feature carries, by feature id.
+        editable: Whether a session may edit it.
+        atomic: Whether a failed commit leaves the layer untouched.
+        revision: How many commits have changed it.
     """
 
     fields: tuple[str, ...]

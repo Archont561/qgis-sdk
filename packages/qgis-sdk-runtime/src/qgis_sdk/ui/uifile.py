@@ -33,7 +33,13 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class UiNode:
-    """One ``<widget>`` of a ``.ui`` file: its class, its name, its children."""
+    """One ``<widget>`` of a ``.ui`` file: its class, its name, its children.
+
+    Attributes:
+        cls: The widget class.
+        name: The widget's ``objectName``.
+        children: The widgets below it.
+    """
 
     cls: str
     name: str
@@ -46,7 +52,11 @@ class UiNode:
 
 
 def read_ui(path: Path) -> UiNode:
-    """Parse ``path`` into its widget tree; a file without a root widget is refused."""
+    """Parse ``path`` into its widget tree; a file without a root widget is refused.
+
+    Args:
+        path: The ``.ui`` file to parse.
+    """
     try:
         tree = ElementTree.parse(path)
     except (OSError, ElementTree.ParseError) as error:
@@ -78,12 +88,21 @@ def _direct_widgets(element: ElementTree.Element) -> list[ElementTree.Element]:
 
 
 def ui_names(path: Path) -> tuple[str, ...]:
-    """Every ``objectName`` the file declares, document order, root included."""
+    """Every ``objectName`` the file declares, document order, root included.
+
+    Args:
+        path: The ``.ui`` file to read.
+    """
     return tuple(node.name for node in read_ui(path).walk() if node.name)
 
 
 def resolve_ui_path(cls: type, ui: str) -> Path:
-    """``ui`` relative to the module that defines ``cls``; absolute paths stay."""
+    """``ui`` relative to the module that defines ``cls``; absolute paths stay.
+
+    Args:
+        cls: The class whose module the path is relative to.
+        ui: The declared path.
+    """
     candidate = Path(ui)
     if candidate.is_absolute():
         return candidate
@@ -139,6 +158,11 @@ class FakeSignal:
     __slots__ = ("_slots", "name")
 
     def __init__(self, name: str) -> None:
+        """Build a signal holding no slots.
+
+        Args:
+            name: The signal's name.
+        """
         self.name = name
         self._slots: list[Callable[..., Any]] = []
 
@@ -147,9 +171,19 @@ class FakeSignal:
         return len(self._slots)
 
     def connect(self, slot: Callable[..., Any]) -> None:
+        """Add a slot to the signal.
+
+        Args:
+            slot: What each emit calls.
+        """
         self._slots.append(slot)
 
     def disconnect(self, slot: Callable[..., Any] | None = None) -> None:
+        """Remove one slot, or every slot.
+
+        Args:
+            slot: The slot to remove, or ``None`` for all.
+        """
         if slot is None:
             self._slots.clear()
             return
@@ -158,6 +192,11 @@ class FakeSignal:
         self._slots.remove(slot)
 
     def emit(self, *arguments: Any) -> None:
+        """Call every connected slot.
+
+        Args:
+            *arguments: What each slot is called with.
+        """
         for slot in tuple(self._slots):
             slot(*arguments)
 
@@ -166,6 +205,12 @@ class FakeWidget:
     """One declared widget: ``objectName()``, ``children()``, its signals."""
 
     def __init__(self, node: UiNode, parent: FakeWidget | None = None) -> None:
+        """Build the fake widget over its declared node.
+
+        Args:
+            node: The declared widget to stand in for.
+            parent: The fake widget above it, or ``None``.
+        """
         self._node = node
         self._parent = parent
         self._signals: dict[str, FakeSignal] = {}
@@ -188,6 +233,11 @@ class FakeWidget:
         return True
 
     def findChild(self, _type: Any, name: str) -> FakeWidget | None:
+        """The descendant widget with this ``objectName``, or ``None``.
+
+        Args:
+            name: The ``objectName`` to look for.
+        """
         for child in self._children:
             if child.objectName() == name:
                 return child

@@ -60,26 +60,35 @@ class _FakeRastersMixin1:
         by band number, and a band left out answers :data:`_EMPTY_STATISTICS`.
         ``dataset_path`` models a container: the file the export copies, when it
         differs from ``source``.
+
+        Args:
+            source: The dataset path the test opens.
+            name: The name the opened raster carries.
+            extent: The raster's own box.
+            band_count: How many bands it has.
+            data_types: Each band's GDAL type, in band order.
+            no_data: Each band's no-data value, in band order.
+            resolution: ``(x, y)`` map units per pixel.
+            crs: The authority code its coordinates are in.
+            values: One sampled value per band, returned inside ``extent``.
+            holes: The points a band is empty at.
+            statistics: The statistics to answer, by band number.
+            dataset_path: The file an export copies, when it differs from ``source``.
         """
         register_dataset(_published_values)
 
     def open_raster(self, source: Path) -> RasterLayerInfo:
-        """Return a new raster for a declared dataset."""
+        """Return a new raster for a declared dataset.
+
+        Args:
+            source: The raster dataset to open.
+        """
         self._scope.ensure_open()
         declared = self._datasets.get(str(source))
         if declared is None:
             raise QgisSdkLayerNotFoundError(str(source))
         template: RasterLayerInfo = declared["info"]
-        info = RasterLayerInfo(
-            id=f"raster-{len(self._rasters) + 1}",
-            name=template.name,
-            band_count=template.band_count,
-            data_types=template.data_types,
-            no_data=template.no_data,
-            extent=template.extent,
-            resolution=template.resolution,
-            crs=template.crs,
-        )
+        info = opened_copy(template, index=len(self._rasters) + 1)
         self._rasters[info.id] = info
         values = self._values.pop(template.id)
         self._values[info.id] = values
@@ -99,12 +108,21 @@ class _FakeRastersMixin1:
         return tuple(self._rasters.values())
 
     def raster(self, layer_id: str) -> RasterLayerInfo:
-        """Return one opened raster."""
+        """Return one opened raster.
+
+        Args:
+            layer_id: The id the raster was opened under.
+        """
         self._scope.ensure_open()
         return self._require(layer_id)
 
     def statistics(self, layer_id: str, band: int) -> RasterStatistics:
-        """Return the declared statistics of one band."""
+        """Return the declared statistics of one band.
+
+        Args:
+            layer_id: The opened raster to read.
+            band: The band to summarise, counting from one.
+        """
         self._scope.ensure_open()
         info = self._require(layer_id)
         self._require_band(info, band)
@@ -125,16 +143,16 @@ class _FakeRastersMixin1:
     def sample(
         self, layer_id: str, point: CanvasPoint, *, band: int | None = None
     ) -> RasterSample:
-        """Answer the declared value for a point inside the raster's box."""
+        """Answer the declared value for a point inside the raster's box.
+
+        Args:
+            layer_id: The opened raster to sample.
+            point: The location to read, in the CRS it names.
+            band: The band to read, or ``None`` for every band.
+        """
         self._scope.ensure_open()
         info = self._require(layer_id)
-        if point.crs is not None and info.crs is not None and point.crs != info.crs:
-            raise QgisSdkUnsupportedCapabilityError(
-                "reprojection",
-                f"this backend has no CRS database, so it cannot transform a "
-                f"{point.crs} point into {info.crs}; pass the point in the "
-                "raster's own CRS or sample through the native backend",
-            )
+        refuse_reprojection(info, point)
         bands = range(1, info.band_count + 1) if band is None else (band,)
         inside = (
             info.extent.x_min <= point.x <= info.extent.x_max
@@ -154,7 +172,13 @@ class _FakeRastersMixin1:
     def export_raster(
         self, layer_id: str, destination: Path, *, overwrite: bool = False
     ) -> RasterExport:
-        """Copy the declared dataset to ``destination`` under the shared policy."""
+        """Copy the declared dataset to ``destination`` under the shared policy.
+
+        Args:
+            layer_id: The opened raster to export.
+            destination: The file to write; its suffix picks the format.
+            overwrite: Whether an existing file may be replaced.
+        """
         self._scope.ensure_open()
         self._require(layer_id)
         plan = export_policy.plan_export(
@@ -204,6 +228,11 @@ class FakeRasters(_FakeRastersMixin1):
     """
 
     def __init__(self, scope: ResourceScope) -> None:
+        """Build the raster fake over one resource scope.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+        """
         self._scope = scope
         self._datasets: dict[str, dict[str, Any]] = {}
         self._rasters: dict[str, RasterLayerInfo] = {}
@@ -213,3 +242,42 @@ class FakeRasters(_FakeRastersMixin1):
         self._holes: dict[str, frozenset[tuple[float, float]]] = {}
         self._statistics: dict[str, dict[int, RasterStatistics]] = {}
         scope.on_close(self._release)
+
+
+def opened_copy(template: RasterLayerInfo, *, index: int) -> RasterLayerInfo:
+    """The description a declared raster is answered under, numbered by open order.
+
+    Args:
+        template: The declared description the dataset answers with.
+        index: Which open this is, counting from one.
+
+    Returns:
+        The opened raster's own description.
+    """
+    return RasterLayerInfo(
+        id=f"raster-{index}",
+        name=template.name,
+        band_count=template.band_count,
+        data_types=template.data_types,
+        no_data=template.no_data,
+        extent=template.extent,
+        resolution=template.resolution,
+        crs=template.crs,
+    )
+
+
+def refuse_reprojection(info: RasterLayerInfo, point: CanvasPoint) -> None:
+    """Refuse a point in another CRS: this backend has no CRS database.
+
+    Args:
+        info: The raster the point is sampled on.
+        point: The point the caller asked to read.
+    """
+    if point.crs is None or info.crs is None or point.crs == info.crs:
+        return
+    raise QgisSdkUnsupportedCapabilityError(
+        "reprojection",
+        f"this backend has no CRS database, so it cannot transform a "
+        f"{point.crs} point into {info.crs}; pass the point in the "
+        "raster's own CRS or sample through the native backend",
+    )

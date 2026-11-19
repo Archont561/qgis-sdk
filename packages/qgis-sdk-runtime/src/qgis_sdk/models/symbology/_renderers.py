@@ -8,22 +8,24 @@ from ._symbols import (
     COLOUR,
     GRADUATED_MODES,
     RENDERER_KIND_NAMES,
-    STYLE_FORMATS,
-    STYLE_MANAGER_KINDS,
     SYMBOLS_FOR_GEOMETRY,
     Category,
     SingleSymbolRenderer,
     Symbol,
-    colour,
     non_empty,
-    positive,
     symbol_from_wire,
 )
 
 
 @dataclass(frozen=True, slots=True)
 class CategorizedRenderer:
-    """One symbol per distinct value of ``field``."""
+    """One symbol per distinct value of ``field``.
+
+    Attributes:
+        field: The attribute field whose values are matched.
+        categories: One symbol per distinct value, in the order they are tried.
+        kind: The discriminator a page reads: always ``categorized``.
+    """
 
     field: str
     categories: tuple[Category, ...]
@@ -48,6 +50,11 @@ class CategorizedRenderer:
 
     @classmethod
     def from_wire(cls, value: Any) -> CategorizedRenderer:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -60,7 +67,14 @@ class CategorizedRenderer:
 
 @dataclass(frozen=True, slots=True)
 class GraduatedClass:
-    """One band of a graduated renderer: ``lower`` to ``upper``, and its symbol."""
+    """One band of a graduated renderer: ``lower`` to ``upper``, and its symbol.
+
+    Attributes:
+        lower: The band's lower bound, inclusive.
+        upper: The band's upper bound.
+        label: The legend text for the band.
+        symbol: How features in the band are drawn.
+    """
 
     lower: float
     upper: float
@@ -84,6 +98,11 @@ class GraduatedClass:
 
     @classmethod
     def from_wire(cls, value: Any) -> GraduatedClass:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -98,7 +117,14 @@ class GraduatedClass:
 
 @dataclass(frozen=True, slots=True)
 class GraduatedRenderer:
-    """A field banded into classes, each drawn with its own symbol."""
+    """A field banded into classes, each drawn with its own symbol.
+
+    Attributes:
+        field: The attribute field the values are banded from.
+        classes: The bands, in ascending order.
+        mode: How a value is placed in a band: ``equal_interval``, ``quantile`` and so on.
+        kind: The discriminator a page reads: always ``graduated``.
+    """
 
     field: str
     classes: tuple[GraduatedClass, ...]
@@ -134,6 +160,11 @@ class GraduatedRenderer:
 
     @classmethod
     def from_wire(cls, value: Any) -> GraduatedRenderer:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -147,7 +178,14 @@ class GraduatedRenderer:
 
 @dataclass(frozen=True, slots=True)
 class Rule:
-    """One rule: an expression, and the symbol drawn where it is true."""
+    """One rule: an expression, and the symbol drawn where it is true.
+
+    Attributes:
+        filter: The expression that has to hold for the rule to draw.
+        label: The legend text for the rule.
+        symbol: How features matching it are drawn.
+        enabled: Whether the rule takes part at all.
+    """
 
     filter: str
     label: str
@@ -167,6 +205,11 @@ class Rule:
 
     @classmethod
     def from_wire(cls, value: Any) -> Rule:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -181,7 +224,12 @@ class Rule:
 
 @dataclass(frozen=True, slots=True)
 class RuleBasedRenderer:
-    """Rules evaluated in order; the first one whose expression holds draws."""
+    """Rules evaluated in order; the first one whose expression holds draws.
+
+    Attributes:
+        rules: The rules, in the order they are evaluated.
+        kind: The discriminator a page reads: always ``rule_based``.
+    """
 
     rules: tuple[Rule, ...]
     kind: Literal["rule_based"] = field(default="rule_based", init=False)
@@ -198,6 +246,11 @@ class RuleBasedRenderer:
 
     @classmethod
     def from_wire(cls, value: Any) -> RuleBasedRenderer:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -217,7 +270,11 @@ RENDERERS: dict[str, Any] = {
 
 
 def renderer_from_wire(value: Any) -> Renderer:
-    """Return the renderer ``value`` describes, dispatching on its ``kind``."""
+    """Return the renderer ``value`` describes, dispatching on its ``kind``.
+
+    Args:
+        value: The mapping a page sent, whose ``kind`` picks the class.
+    """
     for model in (
         SingleSymbolRenderer,
         CategorizedRenderer,
@@ -238,108 +295,6 @@ def renderer_from_wire(value: Any) -> Renderer:
     return model.from_wire(value)
 
 
-@dataclass(frozen=True, slots=True)
-class Labelling:
-    """How a layer's features are labelled, or that they are not.
-
-    ``enabled`` without ``field`` is refused here rather than by QGIS: a layer
-    asked to label with no field labels nothing, and a page that switched labels
-    on and saw no text would have to guess whether it had asked correctly.
-    """
-
-    enabled: bool = False
-    field: str | None = None
-    size: float = 10.0
-    color: str = "#000000"
-
-    def __post_init__(self) -> None:
-        if self.enabled and not (self.field or "").strip():
-            raise ValueError(
-                "labelling a layer needs the field to label; set field= with enabled=True"
-            )
-        object.__setattr__(self, "size", positive(self.size, "a label's size"))
-        object.__setattr__(self, "color", colour(self.color, "label colour"))
-
-    def to_wire(self) -> dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "field": self.field,
-            "size": self.size,
-            "color": self.color,
-        }
-
-    @classmethod
-    def from_wire(cls, value: Any) -> Labelling:
-        if isinstance(value, cls):
-            return value
-        if not isinstance(value, Mapping):
-            raise TypeError("a labelling is an object")
-        field_value = value.get("field")
-        return cls(
-            enabled=bool(value.get("enabled", False)),
-            field=None if field_value is None else str(field_value),
-            size=float(value.get("size", 10.0)),
-            color=str(value.get("color", "#000000")),
-        )
-
-
-def labelling_from_wire(value: Any) -> Labelling:
-    """Return the labelling ``value`` describes."""
-    return Labelling.from_wire(value)
-
-
-@dataclass(frozen=True, slots=True)
-class StyleEntry:
-    """One named thing a QGIS style database holds."""
-
-    name: str
-    kind: str
-
-    def __post_init__(self) -> None:
-        non_empty(self.name, "a style entry's name")
-        if self.kind not in STYLE_MANAGER_KINDS:
-            raise ValueError(
-                f"a style entry is one of {', '.join(STYLE_MANAGER_KINDS)}, "
-                f"not {self.kind!r}"
-            )
-
-    def to_wire(self) -> dict[str, Any]:
-        return {"name": self.name, "kind": self.kind}
-
-    @classmethod
-    def from_wire(cls, value: Any) -> StyleEntry:
-        if isinstance(value, cls):
-            return value
-        if not isinstance(value, Mapping):
-            raise TypeError("a style entry is an object")
-        return cls(name=str(value["name"]), kind=str(value["kind"]))
-
-
-def style_entry_from_wire(value: Any) -> StyleEntry:
-    """Return the style entry ``value`` describes."""
-    return StyleEntry.from_wire(value)
-
-
-@dataclass(frozen=True, slots=True)
-class StyleText:
-    """A layer's style as text, with the dialect it is written in."""
-
-    format: str
-    text: str
-
-    def __post_init__(self) -> None:
-        if self.format not in STYLE_FORMATS:
-            raise ValueError(
-                f"a style format is one of {', '.join(STYLE_FORMATS)}, "
-                f"not {self.format!r}"
-            )
-        if not isinstance(self.text, str) or not self.text:
-            raise ValueError("a style's text is not empty")
-
-    def to_wire(self) -> dict[str, Any]:
-        return {"format": self.format, "text": self.text}
-
-
 NULLABLE_STRING: dict[str, Any] = {"anyOf": [{"type": "string"}, {"type": "null"}]}
 NUMBER = {"type": "number"}
 COLOUR_SCHEMA = {"type": "string", "pattern": COLOUR.pattern}
@@ -353,6 +308,9 @@ def symbol_kind(renderer: Renderer) -> str:
     mixed kinds would draw the wrong thing on half a layer. The first symbol
     answers for the whole description, and both backends refuse a mismatch
     against the layer's geometry through :func:`symbol_fits_geometry`.
+
+    Args:
+        renderer: The renderer to read.
     """
     if isinstance(renderer, SingleSymbolRenderer):
         return renderer.symbol.kind
@@ -371,6 +329,10 @@ def symbol_fits_geometry(renderer: Renderer, geometry_type: str) -> str | None:
     asked for markers and got blank space cannot tell a bug from an empty map.
     A geometry kind the table does not name (a mesh, a raster) is not this
     function's business - there is no renderer to set on it at all.
+
+    Args:
+        renderer: The renderer to check.
+        geometry_type: The geometry the target layer carries.
     """
     expected = SYMBOLS_FOR_GEOMETRY.get(geometry_type)
     drawn = symbol_kind(renderer)

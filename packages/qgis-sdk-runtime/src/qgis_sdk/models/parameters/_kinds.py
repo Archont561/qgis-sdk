@@ -41,6 +41,16 @@ class ParameterKind:
     draws; ``processing`` the ``QgsProcessingParameter*`` class the provider
     adapter builds; ``expected`` and ``accepted`` what a handler receives,
     spelled for a refusal and for ``isinstance``.
+
+    Attributes:
+        name: The kind's own name, as it travels on the wire.
+        marker: The ``Annotated`` marker that selects it, if one does.
+        stored: The types the annotation may store.
+        widget: The widget family ``qgis_sdk.ui`` draws for it.
+        processing: The ``QgsProcessingParameter*`` class the adapter builds.
+        expected: What a handler receives, spelled for a refusal.
+        accepted: What ``isinstance`` accepts for the value.
+        refusal: The sentence a rejected value is refused with.
     """
 
     name: str
@@ -53,7 +63,11 @@ class ParameterKind:
     refusal: str = field(default="")
 
     def annotation(self, marker: Any) -> dict[str, Any]:
-        """The ``x-qgis-sdk`` object the describer puts on the wire."""
+        """The ``x-qgis-sdk`` object the describer puts on the wire.
+
+        Args:
+            marker: The marker the parameter carries, if any.
+        """
         payload: dict[str, Any] = {"kind": self.name}
         if isinstance(marker, FileParameter) and marker.filters:
             payload["filters"] = list(marker.filters)

@@ -56,6 +56,9 @@ def declared_components(cls: type) -> dict[str, Component]:
 
     Base classes first, in definition order; a subclass that reassigns an
     attribute replaces the base's component at the base's position.
+
+    Args:
+        cls: The surface class to read.
     """
     found: dict[str, Component] = {}
     for base in reversed(cls.__mro__):
@@ -70,6 +73,9 @@ def materialise(surface: Any) -> dict[str, Component]:
 
     Returns ``attribute -> copy``; the copies are set on the instance so
     ``self.clear`` in a method is the instance's button, not the prototype.
+
+    Args:
+        surface: The surface to give its own copies.
     """
     existing = surface.__dict__.get(MATERIALISED_ATTRIBUTE)
     if existing is not None:
@@ -96,6 +102,9 @@ def declared_root(surface: Any) -> Component | None:
     The roots are the declared components no other declared component
     contains; a single root is returned as is, several are stacked in a
     ``Column`` named after the surface class.
+
+    Args:
+        surface: The surface whose tree is read.
     """
     components = materialise(surface)
     if not components:
@@ -114,6 +123,9 @@ def declared_inputs(surface: Any) -> dict[str, Input]:
 
     The instance's copies, at any depth, in declaration order; an input
     reached twice (declared and placed in a declared container) counts once.
+
+    Args:
+        surface: The surface whose inputs are read.
     """
     found: dict[str, Input] = {}
     seen: set[int] = set()
@@ -133,7 +145,11 @@ def declared_inputs(surface: Any) -> dict[str, Input]:
 
 
 def apply_initial(surface: Any) -> None:
-    """Seed the declared inputs from ``surface.initial``; an unknown name is refused."""
+    """Seed the declared inputs from ``surface.initial``; an unknown name is refused.
+
+    Args:
+        surface: The surface whose ``initial`` seeds its inputs.
+    """
     initial = getattr(surface, "initial", None) or {}
     if not initial:
         return
@@ -150,7 +166,12 @@ def apply_initial(surface: Any) -> None:
 
 
 def resolve_declared(surface: Any, prototype: Component) -> Component | None:
-    """The instance's copy of ``prototype``, or ``None`` if the class lacks it."""
+    """The instance's copy of ``prototype``, or ``None`` if the class lacks it.
+
+    Args:
+        surface: The surface holding the copies.
+        prototype: The declared component to resolve.
+    """
     for attribute, declared in declared_components(type(surface)).items():
         if declared is prototype:
             return materialise(surface)[attribute]

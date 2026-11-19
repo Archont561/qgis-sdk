@@ -1,4 +1,4 @@
-"""Metadata: ids and titles, derived or given, and how a class or function carries them."""
+"""Ids and titles, derived or given, and how a class or function carries them."""
 
 import hashlib
 import inspect
@@ -192,17 +192,12 @@ def function_metadata(function: Any, id: str | None, title: str | None) -> Metad
 
 
 def attach_describe(target: Any) -> None:
-    """Install a collision-safe convenience entry point without wrapping target."""
-    absent = object()
-    existing = inspect.getattr_static(target, "describe", absent)
-    underlying = existing.__func__ if isinstance(existing, classmethod) else existing
-    if getattr(underlying, "__qgis_sdk_describer__", False):
-        return
-    if existing is not absent:
-        raise QgisSdkDeclarationError(
-            f"{getattr(target, '__name__', target)!r} already defines 'describe'; "
-            "rename it to use the SDK's description method"
-        )
+    """Install a collision-safe convenience entry point without wrapping target.
+
+    Args:
+        target: The class or function to install ``describe`` on.
+    """
+    _refuse_existing_describe(target)
     if inspect.isclass(target):
 
         def describe_class(cls: type) -> Any:
@@ -221,6 +216,19 @@ def attach_describe(target: Any) -> None:
 
         describe_function.__qgis_sdk_describer__ = True  # type: ignore[attr-defined]
         target.describe = describe_function
+
+
+def _refuse_existing_describe(target: Any) -> None:
+    absent = object()
+    existing = inspect.getattr_static(target, "describe", absent)
+    underlying = existing.__func__ if isinstance(existing, classmethod) else existing
+    if getattr(underlying, "__qgis_sdk_describer__", False):
+        return
+    if existing is not absent:
+        raise QgisSdkDeclarationError(
+            f"{getattr(target, '__name__', target)!r} already defines 'describe'; "
+            "rename it to use the SDK's description method"
+        )
 
 
 def mark_function(
@@ -370,25 +378,3 @@ def class_decorator(
     if cls is None:
         return decorate
     return decorate(cls)
-
-
-def declared_metadata(
-    cls: Any, attribute: str, describer: str, decorator: str
-) -> Metadata:
-    """Return the class's own marker, or refuse with the describer's message.
-
-    Args:
-        cls: The class a describer was asked to describe.
-        attribute: The attribute the marker is recorded under.
-        describer: The describer's name, for the error.
-        decorator: The decorator it requires, for the error.
-
-    Raises:
-        QgisSdkDeclarationError: The target is not a marked class.
-    """
-    if not inspect.isclass(cls) or attribute not in vars(cls):
-        raise QgisSdkDeclarationError(f"{describer} requires a class with {decorator}")
-    declared = vars(cls)[attribute]
-    if not isinstance(declared, Metadata):
-        raise QgisSdkDeclarationError(f"{describer} requires a class with {decorator}")
-    return declared

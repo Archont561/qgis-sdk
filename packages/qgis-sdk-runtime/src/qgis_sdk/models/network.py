@@ -56,6 +56,9 @@ class Headers(Mapping[str, str]):
     that appears twice keeps the last value, which is what a buffered client
     needs; the one multi-valued header that matters, ``Set-Cookie``, is not
     something this client manages.
+
+    Args:
+        items: The header pairs, which a later pair overrides by name.
     """
 
     __slots__ = ("_items",)
@@ -70,6 +73,11 @@ class Headers(Mapping[str, str]):
         self._items = folded
 
     def __getitem__(self, name: str) -> str:
+        """Return one header's value, whatever case the name is written in.
+
+        Args:
+            name: The header name, matched case-insensitively.
+        """
         return self._items[name.lower()][1]
 
     def __iter__(self) -> Iterator[str]:
@@ -96,13 +104,21 @@ class Headers(Mapping[str, str]):
         return f"Headers({{{shown}}})"
 
     def merge(self, other: Mapping[str, str] | None) -> Headers:
-        """Return a copy where ``other`` overrides, case-insensitively."""
+        """Return a copy where ``other`` overrides, case-insensitively.
+
+        Args:
+            other: The headers that override these by name.
+        """
         if not other:
             return self
         return Headers([*self.items(), *other.items()])
 
     def without(self, *names: str) -> Headers:
-        """Return a copy without the named headers."""
+        """Return a copy without the named headers.
+
+        Args:
+            names: The header names to drop, matched case-insensitively.
+        """
         dropped = {name.lower() for name in names}
         return Headers(
             [
@@ -126,6 +142,17 @@ class NetworkRequest:
     lead to, as ``scheme://host[:port]``. Every transport refuses a hop outside
     them with :class:`QgisSdkRedirectError`; ``None`` leaves only the
     transport's own redirect rules in force.
+
+    Attributes:
+        method: The HTTP method, upper case.
+        url: The absolute ``http``/``https`` URL, without user-info.
+        headers: The headers to send.
+        body: The bytes to send, or ``None`` for no body.
+        timeout_seconds: How long the whole request may take.
+        max_redirects: How many hops may be followed.
+        max_body_bytes: The largest body that may be buffered.
+        auth_config: The ``authcfg`` id to authenticate with, never a credential.
+        allowed_origins: The origins a redirect may reach, or ``None`` for the transport's own rules.
     """
 
     method: str
@@ -147,6 +174,14 @@ class Response:
     demand and raise :class:`QgisSdkDecodeError` rather than returning garbage;
     :meth:`raise_for_status` is explicit, so a 404 is data until the caller says
     it is an error.
+
+    Attributes:
+        url: Where the body came from, after any redirects.
+        status_code: The HTTP status the server answered with.
+        reason: The reason phrase that came with it.
+        headers: The response headers.
+        content: The body, fully buffered.
+        method: The method the request was made with.
     """
 
     url: str

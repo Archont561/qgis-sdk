@@ -63,6 +63,12 @@ class Wire:
 
     ``target`` is a node name, a stream id, or - for ``@on(component)`` -
     the component prototype declared on the surface class.
+
+    Attributes:
+        kind: What the wire is: an event, a request or a stream.
+        target: The handler it calls.
+        signal: The widget signal it listens to, if any.
+        request: The request it describes, if any.
     """
 
     kind: str  # "on" | "subscribe"
@@ -78,13 +84,23 @@ class Wire:
 
 @dataclass(frozen=True, slots=True)
 class WiringDescription:
-    """The UI and stream connections declared on a surface handler."""
+    """The UI and stream connections declared on a surface handler.
+
+    Attributes:
+        handler: What the surface wires its signals to.
+        wires: One description per wire.
+    """
 
     handler: str
     wires: tuple[Wire, ...]
 
 
 def shown(target: str | Component) -> str:
+    """How a wire target reads in a message.
+
+    Args:
+        target: The node name or component to render.
+    """
     if isinstance(target, str):
         return repr(target)
     return target._name or f"<unnamed {type(target).__name__}>"

@@ -30,7 +30,13 @@ class Cancellation(Protocol):
 class Progress(Protocol):
     """Report a fraction from 0.0 to 1.0 for one execution."""
 
-    def report(self, fraction: float) -> None: ...
+    def report(self, fraction: float) -> None:
+        """Report one fraction.
+
+        Args:
+            fraction: How much is done, from ``0.0`` to ``1.0``.
+        """
+        ...
 
 
 class ObservableProgress(Progress, Protocol):
@@ -43,7 +49,11 @@ class ObservableProgress(Progress, Protocol):
     """
 
     def observe(self, callback: Callable[[float], None]) -> None:
-        """Hear each fraction reported from now on, on the reporting thread."""
+        """Hear each fraction reported from now on, on the reporting thread.
+
+        Args:
+            callback: What each later fraction is handed to.
+        """
         ...
 
 
@@ -56,6 +66,11 @@ class WorkItem:
     attempt's observable progress (a backend may mirror it into its own bar),
     and ``cancel`` asks the job to stop - it is what a task bar's cancel button
     calls, and it is a request, never an interruption (decision-21).
+
+    Attributes:
+        title: What the work is called in a surface that shows it.
+        progress: The attempt's progress, when a backend may show it.
+        cancel: How a surface requests cancellation, when it may offer it.
     """
 
     title: str
@@ -81,7 +96,14 @@ class Ui(Protocol):
 
     def open(
         self, surface: type, *, initial: Mapping[str, object] | None = None
-    ) -> object: ...
+    ) -> object:
+        """Show one registered surface and answer its instance.
+
+        Args:
+            surface: The ``Dialog`` or ``Dock`` subclass to open.
+            initial: What to hand the instance as ``self.initial``.
+        """
+        ...
 
 
 class DesktopAccess(Protocol):
@@ -111,4 +133,14 @@ class Workers(Protocol):
 
     def offload(
         self, fn: Callable[[], T_co], *, item: WorkItem | None = None
-    ) -> Awaitable[T_co]: ...
+    ) -> Awaitable[T_co]:
+        """Run ``fn`` off the driving thread; the job suspends on the awaitable.
+
+        Args:
+            fn: The worker-safe callable to run.
+            item: What a surface showing the work needs, when it is a job.
+
+        Returns:
+            The awaitable that resumes the job with ``fn``'s outcome.
+        """
+        ...

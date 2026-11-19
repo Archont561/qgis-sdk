@@ -43,23 +43,46 @@ class Styles(Protocol):
     """
 
     def apply_style(self, layer_id: str, style: str) -> None:
-        """Apply one packaged style resource to an owned layer."""
+        """Apply one packaged style resource to an owned layer.
+
+        Args:
+            layer_id: The owned vector layer to restyle.
+            style: The catalog identifier of the packaged style.
+        """
         ...
 
     def symbology(self, layer_id: str) -> Renderer:
-        """Return the description of the renderer drawing ``layer_id``."""
+        """Return the description of the renderer drawing ``layer_id``.
+
+        Args:
+            layer_id: The owned vector layer to read.
+        """
         ...
 
     def set_symbology(self, layer_id: str, renderer: Renderer) -> None:
-        """Draw ``layer_id`` with ``renderer``, replacing the current renderer."""
+        """Draw ``layer_id`` with ``renderer``, replacing the current renderer.
+
+        Args:
+            layer_id: The owned vector layer to restyle.
+            renderer: The renderer description to apply.
+        """
         ...
 
     def labelling(self, layer_id: str) -> Labelling:
-        """Return how ``layer_id``'s features are labelled."""
+        """Return how ``layer_id``'s features are labelled.
+
+        Args:
+            layer_id: The owned vector layer to read.
+        """
         ...
 
     def set_labelling(self, layer_id: str, labelling: Labelling) -> None:
-        """Label ``layer_id``'s features as ``labelling`` says, or switch it off."""
+        """Label ``layer_id``'s features as ``labelling`` says, or switch it off.
+
+        Args:
+            layer_id: The owned vector layer whose labels are set.
+            labelling: The labelling description, disabled to switch it off.
+        """
         ...
 
     def list_styles(self, kind: str | None = None) -> tuple[StyleEntry, ...]:
@@ -69,13 +92,28 @@ class Styles(Protocol):
         unknown kind raises ``ValueError`` rather than answering an empty list,
         because "the manager holds nothing of that kind" and "you spelled the
         kind wrong" are different answers.
+
+        Args:
+            kind: One of ``symbol``, ``color_ramp``, ``label_settings``, or
+                ``None`` for everything the manager holds.
         """
         ...
 
     def export_style(self, layer_id: str, format: str) -> StyleText:
-        """Return ``layer_id``'s style as QML or SLD text."""
+        """Return ``layer_id``'s style as QML or SLD text.
+
+        Args:
+            layer_id: The owned vector layer to export.
+            format: ``qml`` or ``sld``.
+        """
         ...
 
     def import_style(self, layer_id: str, text: str, format: str) -> None:
-        """Apply QML or SLD text to ``layer_id``, replacing its current style."""
+        """Apply QML or SLD text to ``layer_id``, replacing its current style.
+
+        Args:
+            layer_id: The owned vector layer to restyle.
+            text: The document to apply.
+            format: ``qml`` or ``sld``, saying how to read that text.
+        """
         ...

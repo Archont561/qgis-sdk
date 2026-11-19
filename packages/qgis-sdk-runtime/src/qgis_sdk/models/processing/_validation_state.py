@@ -198,6 +198,24 @@ class ParameterInfo:
     ``default`` is JSON only: a QGIS default the reader could not express as
     JSON (a CRS object, a date) arrives as ``None``, and the parameter is still
     not required when the registry says it has a default (``has_default``).
+
+    Attributes:
+        name: The parameter's name in the mapping.
+        kind: The QGIS parameter type it was declared as.
+        label: The name the dialog shows.
+        description: The help text the dialog shows.
+        optional: Whether the parameter may be left out.
+        advanced: Whether the dialog hides it behind a toggle.
+        hidden: Whether it is always hidden.
+        destination: Whether it names where an output is written.
+        default: The value used when the caller omits it.
+        has_default: Whether a default is declared at all.
+        options: The choices an enum parameter offers.
+        multiple: Whether several values may be passed.
+        number_type: Whether a number is an integer or a float.
+        minimum: The smallest accepted value, if bounded.
+        maximum: The largest accepted value, if bounded.
+        extension: The file extension a file parameter expects.
     """
 
     name: str
@@ -256,6 +274,11 @@ class ParameterInfo:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ParameterInfo:
+        """Read this value from a plain mapping.
+
+        Args:
+            data: The mapping the catalogue carries.
+        """
         known = {f.name for f in fields(cls)}
         values = {k: v for k, v in data.items() if k in known}
         if "options" in values:
@@ -265,7 +288,13 @@ class ParameterInfo:
 
 @dataclass(frozen=True, slots=True)
 class OutputInfo:
-    """One declared output: its name and QGIS output type id."""
+    """One declared output: its name and QGIS output type id.
+
+    Attributes:
+        name: The output's name in the result mapping.
+        kind: The QGIS output type it was declared as.
+        label: The name the dialog shows.
+    """
 
     name: str
     kind: str
@@ -279,6 +308,11 @@ class OutputInfo:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> OutputInfo:
+        """Read this value from a plain mapping.
+
+        Args:
+            data: The mapping the catalogue carries.
+        """
         return cls(name=data["name"], kind=data["kind"], label=data.get("label", ""))
 
 
@@ -328,6 +362,14 @@ class OutputKind:
     against. :func:`output_kinds` is the one table every describer and adapter
     reads, so a kind missing a face is a test failure here, never a surprise
     in a host.
+
+    Attributes:
+        name: The kind's own name, as it travels on the wire.
+        marker: The ``Annotated`` marker that selects it, if one does.
+        stored: The type the result carries.
+        processing: The QGIS output type the adapter declares.
+        result: What the run's result mapping holds for it.
+        accepted: What ``isinstance`` accepts for the value.
     """
 
     name: str

@@ -61,6 +61,10 @@ class Connections(Protocol):
 
         Raises ``QgisSdkConnectionNotFoundError`` when the provider or the name
         is unknown - the message says which half missed.
+
+        Args:
+            provider: The provider key, such as ``postgres`` or ``ogr``.
+            name: The connection's registered name.
         """
 
     def browse(
@@ -74,6 +78,12 @@ class Connections(Protocol):
         and views are answered. Raises ``QgisSdkConnectionNotFoundError`` for an
         unknown connection and ``QgisSdkConnectionItemNotFoundError`` for a
         schema the connection does not hold.
+
+        Args:
+            provider: The provider key, such as ``postgres`` or ``ogr``.
+            name: The connection's registered name.
+            schema: The schema to list, or ``None`` for the connection's top
+                level.
         """
 
     def open_layer(
@@ -89,6 +99,12 @@ class Connections(Protocol):
         raster table names a different provider and a different description.
         Raises ``QgisSdkConnectionItemNotFoundError`` for an entry the
         connection does not hold.
+
+        Args:
+            provider: The provider key, such as ``postgres`` or ``ogr``.
+            name: The connection's registered name.
+            schema: The schema the entry sits in.
+            item: The table or view to open.
         """
 
     def test(self, provider: str, name: str) -> ConnectionTest:
@@ -99,6 +115,10 @@ class Connections(Protocol):
         refusal - never an exception, because "this connection is broken" is
         the answer the call exists to give. Raises
         ``QgisSdkConnectionNotFoundError`` only for a lookup miss.
+
+        Args:
+            provider: The provider key, such as ``postgres`` or ``ogr``.
+            name: The connection's registered name.
         """
 
     def auth_configurations(self) -> tuple[AuthConfiguration, ...]:
@@ -119,4 +139,9 @@ class Connections(Protocol):
         hold, ``QgisSdkConnectionNotFoundError`` for an unknown connection and
         ``QgisSdkUnsupportedCapabilityError`` for a connection that
         authenticates without one (a GeoPackage is opened by file access).
+
+        Args:
+            provider: The provider key, such as ``postgres`` or ``ogr``.
+            name: The connection's registered name.
+            auth_config: The id of the authentication configuration to attach.
         """

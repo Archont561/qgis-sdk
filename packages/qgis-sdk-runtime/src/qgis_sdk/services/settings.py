@@ -14,9 +14,19 @@ class Settings(Protocol):
     """
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        """Return the stored value, the default, or ``None`` when absent."""
+        """Return the stored value, the default, or ``None`` when absent.
+
+        Args:
+            key: The setting to read, within this runtime's scope.
+            default: What to answer instead of ``None`` when it is not set.
+        """
         ...
 
     def set(self, key: str, value: str) -> None:
-        """Store a value under this runtime's key scope."""
+        """Store a value under this runtime's key scope.
+
+        Args:
+            key: The setting to write.
+            value: The string to store.
+        """
         ...

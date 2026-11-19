@@ -36,7 +36,14 @@ FILE_REF: dict[str, Any] = {
 
 @dataclass(frozen=True, slots=True)
 class FileRef:
-    """What a view holds: an opaque id and the fields it may show the user."""
+    """What a view holds: an opaque id and the fields it may show the user.
+
+    Attributes:
+        id: The opaque id a service resolves back to a path.
+        name: The file's display name, for a view to show.
+        operations: What the ref may be used for: ``read``, ``write`` and so on.
+        kind: The discriminator a page reads: always ``file``.
+    """
 
     id: str
     name: str
@@ -53,7 +60,11 @@ class FileRef:
 
     @classmethod
     def from_wire(cls, value: Any) -> FileRef:
-        """Rebuild a ref from its wire shape; a value already a ref passes."""
+        """Rebuild a ref from its wire shape; a value already a ref passes.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, dict) or value.get("kind") not in FILE_REF_KINDS:

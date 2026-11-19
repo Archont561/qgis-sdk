@@ -166,33 +166,57 @@ class LayoutService:
         return self._backend.list()
 
     def load_template(self, template: FileRef) -> LayoutInfo:
-        """Load a template file into the project and describe the new layout."""
+        """Load a template file into the project and describe the new layout.
+
+        Args:
+            template: The ref the host minted for the ``.qpt`` file.
+        """
         return self._backend.load_template(self._path(template, "read"))
 
     # -- exports ----------------------------------------------------------------
 
     def export(self, layout: str, **options: Unpack[ExportOptions]) -> JobHandle:
-        """Export a layout as a job; the outcome is a ``LayoutExport``."""
+        """Export a layout as a job; the outcome is a ``LayoutExport``.
+
+        Args:
+            layout: The name of the layout in the project.
+            **options: ``format``, ``destination``, ``settings`` and ``overwrite``.
+        """
         request = self._export_request(layout, _export_values(options))
         return self._jobs.bind(_export_body(self._backend, layout)).delay(
             request=request
         )
 
     def render(self, layout: str, **options: Unpack[ExportOptions]) -> LayoutExport:
-        """Export a layout here and now: no job, no progress bar."""
+        """Export a layout here and now: no job, no progress bar.
+
+        Args:
+            layout: The name of the layout in the project.
+            **options: ``format``, ``destination``, ``settings`` and ``overwrite``.
+        """
         return _render(
             self._backend, self._export_request(layout, _export_values(options))
         )
 
     def run_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> JobHandle:
-        """Run a layout's atlas as a job; the outcome is an ``AtlasExport``."""
+        """Run a layout's atlas as a job; the outcome is an ``AtlasExport``.
+
+        Args:
+            layout: The name of the layout in the project.
+            **options: ``format``, ``directory``, ``pattern``, ``settings`` and ``overwrite``.
+        """
         request = self._atlas_request(layout, _atlas_values(options))
         return self._jobs.bind(_atlas_body(self._backend, layout)).delay(
             request=request
         )
 
     def render_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> AtlasExport:
-        """Run a layout's atlas here and now: no job, no progress bar."""
+        """Run a layout's atlas here and now: no job, no progress bar.
+
+        Args:
+            layout: The name of the layout in the project.
+            **options: ``format``, ``directory``, ``pattern``, ``settings`` and ``overwrite``.
+        """
         return _render_atlas(
             self._backend, self._atlas_request(layout, _atlas_values(options))
         )

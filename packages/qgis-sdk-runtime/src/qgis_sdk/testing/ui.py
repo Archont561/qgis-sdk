@@ -124,7 +124,12 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class OpenedSurface:
-    """One ``ctx.ui.open`` call the fake recorded."""
+    """One ``ctx.ui.open`` call the fake recorded.
+
+    Attributes:
+        surface: The surface class the plugin asked for.
+        initial: What the instance was handed as ``self.initial``.
+    """
 
     surface: type
     initial: Mapping[str, object]
@@ -140,6 +145,12 @@ class FakeUi:
     def __init__(
         self, scope: ResourceScope, *, app: QgisSdkPlugin | None = None
     ) -> None:
+        """Build the UI fake over one scope and the plugin it builds surfaces from.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            app: The plugin class the surfaces are built from.
+        """
         self._scope = scope
         self._app = app
         self._opened: list[OpenedSurface] = []
@@ -152,6 +163,12 @@ class FakeUi:
     def open(
         self, surface: type, *, initial: Mapping[str, object] | None = None
     ) -> OpenedSurface:
+        """Record the opening and answer the surface instance the test gets.
+
+        Args:
+            surface: The surface class the plugin asked for.
+            initial: What the instance is handed as ``self.initial``.
+        """
         self._scope.ensure_open()
         if not is_surface_class(surface):
             name = getattr(surface, "__name__", repr(surface))
@@ -173,7 +190,11 @@ class FakeUi:
 
 @dataclass(slots=True)
 class FakeViewControl:
-    """Count close requests; the owning test decides what closing means."""
+    """Count close requests; the owning test decides what closing means.
+
+    Attributes:
+        close_requests: How many times closure was requested.
+    """
 
     close_requests: int = field(default=0)
 
@@ -197,27 +218,46 @@ def fake_ui_context(
     ``desktop`` and ``ui`` are carried when given. Shared service objects
     keep their own scopes; the caller controls their lifetimes.
     ``runtime`` - a started ``PluginRuntime`` - builds ``actions`` and
-    ``streams`` as the host would, dispatches action calls on behalf of
-    ``scope``, and adds ``jobs`` when the plugin declares any.
+    ``streams`` as the host would, and adds ``jobs`` when the plugin declares any.
+
+    Args:
+        scope: The resource scope the context owns, or ``None`` for a new one.
+        runtime: The runtime the context answers with, if a test set one.
+        view_id: The view id the context is registered under.
+        **services: The services the context provides.
     """
     _s = _CcState(scope=scope, runtime=runtime, view_id=view_id, services=services)
     for _p in (_cc_fake_ui_context_p1, _cc_fake_ui_context_p2, _cc_fake_ui_context_p3):
         _r = _p(_s)
         if isinstance(_r, _CcReturn):
             return _r.value
-    return None
+    return _context_of(_s)
+
+
+def _context_of(_s: _CcState) -> UiContext:
+    return UiContext(_s.notifications, _s.view, _s.scope, UiServices(**_s.services))
 
 
 @dataclass(slots=True)
 class BuiltSurface:
-    """A surface built under the fake: the instance, its root and its context."""
+    """A surface built under the fake: the instance, its root and its context.
+
+    Attributes:
+        surface: The surface instance the test built.
+        root: The root node of the widget tree it produced.
+        ctx: The context the surface was built against.
+    """
 
     surface: Any
     root: Any
     ctx: UiContext
 
     def find(self, name: str) -> Any:
-        """The node called ``name`` anywhere in the tree: a component or a fake widget."""
+        """The node called ``name`` anywhere in the tree: a component or a fake widget.
+
+        Args:
+            name: The component or widget name to find.
+        """
         root = self.root
         if isinstance(root, Component):
             if root.name == name:
@@ -253,6 +293,11 @@ def build_surface(
     host would. A ``ui =`` surface gets a :class:`~qgis_sdk.ui.uifile.FakeUiTree`
     read from the Designer file. A surface in the widget form is refused: it
     *is* a Qt widget and opens only under a host.
+
+    Args:
+        surface: The surface class to build.
+        ctx: The context it is built against.
+        initial: What the instance is handed as ``self.initial``.
     """
     if not is_surface_class(surface):
         name = getattr(surface, "__name__", repr(surface))

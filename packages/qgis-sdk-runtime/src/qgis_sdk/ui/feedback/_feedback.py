@@ -1,25 +1,15 @@
-"""The catalogue's feedback components (decision-55 point 3).
-
-``JobProgress`` follows one :class:`~qgis_sdk.jobs.JobHandle` - its
-fraction, its outcome, a Cancel button; ``LogView`` shows the records the
-plugin writes through ``ctx.log`` (decision-63); ``ResultTable`` lists rows
-of plain mappings under named columns and remembers which one is selected.
-Like the inputs they are state first: a pure test binds a handle, writes a
-record or sets rows and reads the same state the widget would show.
-"""
+"""The catalogue's feedback components: progress, log and result tables."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
 from typing import Any, Literal
 
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.services import LogRecord
+from qgis_sdk.ui.components import Component
 
-from .components import Component, split_name_and_children
-from .form_fields import label_for
-
-__all__ = ["JobProgress", "LogView", "ResultTable"]
+__all__ = ["JobProgress", "LogView"]
 
 ProgressStatus = Literal[
     "idle", "queued", "running", "succeeded", "failed", "cancelled"
@@ -34,7 +24,11 @@ class _Feedback(Component):
         self._listeners: list[Callable[[Any], None]] = []
 
     def changed(self, listener: Callable[[Any], None]) -> Callable[[], None]:
-        """Call ``listener`` after each change; returns the unsubscribe."""
+        """Call ``listener`` after each change; returns the unsubscribe.
+
+        Args:
+            listener: What each change is handed to.
+        """
         self._listeners.append(listener)
 
         def unsubscribe() -> None:
@@ -81,7 +75,11 @@ class _JobProgressMixin1:
         return self._message
 
     def bind(self, handle: Any) -> None:
-        """Follow ``handle``; a previous handle is left alone from now on."""
+        """Follow ``handle``; a previous handle is left alone from now on.
+
+        Args:
+            handle: The job handle to follow.
+        """
         if not hasattr(handle, "on_progress") or not hasattr(handle, "status"):
             raise QgisSdkUiError(
                 f"{self._describe()}.bind() takes a job handle, "
@@ -160,6 +158,11 @@ class JobProgress(_JobProgressMixin1, _JobProgressMixin2, _Feedback):
     ``queued``, ``running``, ``succeeded``, ``failed``, ``cancelled``;
     ``fraction`` the latest report; ``message`` the failure text. ``cancel()``
     is what the button does: asks the bound job to stop.
+
+    Args:
+        name: The component's name in the surface.
+        label: The text shown above it.
+        cancellable: Whether it offers a Cancel button.
     """
 
     def __init__(
@@ -169,6 +172,13 @@ class JobProgress(_JobProgressMixin1, _JobProgressMixin2, _Feedback):
         label: str | None = None,
         cancellable: bool = True,
     ) -> None:
+        """Build the progress component, with or without a Cancel button.
+
+        Args:
+            name: The component's name in the surface.
+            label: The text shown above it.
+            cancellable: Whether it offers a Cancel button.
+        """
         super().__init__(name, label=label)
         self.cancellable = cancellable
         self._handle: Any | None = None
@@ -198,11 +208,23 @@ class LogView(_Feedback):
     Subscribes to the context's log on ``attach`` (a host without ``ctx.log``
     is refused by name) and unsubscribes when the scope closes. ``limit``
     bounds how many records are kept; ``records()`` is what the widget shows.
+
+    Args:
+        name: The component's name in the surface.
+        label: The text shown above it.
+        limit: How many records to keep, oldest dropped first.
     """
 
     def __init__(
         self, name: str | None = None, *, label: str | None = None, limit: int = 500
     ) -> None:
+        """Build the log view, keeping at most ``limit`` records.
+
+        Args:
+            name: The component's name in the surface.
+            label: The text shown above it.
+            limit: How many records to keep, oldest dropped first.
+        """
         super().__init__(name, label=label)
         if limit < 1:
             raise QgisSdkUiError(f"{self._describe()}: limit must be at least 1")
@@ -247,117 +269,3 @@ class LogView(_Feedback):
         del self._records[: -self.limit]
         self._sync()
         self._notify(record)
-
-
-class ResultTable(_Feedback):
-    """Rows of plain mappings under named columns, one of them selectable.
-
-    ``columns`` are the keys read from every row (``("name", "count")``) or
-    ``(key, heading)`` pairs; a row missing a key shows an empty cell.
-    ``set_rows`` replaces the rows and clears the selection; ``select(i)``
-    picks a row (``None`` clears), ``selected()`` reads the index and
-    ``changed`` hears the user's picks too.
-    """
-
-    def __init__(
-        self,
-        name: str | Sequence[str | tuple[str, str]] | None = None,
-        columns: Sequence[str | tuple[str, str]] | None = None,
-        *,
-        label: str | None = None,
-    ) -> None:
-        # ``ResultTable(["id", "name"])`` and ``ResultTable(columns=[...])``
-        # both leave the name to the class attribute (decision-55).
-        name, columns = split_name_and_children("ResultTable", name, columns)  # type: ignore[assignment]
-        super().__init__(name, label=label)
-        keys: list[str] = []
-        headings: list[str] = []
-        for column in columns:
-            key, heading = (
-                (column, label_for(column)) if isinstance(column, str) else column
-            )
-            if not key or key in keys:
-                raise QgisSdkUiError(
-                    f"{self._describe()}: column keys must be unique, got {key!r}"
-                )
-            keys.append(key)
-            headings.append(heading)
-        if not keys:
-            raise QgisSdkUiError(f"{self._describe()} needs at least one column")
-        self.columns = tuple(keys)
-        self.headings = tuple(headings)
-        self._rows: tuple[Mapping[str, Any], ...] = ()
-        self._selected: int | None = None
-
-    def rows(self) -> tuple[Mapping[str, Any], ...]:
-        return self._rows
-
-    def set_rows(self, rows: Sequence[Mapping[str, Any]]) -> None:
-        """Replace every row; the selection is cleared."""
-        checked: list[Mapping[str, Any]] = []
-        for index, row in enumerate(rows):
-            if not isinstance(row, Mapping):
-                raise QgisSdkUiError(
-                    f"{self._describe()}: row {index} must be a mapping, "
-                    f"got {type(row).__name__}"
-                )
-            checked.append(dict(row))
-        self._rows = tuple(checked)
-        self._selected = None
-        self._sync()
-        self._notify(None)
-
-    def cells(self) -> tuple[tuple[str, ...], ...]:
-        """Every row as text cells in column order; what the widget shows."""
-        return tuple(
-            tuple(_cell(row.get(key)) for key in self.columns) for row in self._rows
-        )
-
-    def selected(self) -> int | None:
-        """The index of the selected row, or ``None``."""
-        return self._selected
-
-    def selected_row(self) -> Mapping[str, Any] | None:
-        """The selected row itself, or ``None``."""
-        return None if self._selected is None else self._rows[self._selected]
-
-    def select(self, index: int | None) -> None:
-        """Select row ``index`` (``None`` clears); out of range is refused."""
-        if index is not None and not 0 <= index < len(self._rows):
-            raise QgisSdkUiError(
-                f"{self._describe()} has {len(self._rows)} rows; "
-                f"cannot select {index!r}"
-            )
-        if index == self._selected:
-            return
-        self._selected = index
-        self._sync()
-        self._notify(index)
-
-    def snapshot(self) -> dict[str, Any]:
-        node = super().snapshot()
-        node["columns"] = list(self.columns)
-        node["rows"] = [list(cells) for cells in self.cells()]
-        node["selected"] = self._selected
-        return node
-
-    def _state(self) -> object:
-        return (self.cells(), self._selected)
-
-    def _from_widget(self, value: object) -> None:
-        if self._syncing:
-            return
-        index = (
-            value if isinstance(value, int) and 0 <= value < len(self._rows) else None
-        )
-        if index != self._selected:
-            self._selected = index
-            self._notify(index)
-
-
-def _cell(value: object) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return f"{value:g}"
-    return str(value)

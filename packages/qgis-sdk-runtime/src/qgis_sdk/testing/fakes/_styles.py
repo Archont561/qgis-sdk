@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
 
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import (
     STYLE_MANAGER_KINDS,
     SYMBOLS_FOR_GEOMETRY,
@@ -29,16 +27,9 @@ from qgis_sdk.models import (
 from qgis_sdk.resources import require_style
 from qgis_sdk.services import (
     Layers,
-    LogBase,
-    LogRecord,
-    Notification,
-    NotificationsBase,
 )
 
 from ._declarations import TableDeclaration
-
-if TYPE_CHECKING:
-    from qgis_sdk.providers import Provider
 
 
 class FakeStyles:
@@ -64,6 +55,13 @@ class FakeStyles:
         *,
         styles: Sequence[StyleEntry] = (),
     ) -> None:
+        """Build the style fake over the layers it applies styles to.
+
+        Args:
+            layers: The layer backend the styles are applied to.
+            scope: The resource scope the fake belongs to.
+            styles: The packaged styles the fake may apply.
+        """
         self._layers = layers
         self._scope = scope
         self._applied: dict[str, list[str]] = {}
@@ -72,7 +70,12 @@ class FakeStyles:
         self._labelling: dict[str, Labelling] = {}
 
     def apply_style(self, layer_id: str, style: str) -> None:
-        """Validate the target, then record the application."""
+        """Validate the target, then record the application.
+
+        Args:
+            layer_id: The layer the style is applied to.
+            style: The packaged style identifier.
+        """
         self._scope.ensure_open()
         info = self._layers.layer(layer_id)
         spec = require_style(style)
@@ -82,7 +85,11 @@ class FakeStyles:
         self._applied.setdefault(layer_id, []).append(style)
 
     def applied(self, layer_id: str) -> tuple[str, ...]:
-        """Return styles applied to a layer; observation, not part of the contract."""
+        """Return styles applied to a layer; observation, not part of the contract.
+
+        Args:
+            layer_id: The layer whose applications are read.
+        """
         self._scope.ensure_open()
         self._layers.layer(layer_id)
         return tuple(self._applied.get(layer_id, ()))
@@ -90,7 +97,11 @@ class FakeStyles:
     # -- symbology -----------------------------------------------------------
 
     def symbology(self, layer_id: str) -> Renderer:
-        """Answer the renderer this backend holds for the layer."""
+        """Answer the renderer this backend holds for the layer.
+
+        Args:
+            layer_id: The layer whose renderer is read.
+        """
         info = self._vector(layer_id)
         stored = self._renderers.get(layer_id)
         if stored is not None:
@@ -98,7 +109,12 @@ class FakeStyles:
         return _default_renderer(info.geometry_type)
 
     def set_symbology(self, layer_id: str, renderer: Renderer) -> None:
-        """Record a renderer, refusing a symbol its geometry cannot draw."""
+        """Record a renderer, refusing a symbol its geometry cannot draw.
+
+        Args:
+            layer_id: The layer the renderer is set on.
+            renderer: The renderer to record.
+        """
         info = self._vector(layer_id)
         reason = symbol_fits_geometry(renderer, info.geometry_type)
         if reason is not None:
@@ -106,19 +122,32 @@ class FakeStyles:
         self._renderers[layer_id] = renderer
 
     def labelling(self, layer_id: str) -> Labelling:
-        """Answer the labelling this backend holds for the layer."""
+        """Answer the labelling this backend holds for the layer.
+
+        Args:
+            layer_id: The layer whose labelling is read.
+        """
         self._vector(layer_id)
         return self._labelling.get(layer_id, Labelling())
 
     def set_labelling(self, layer_id: str, labelling: Labelling) -> None:
-        """Record a labelling."""
+        """Record a labelling.
+
+        Args:
+            layer_id: The layer the labelling is set on.
+            labelling: The labelling to record.
+        """
         self._vector(layer_id)
         self._labelling[layer_id] = labelling
 
     # -- the style manager and style text ------------------------------------
 
     def list_styles(self, kind: str | None = None) -> tuple[StyleEntry, ...]:
-        """Answer the declared style entries, optionally of one kind."""
+        """Answer the declared style entries, optionally of one kind.
+
+        Args:
+            kind: The kind to narrow to, or ``None`` for all.
+        """
         self._scope.ensure_open()
         if kind is not None and kind not in STYLE_MANAGER_KINDS:
             raise ValueError(
@@ -130,7 +159,12 @@ class FakeStyles:
         )
 
     def export_style(self, layer_id: str, format: str) -> StyleText:
-        """Write the layer's renderer and labelling as this fake's document."""
+        """Write the layer's renderer and labelling as this fake's document.
+
+        Args:
+            layer_id: The layer whose style is written.
+            format: The dialect to write: ``qml`` or ``sld``.
+        """
         self._vector(layer_id)
         document = {
             "qgis_sdk_style": 1,
@@ -141,7 +175,13 @@ class FakeStyles:
         return StyleText(format=format, text=json.dumps(document, sort_keys=True))
 
     def import_style(self, layer_id: str, text: str, format: str) -> None:
-        """Read this fake's document back, refusing anything else."""
+        """Read this fake's document back, refusing anything else.
+
+        Args:
+            layer_id: The layer the style is applied to.
+            text: The style document to read.
+            format: The dialect the text is in.
+        """
         info = self._vector(layer_id)
         try:
             document = json.loads(text)
@@ -181,121 +221,6 @@ def _default_renderer(geometry_type: str) -> Renderer:
     if kind == "fill":
         return SingleSymbolRenderer(symbol=FillSymbol(color=color))
     return SingleSymbolRenderer(symbol=MarkerSymbol(color=color))
-
-
-class RecordingNotifications(NotificationsBase):
-    """A ``Notifications`` backend that records what it was given.
-
-    ``messages`` is every message text in order, whatever its level - the
-    assertion most tests want; ``records`` keeps the level and the button
-    ``with_action`` attached, so a test can press it with :meth:`press`.
-    """
-
-    def __init__(self, scope: ResourceScope) -> None:
-        self._scope = scope
-        self.messages: list[str] = []
-        self.records: list[Notification] = []
-        self._dispatch: list[Callable[..., object] | None] = [None]
-
-    def bind_actions(self, dispatch: Callable[..., object]) -> None:
-        """Make :meth:`press` run ``dispatch(action_id, **arguments)``."""
-        self._dispatch[0] = dispatch
-
-    def press(self, index: int = -1) -> object:
-        """Press the button of the ``index``-th record, as the user would."""
-        record = self.records[index]
-        if record.action is None:
-            raise ValueError(f"notification {record.message!r} carries no action")
-        dispatch = self._dispatch[0]
-        if dispatch is None:
-            raise ValueError(
-                "no actions bound: call bind_actions(runtime.actions...) first"
-            )
-        return dispatch(record.action.action_id, **record.action.arguments)
-
-    def _deliver(self, notification: Notification) -> None:
-        self._scope.ensure_open()
-        self.messages.append(notification.message)
-        self.records.append(notification)
-
-
-class RecordingLog(LogBase):
-    """A ``Log`` backend that keeps every record it was given.
-
-    ``records`` is the full :class:`LogRecord` list in order; ``messages``
-    the message texts alone, whatever their level. ``plugin`` is the tag
-    the records carry, ``"test"`` unless a test names its plugin.
-    """
-
-    def __init__(self, scope: ResourceScope, plugin: str = "test") -> None:
-        super().__init__(plugin)
-        self._scope = scope
-        self.records: list[LogRecord] = []
-
-    @property
-    def messages(self) -> list[str]:
-        """The message text of every record, in order."""
-        return [record.message for record in self.records]
-
-    def _deliver(self, record: LogRecord) -> None:
-        self._scope.ensure_open()
-        self.records.append(record)
-
-
-class FakeProviderRegistration:
-    """One provider a :class:`FakeProcessing` currently advertises."""
-
-    def __init__(self, registry: FakeProcessing, provider: Provider) -> None:
-        self._registry = registry
-        self.provider = provider
-
-    def unregister(self) -> None:
-        """Take the provider down; a second call is a safe no-op."""
-        self._registry._remove(self.provider.id, self)
-
-
-class FakeProcessing:
-    """A ``Processing`` registry that records what a host would advertise.
-
-    It holds no toolbox, so it proves only the contract ``PluginRuntime``
-    relies on: ``register_provider`` records the provider under its id,
-    refuses a second registration of the same id by name - the way the QGIS
-    registry refuses a duplicate provider - and ``unregister`` on the returned
-    registration removes it again. ``registered`` is the ids currently held,
-    in registration order; ``events`` is the full history a test can assert
-    ordering against.
-    """
-
-    def __init__(self, scope: ResourceScope) -> None:
-        self._scope = scope
-        self._live: dict[str, FakeProviderRegistration] = {}
-        self.events: list[tuple[str, str]] = []
-
-    @property
-    def registered(self) -> tuple[str, ...]:
-        """The ids of the providers currently advertised."""
-        return tuple(self._live)
-
-    def provider(self, provider_id: str) -> Provider:
-        """Return the provider advertised under ``provider_id``."""
-        return self._live[provider_id].provider
-
-    def register_provider(self, provider: Provider) -> FakeProviderRegistration:
-        """Advertise ``provider``, refusing an id that is already live."""
-        self._scope.ensure_open()
-        if provider.id in self._live:
-            raise QgisSdkDeclarationError(
-                f"provider {provider.id!r} is already registered with the host"
-            )
-        registration = FakeProviderRegistration(self, provider)
-        self._live[provider.id] = registration
-        self.events.append(("register", provider.id))
-        return registration
-
-    def _remove(self, provider_id: str, registration: FakeProviderRegistration) -> None:
-        if self._live.get(provider_id) is registration:
-            del self._live[provider_id]
-            self.events.append(("unregister", provider_id))
 
 
 def table_entry(declaration: TableDeclaration) -> dict[str, object]:

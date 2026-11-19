@@ -51,15 +51,28 @@ class Rasters(Protocol):
     """
 
     def open_raster(self, source: Path) -> RasterLayerInfo:
-        """Open a local raster dataset and describe its bands."""
+        """Open a local raster dataset and describe its bands.
+
+        Args:
+            source: The raster dataset to open.
+        """
         ...
 
     def raster(self, layer_id: str) -> RasterLayerInfo:
-        """Describe one opened raster."""
+        """Describe one opened raster.
+
+        Args:
+            layer_id: The id the raster was opened under.
+        """
         ...
 
     def statistics(self, layer_id: str, band: int) -> RasterStatistics:
-        """Compute one band's statistics over the whole raster."""
+        """Compute one band's statistics over the whole raster.
+
+        Args:
+            layer_id: The opened raster to read.
+            band: The band number, from ``1`` to the raster's ``band_count``.
+        """
         ...
 
     def sample(
@@ -70,6 +83,11 @@ class Rasters(Protocol):
         ``point.crs`` names the CRS the caller's numbers are in; a point with no
         CRS is read as being in the raster's own. A pixel that is no-data, or
         outside the raster, answers ``None`` for that band rather than a zero.
+
+        Args:
+            layer_id: The opened raster to sample.
+            point: The location to read, in the CRS it names.
+            band: The band to read, or ``None`` for every band.
         """
         ...
 
@@ -83,5 +101,10 @@ class Rasters(Protocol):
         file is replaced only with ``overwrite=True``, and a failure leaves no
         partial output - the same policy ``Layers.export_vector`` applies. Call
         it inside a ``@job``: it blocks for as long as the write takes.
+
+        Args:
+            layer_id: The opened raster to export.
+            destination: The file to write; its suffix picks the format.
+            overwrite: Whether an existing file may be replaced.
         """
         ...

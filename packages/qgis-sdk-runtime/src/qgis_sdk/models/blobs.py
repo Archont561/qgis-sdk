@@ -104,6 +104,14 @@ class BlobRef:
     mismatch is a failed transfer rather than a plausible one. ``expires_at`` is
     the moment the host will refuse the ref, in UTC ISO-8601, and ``None`` when
     it lives only as long as the view does.
+
+    Attributes:
+        id: The opaque id the bytes are fetched by.
+        size: How many bytes the blob holds.
+        media_type: Its MIME type, such as ``image/png``.
+        checksum: The digest a reader can verify the bytes against.
+        expires_at: When the ref stops resolving, as an ISO 8601 string.
+        kind: The discriminator a page reads: always ``blob``.
     """
 
     id: str
@@ -125,7 +133,11 @@ class BlobRef:
 
     @classmethod
     def from_wire(cls, value: Any) -> BlobRef:
-        """Rebuild a ref from its wire shape; a value already a ref passes."""
+        """Rebuild a ref from its wire shape; a value already a ref passes.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         _s = _CcState(cls=cls, value=value)
         for _p in (_cc_from_wire_p1, _cc_from_wire_p2, _cc_from_wire_p3):
             _r = _p(_s)

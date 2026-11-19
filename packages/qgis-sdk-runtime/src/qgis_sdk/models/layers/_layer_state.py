@@ -168,6 +168,14 @@ class VectorLayerInfo:
     Native handles never cross this boundary. ``id`` is the runtime-owned
     reference, and the remaining fields are the values the reference workflow
     validates before it applies an operation or a style (decision-19).
+
+    Attributes:
+        id: The runtime-owned id every layer call takes.
+        name: The name the layer is listed under in the project.
+        geometry_type: The kind of geometry its features carry.
+        field_names: The attribute fields, in the layer's own order.
+        crs: The authority code its coordinates are in, if it has one.
+        kind: The discriminator a page reads: always ``vector``.
     """
 
     id: str
@@ -194,7 +202,11 @@ class VectorLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> VectorLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {"kind", "id", "name", "geometry_type", "field_names", "crs"}
         unknown = set(value) - known
         if unknown:
@@ -217,6 +229,17 @@ class RasterLayerInfo:
     tuples are exactly ``band_count`` long, which is refused rather than
     tolerated when it is not. ``extent`` is the raster's own box; its ``crs`` is
     ``None`` because :attr:`crs` already says which CRS the numbers are in.
+
+    Attributes:
+        id: The runtime-owned id the raster was opened under.
+        name: The name the layer is listed under in the project.
+        band_count: How many bands it has; band numbers run ``1..band_count``.
+        data_types: Each band's GDAL type, in band order.
+        no_data: Each band's no-data value, or ``None`` for a band without one.
+        extent: The raster's own box, in its own CRS.
+        resolution: ``(x, y)`` map units per pixel.
+        crs: The authority code its coordinates are in, if it has one.
+        kind: The discriminator a page reads: always ``raster``.
     """
 
     id: str
@@ -255,7 +278,11 @@ class RasterLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> RasterLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {
             "kind",
             "id",

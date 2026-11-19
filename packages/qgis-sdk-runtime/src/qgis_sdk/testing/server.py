@@ -25,7 +25,13 @@ __all__ = ["FakeServerInterface", "RegisteredFilter"]
 
 @dataclass(frozen=True, slots=True)
 class RegisteredFilter:
-    """One registration: the name the host used, the callable and its priority."""
+    """One registration: the name the host used, the callable and its priority.
+
+    Attributes:
+        name: The filter's name.
+        hook: What each request is handed to.
+        priority: Where it sits in the chain; lower runs first.
+    """
 
     name: str
     hook: Callable[..., Any]
@@ -53,19 +59,37 @@ class FakeServerInterface:
     def register_filter(
         self, name: str, hook: Callable[..., Any], priority: int
     ) -> None:
-        """Record a request hook."""
+        """Record a request hook.
+
+        Args:
+            name: The filter's name.
+            hook: What each request is handed to.
+            priority: Where it sits in the chain; lower runs first.
+        """
         self._filters.append(RegisteredFilter(name, hook, priority))
 
     def register_service(
         self, name: str, version: str, handler: Callable[..., Any]
     ) -> None:
-        """Record an OGC service handler."""
+        """Record an OGC service handler.
+
+        Args:
+            name: The OGC service name, such as ``WMS``.
+            version: The service version it answers.
+            handler: What a request for it is handed to.
+        """
         self._services.append((name, version, handler))
 
     def register_access_control(
         self, name: str, hook: Callable[..., Any], priority: int
     ) -> None:
-        """Record a layer permission hook."""
+        """Record a layer permission hook.
+
+        Args:
+            name: The hook's name.
+            hook: What each layer permission question is handed to.
+            priority: Where it sits in the chain; lower runs first.
+        """
         self._access_control.append(RegisteredFilter(name, hook, priority))
 
     # -- what a test reads -------------------------------------------------------
@@ -114,6 +138,13 @@ class FakeServerInterface:
         ``jobs`` is the plugin's job service, when the test has one: the host
         derives a request-scoped service from it exactly as a deployed server
         does, which is what makes ``ctx.jobs`` reachable from a hook here.
+
+        Args:
+            hooks: The plugin's own hooks, registered before the request is served.
+            request: The request to serve.
+            scope: The resource scope the request runs in.
+            jobs: The plugin's job service, when the test has one.
+            services: The services the request's context provides.
         """
         host = ServerHost(
             _published_values.hooks, _published_values.self, jobs=_published_values.jobs

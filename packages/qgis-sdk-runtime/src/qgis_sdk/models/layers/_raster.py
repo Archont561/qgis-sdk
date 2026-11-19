@@ -15,7 +15,12 @@ from ._layer_state import is_number, post_init___tail1
 
 @dataclass(frozen=True, slots=True)
 class RasterExport:
-    """What a raster export produced: the file written and its GDAL driver."""
+    """What a raster export produced: the file written and its GDAL driver.
+
+    Attributes:
+        path: The file that was written.
+        driver: The GDAL driver that wrote it.
+    """
 
     path: str
     driver: str
@@ -31,6 +36,15 @@ class RasterStatistics:
     ``valid_count`` and ``no_data_count`` add up to the cells the band covers;
     a band with no valid cell answers ``None`` for the four values rather than a
     zero, because "no data" and "all zeros" are different answers.
+
+    Attributes:
+        band: Which band these numbers describe.
+        minimum: The smallest valid cell value.
+        maximum: The largest valid cell value.
+        mean: The average of the valid cells.
+        std_dev: The standard deviation of the valid cells.
+        valid_count: How many cells were counted.
+        no_data_count: How many cells were skipped as no-data.
     """
 
     band: int
@@ -66,6 +80,10 @@ class RasterSample:
 
     A band whose pixel at that point is no-data, or outside the raster, answers
     ``None`` for that band - a sample never invents a zero for a hole.
+
+    Attributes:
+        point: The sample point, in the raster's own CRS.
+        values: One value per band, in band order; ``None`` outside the raster.
     """
 
     point: CanvasPoint
@@ -131,7 +149,11 @@ def _layer_schema(kind: str, title: str, properties: dict[str, Any]) -> dict[str
 
 
 def layer_kind_of(schema: Mapping[str, Any]) -> str:
-    """The kind a layer description's schema is for, read from the schema."""
+    """The kind a layer description's schema is for, read from the schema.
+
+    Args:
+        schema: The description schema a page sent.
+    """
     return str(schema["properties"]["kind"]["enum"][0])
 
 

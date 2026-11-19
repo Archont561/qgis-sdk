@@ -24,7 +24,11 @@ def _mark(method: T, wire: Wire) -> T:
 
 
 class OnMarker:
-    """``on("distance")``: pick the signal as an attribute, or call with one."""
+    """``on("distance")``: pick the signal as an attribute, or call with one.
+
+    Args:
+        target: The handler name the marker is about.
+    """
 
     __slots__ = ("_target",)
 
@@ -63,6 +67,10 @@ def on(target: str | Component, signal: str | None = None) -> Any:
     also resolves against the catalogue's names, so ``@on("go", "clicked")``
     works on a ``Button``) - or a component declared on the surface class
     (``@on(clear).clicked``), which wires to that window's copy of it.
+
+    Args:
+        target: The node name or component to listen to.
+        signal: The signal name, or ``None`` to pick it as an attribute.
     """
     if isinstance(target, Component) or isinstance(target, str) and target:
         marker = OnMarker(target)
@@ -81,6 +89,10 @@ def subscribe(stream: str, /, **request: object) -> Callable[[T], T]:
     The method takes the :class:`~qgis_sdk.ui.streams.StreamEvent`. The
     subscription opens after ``build()`` with ``request`` as the stream's
     arguments and ends with the view's scope.
+
+    Args:
+        stream: The stream id to listen to.
+        **request: The arguments the stream is opened with.
     """
     if not isinstance(stream, str) or not stream:
         raise QgisSdkUiError("@subscribe needs the id of a stream")

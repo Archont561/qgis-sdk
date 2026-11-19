@@ -18,6 +18,10 @@ class TypedRun:
     each field to its QGIS name. ``params()`` keeps only the fields that were
     given (``None`` is "not given": QGIS applies the default, or the backend
     allocates the destination).
+
+    Attributes:
+        algorithm: The id the generated class runs.
+        _names: The parameter names the class declares, in order.
     """
 
     algorithm: ClassVar[str]
@@ -44,6 +48,10 @@ class RunResult:
     plugin that ran the algorithm); numbers, strings and booleans as they are;
     a multiple-layers output as a tuple of :class:`VectorLayerInfo`, in the
     order the registry listed them.
+
+    Attributes:
+        algorithm: The algorithm that produced it.
+        outputs: One typed value per output, by output name.
     """
 
     algorithm: str
@@ -53,6 +61,11 @@ class RunResult:
         object.__setattr__(self, "outputs", dict(self.outputs))
 
     def __getitem__(self, name: str) -> object:
+        """Return one output by name, refusing a name the run did not produce.
+
+        Args:
+            name: The output name to read.
+        """
         try:
             return self.outputs[name]
         except KeyError:
@@ -71,15 +84,30 @@ class RunResult:
         return len(self.outputs)
 
     def value(self, name: str) -> object:
+        """Return one output as the plain value the algorithm produced.
+
+        Args:
+            name: The output whose scalar is read.
+        """
         return self[name]
 
     def vector(self, name: str) -> VectorLayerInfo:
+        """Return one output as an owned vector layer description.
+
+        Args:
+            name: The output whose layer is read.
+        """
         value = self[name]
         if not isinstance(value, VectorLayerInfo):
             raise KeyError(f"output {name!r} of {self.algorithm} is not a vector layer")
         return value
 
     def layers(self, name: str) -> tuple[VectorLayerInfo, ...]:
+        """Return one output as the layers a multiple-layers run produced.
+
+        Args:
+            name: The output whose layer tuple is read.
+        """
         value = self[name]
         if not isinstance(value, tuple) or not all(
             isinstance(item, VectorLayerInfo) for item in value
@@ -88,6 +116,11 @@ class RunResult:
         return value
 
     def file(self, name: str) -> FileRef:
+        """Return one output as a ref to the file, folder or report it wrote.
+
+        Args:
+            name: The output whose file ref is read.
+        """
         value = self[name]
         if not isinstance(value, FileRef):
             raise KeyError(f"output {name!r} of {self.algorithm} is not a file")
@@ -123,6 +156,11 @@ class RunResult:
 
     @classmethod
     def from_wire(cls, data: Mapping[str, Any]) -> RunResult:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            data: The mapping a page sent, whose keys are checked.
+        """
         outputs: dict[str, object] = {}
         for entry in data.get("outputs", ()):
             name, kind = entry["name"], entry.get("kind")

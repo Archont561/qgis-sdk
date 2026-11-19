@@ -34,6 +34,21 @@ def is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+#: Every key a geometry's wire shape may carry; anything else is refused by
+#: name rather than ignored, so a newer host cannot quietly widen the contract.
+_GEOMETRY_FIELDS = frozenset(
+    {
+        "encoding",
+        "value",
+        "geometry_type",
+        "crs",
+        "part_count",
+        "vertex_count",
+        "is_empty",
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Geometry:
     """One geometry, encoded, with just enough shape for a page to reason about.
@@ -42,6 +57,15 @@ class Geometry:
     "multipart, 42 vertices" without decoding the payload; ``is_empty`` is an
     explicit answer, because an empty geometry and a missing one are different
     facts about a row.
+
+    Attributes:
+        encoding: How the value is encoded: ``wkb``, ``wkt`` or ``geojson``.
+        value: The encoded geometry, as text or hex.
+        geometry_type: The shape it is, or ``none`` for an empty one.
+        crs: The authority code its coordinates are in, if known.
+        part_count: How many parts it has, for the multi-part kinds.
+        vertex_count: How many vertices it has.
+        is_empty: Whether it carries no coordinates at all.
     """
 
     encoding: GeometryEncoding
@@ -90,20 +114,16 @@ class Geometry:
 
     @classmethod
     def from_wire(cls, value: Any) -> Geometry:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
             raise TypeError("a Geometry is an object")
-        known = {
-            "encoding",
-            "value",
-            "geometry_type",
-            "crs",
-            "part_count",
-            "vertex_count",
-            "is_empty",
-        }
-        unknown = set(value) - known
+        unknown = set(value) - _GEOMETRY_FIELDS
         if unknown:
             raise ValueError(f"a Geometry has no field {min(unknown)!r}")
         return cls(

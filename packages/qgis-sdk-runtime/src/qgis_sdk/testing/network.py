@@ -43,7 +43,12 @@ class QgisSdkNetworkFakeError(QgisSdkError):
 
 
 def reply(status: int = 200, **options: Unpack[_ReplyOptions1]) -> Responder:
-    """Script a response; ``url`` overrides the final URL, as after a redirect."""
+    """Script a response; ``url`` overrides the final URL, as after a redirect.
+
+    Args:
+        status: The HTTP status to answer with.
+        **options: The body, JSON, headers, reason and URL to answer with.
+    """
     values = _ReplyValues1(**options)
     if values.json is not None:
         content = json_module.dumps(values.json).encode("utf-8")
@@ -94,7 +99,17 @@ class _Expectation:
 
 @dataclass(slots=True)
 class PendingRequest:
-    """A held request the test settles when it chooses."""
+    """A held request the test settles when it chooses.
+
+    Attributes:
+        request: The request the expectation matched.
+        settled: Whether the request has been answered.
+        cancelled: Whether the request was cancelled before it was answered.
+
+    Args:
+        _deliver: What the one outcome is reported to.
+        _responder: The answer the expectation scripted.
+    """
 
     request: NetworkRequest
     _deliver: Deliver = field(repr=False)
@@ -109,7 +124,11 @@ class PendingRequest:
         self._settle(self._responder(self.request))
 
     def deliver_with(self, outcome: Response | Exception) -> None:
-        """Deliver something else instead, such as a late failure."""
+        """Deliver something else instead, such as a late failure.
+
+        Args:
+            outcome: What to deliver instead of the scripted answer.
+        """
         self._settle(outcome)
 
     def _settle(self, outcome: Response | Exception) -> None:
@@ -149,6 +168,11 @@ class FakeNetworkTransport:
     """
 
     def __init__(self, *, gui_thread: bool = False) -> None:
+        """Build the transport, pretending to be (or not be) the GUI thread.
+
+        Args:
+            gui_thread: Whether the fake pretends to run on the GUI thread.
+        """
         self.gui_thread = gui_thread
         self.requests: list[NetworkRequest] = []
         self.cancelled: list[NetworkRequest] = []
@@ -164,7 +188,14 @@ class FakeNetworkTransport:
         *,
         hold: bool = False,
     ) -> None:
-        """Answer the next ``method url`` with ``responder``; ``hold`` waits for the test."""
+        """Answer the next ``method url`` with ``responder``; ``hold`` waits for the test.
+
+        Args:
+            method: The HTTP method the request must use.
+            url: The URL the request must target.
+            responder: What the request is answered with.
+            hold: Whether the answer waits for the test to release it.
+        """
         if responder is None:
             responder = reply()
         elif isinstance(responder, Response | Exception):
@@ -205,7 +236,12 @@ class FakeNetworkTransport:
     # -- NetworkTransport -------------------------------------------------------
 
     def send(self, request: NetworkRequest, deliver: Deliver) -> Callable[[], None]:
-        """Record the request and answer it now, or hold it for the test."""
+        """Record the request and answer it now, or hold it for the test.
+
+        Args:
+            request: The validated request to answer.
+            deliver: What the one outcome is reported to.
+        """
         expectation = self._take(request)
         pending = PendingRequest(request, deliver, expectation.responder)
         self.pending.append(pending)
@@ -227,7 +263,11 @@ class FakeNetworkTransport:
         return cancel
 
     def send_blocking(self, request: NetworkRequest) -> Response:
-        """Answer on the calling thread, or refuse it as a GUI thread would be."""
+        """Answer on the calling thread, or refuse it as a GUI thread would be.
+
+        Args:
+            request: The validated request to answer.
+        """
         if self.gui_thread:
             raise QgisSdkBlockingOnGuiThreadError(
                 method=request.method, url=request.url

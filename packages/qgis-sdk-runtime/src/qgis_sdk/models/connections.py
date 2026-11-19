@@ -88,6 +88,11 @@ class ConnectionInfo:
     secret itself. ``None`` means the connection authenticates some other way
     (a local file, a service file, a password QGIS stores in its own settings),
     and this description says which rather than exposing which.
+
+    Attributes:
+        name: The connection's name, as QGIS lists it.
+        provider: The data-source provider it belongs to, such as ``postgres``.
+        auth_config: The ``authcfg`` id it authenticates with, if any.
     """
 
     name: str
@@ -109,6 +114,11 @@ class ConnectionInfo:
 
     @classmethod
     def from_wire(cls, value: Any) -> ConnectionInfo:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -129,6 +139,12 @@ class ConnectionItem:
     file) and named for the ones that do. ``geometries`` names the geometry
     columns in the layer vocabulary, empty for a schema entry or an aspatial
     table.
+
+    Attributes:
+        name: The schema, table or view name.
+        schema: The schema it lives in, empty for the connection's root.
+        kind: What it is: ``schema``, ``table`` or ``view``.
+        geometries: The geometry types its columns carry, for a layer item.
     """
 
     name: str
@@ -164,6 +180,11 @@ class ConnectionItem:
 
     @classmethod
     def from_wire(cls, value: Any) -> ConnectionItem:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -184,6 +205,10 @@ class ConnectionTest:
     shape: one boolean a page can show, and a message only when it is false.
     The message is the provider's own refusal, already free of the connection's
     URI (a refusal string can quote what it refused).
+
+    Attributes:
+        valid: Whether the connection opened.
+        message: Why it did not, when it did not.
     """
 
     valid: bool
@@ -200,6 +225,11 @@ class ConnectionTest:
 
     @classmethod
     def from_wire(cls, value: Any) -> ConnectionTest:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -218,6 +248,10 @@ class AuthConfiguration:
     Nothing else is modelled on purpose. A configuration's method, its URI and
     its secret live in the authentication database and are spent by QGIS when a
     connection opens; a page names them, it never reads them.
+
+    Attributes:
+        id: The seven-character ``authcfg`` id a data source quotes.
+        name: The human name the user gave the configuration.
     """
 
     id: str
@@ -232,6 +266,11 @@ class AuthConfiguration:
 
     @classmethod
     def from_wire(cls, value: Any) -> AuthConfiguration:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -297,20 +336,36 @@ AUTH_CONFIGURATION = _object(
 
 
 def connection_info_from_wire(value: Any) -> ConnectionInfo:
-    """Return the connection ``value`` describes."""
+    """Return the connection ``value`` describes.
+
+    Args:
+        value: The mapping a page sent.
+    """
     return ConnectionInfo.from_wire(value)
 
 
 def connection_item_from_wire(value: Any) -> ConnectionItem:
-    """Return the browse item ``value`` describes."""
+    """Return the browse item ``value`` describes.
+
+    Args:
+        value: The mapping a page sent.
+    """
     return ConnectionItem.from_wire(value)
 
 
 def connection_test_from_wire(value: Any) -> ConnectionTest:
-    """Return the connection test ``value`` describes."""
+    """Return the connection test ``value`` describes.
+
+    Args:
+        value: The mapping a page sent.
+    """
     return ConnectionTest.from_wire(value)
 
 
 def auth_configuration_from_wire(value: Any) -> AuthConfiguration:
-    """Return the auth configuration ``value`` describes."""
+    """Return the auth configuration ``value`` describes.
+
+    Args:
+        value: The mapping a page sent.
+    """
     return AuthConfiguration.from_wire(value)

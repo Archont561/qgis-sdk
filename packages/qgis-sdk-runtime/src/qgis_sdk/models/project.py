@@ -73,6 +73,13 @@ class LayerNode:
     ``parent`` is the group id the node sits in, or ``None`` for a node the root
     holds. ``visible`` is the node's own visibility, which is what the user
     toggled - a node inside a hidden group is still ``visible``.
+
+    Attributes:
+        id: The runtime-owned id of the layer or group.
+        name: The name the tree shows.
+        kind: ``layer`` or ``group``.
+        visible: Whether the node is ticked in the tree.
+        parent: The id of the group holding it, or ``None`` at the root.
     """
 
     id: str
@@ -106,6 +113,11 @@ class LayerNode:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> LayerNode:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         unknown = set(value) - {"id", "name", "kind", "visible", "parent"}
         if unknown:
             raise ValueError(f"a LayerNode has no field {min(unknown)!r}")
@@ -125,6 +137,9 @@ class LayerTree:
     Every node appears once, after its parent. A group a node names must exist
     in the same tree as a group, so a tree cannot describe a dangling branch -
     the one invariant a reader of ``parent`` depends on.
+
+    Attributes:
+        nodes: Every node, parents before their children.
     """
 
     nodes: tuple[LayerNode, ...] = ()
@@ -151,14 +166,22 @@ class LayerTree:
         return len(self.nodes)
 
     def node(self, node_id: str) -> LayerNode:
-        """Return one node by id."""
+        """Return one node by id.
+
+        Args:
+            node_id: The node to find.
+        """
         for node in self.nodes:
             if node.id == node_id:
                 return node
         raise KeyError(node_id)
 
     def children_of(self, parent: str | None = None) -> tuple[LayerNode, ...]:
-        """Return the nodes directly inside ``parent`` (``None`` = the root)."""
+        """Return the nodes directly inside ``parent`` (``None`` = the root).
+
+        Args:
+            parent: The group id, or ``None`` for the root.
+        """
         return tuple(node for node in self.nodes if node.parent == parent)
 
     def layer_ids(self) -> tuple[str, ...]:
@@ -174,6 +197,11 @@ class LayerTree:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> LayerTree:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         unknown = set(value) - {"nodes"}
         if unknown:
             raise ValueError(f"a LayerTree has no field {min(unknown)!r}")
@@ -182,7 +210,12 @@ class LayerTree:
 
 @dataclass(frozen=True, slots=True)
 class ProjectEntry:
-    """One variable or custom property: a name and its string value."""
+    """One variable or custom property: a name and its string value.
+
+    Attributes:
+        key: The variable or property name.
+        value: Its value, as the string the project stores.
+    """
 
     key: str
     value: str
@@ -198,6 +231,11 @@ class ProjectEntry:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> ProjectEntry:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         unknown = set(value) - {"key", "value"}
         if unknown:
             raise ValueError(f"a ProjectEntry has no field {min(unknown)!r}")
@@ -206,7 +244,12 @@ class ProjectEntry:
 
 @dataclass(frozen=True, slots=True)
 class Bookmark:
-    """A named extent a user can jump back to."""
+    """A named extent a user can jump back to.
+
+    Attributes:
+        name: The bookmark's name in the project.
+        extent: The box it returns the canvas to.
+    """
 
     name: str
     extent: CanvasExtent
@@ -220,6 +263,11 @@ class Bookmark:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> Bookmark:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         unknown = set(value) - {"name", "extent"}
         if unknown:
             raise ValueError(f"a Bookmark has no field {min(unknown)!r}")
@@ -228,7 +276,11 @@ class Bookmark:
 
 @dataclass(frozen=True, slots=True)
 class ProjectFile:
-    """A project file that was written, or saved to: its path, as a string."""
+    """A project file that was written, or saved to: its path, as a string.
+
+    Attributes:
+        path: Where the project was written.
+    """
 
     path: str
 
@@ -243,6 +295,10 @@ class ProjectChange:
     ``layer_ids`` is empty when the change was not about layers; a ``tree`` or
     ``layers`` frame carries the ids in tree order so a view can re-read exactly
     the layers it drew before.
+
+    Attributes:
+        kind: What happened: ``added``, ``removed``, ``moved`` or ``visibility``.
+        layer_ids: The layers the change concerns, in the order it happened.
     """
 
     kind: str

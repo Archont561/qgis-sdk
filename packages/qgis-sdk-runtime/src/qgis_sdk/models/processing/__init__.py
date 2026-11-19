@@ -7,10 +7,9 @@ from ._catalogue import (
     AlgorithmRun,
     Catalogue,
     ProviderInfo,
-    output_kind_for,
-    output_kinds,
     validate_parameters,
 )
+from ._output_kinds import output_kind_for, output_kinds
 from ._runs import (
     RunResult,
     TypedRun,

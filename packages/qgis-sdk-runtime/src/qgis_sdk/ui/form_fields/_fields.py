@@ -80,7 +80,17 @@ DETAIL_KEYS = (
 
 @dataclass(frozen=True, slots=True)
 class FieldSpec:
-    """One input of a declared action, as a host should render it."""
+    """One input of a declared action, as a host should render it.
+
+    Attributes:
+        name: The parameter name the field fills.
+        label: The text the widget shows for it.
+        widget: The widget family that draws it.
+        required: Whether a form refuses to submit it empty.
+        nullable: Whether ``None`` is an accepted value.
+        choices: The values an enum field offers.
+        details: The kind-specific extras, as the wire carries them.
+    """
 
     name: str
     label: str
@@ -119,6 +129,10 @@ def form_fields(
     kind name (``"layer"``) for a host that read the signature itself; it
     overrides the annotation. Unknown marker names are refused rather than
     ignored: a typo in a widget hint should not quietly render a text box.
+
+    Args:
+        action: The action to describe.
+        markers: Widget hints by field name, overriding the annotation.
     """
     return schema_fields(action.request, owner=f"action {action.id!r}", markers=markers)
 
@@ -134,6 +148,11 @@ def schema_fields(
     The rule behind :func:`form_fields`, for a caller holding a schema rather
     than an action: a page's generated schema, or ``Form.from_schema``.
     ``owner`` names the schema in refusals.
+
+    Args:
+        schema: The request schema to describe.
+        owner: What the schema is called in refusals.
+        markers: Widget hints by field name, overriding the annotation.
     """
     required = set(schema.get("required", ()))
     specs = []
@@ -148,38 +167,6 @@ def schema_fields(
             )
         )
     return tuple(specs)
-
-
-def coerce_values(
-    action: ActionDescription,
-    values: Mapping[str, object],
-    *,
-    markers: Mapping[str, str] | None = None,
-) -> dict[str, object]:
-    """Convert submitted form values into the handler's Python types.
-
-    Unknown keys, missing required fields and uncoercible values are refused
-    with :class:`~qgis_sdk.models.QgisSdkFormError`. Optional fields that were
-    not submitted are simply absent from the result, so the handler's own
-    defaults apply.
-    """
-    from ._coercion import coerce
-
-    specs = form_fields(action, markers=markers)
-    known = {spec.name for spec in specs}
-    unknown = sorted(set(values) - known)
-    if unknown:
-        raise QgisSdkFormError(
-            f"action {action.id!r}: no such field(s): {', '.join(unknown)}"
-        )
-    coerced: dict[str, object] = {}
-    for spec in specs:
-        if spec.name not in values:
-            if spec.required:
-                raise QgisSdkFormError(f"action {action.id!r}: {spec.name} is required")
-            continue
-        coerced[spec.name] = coerce(f"action {action.id!r}", spec, values[spec.name])
-    return coerced
 
 
 def _field(
@@ -216,7 +203,14 @@ def _concrete(subschema: Mapping[str, Any]) -> tuple[Mapping[str, Any], bool]:
 def widget_for(
     owner: str, name: str, subschema: Mapping[str, Any], marker: str | None
 ) -> str:
-    """Pick the widget family for a concrete schema, or refuse the field."""
+    """Pick the widget family for a concrete schema, or refuse the field.
+
+    Args:
+        owner: What the field belongs to, for the refusal.
+        name: The field's name.
+        subschema: The field's schema entry.
+        marker: The widget hint, or ``None``.
+    """
     if marker is not None:
         widget = _MARKER_WIDGETS.get(marker)
         if widget is None:

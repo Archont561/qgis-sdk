@@ -21,6 +21,15 @@ def surface_nodes(
     *,
     parent: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Walk a widget's children into snapshot nodes and findings.
+
+    Args:
+        widget: The widget whose children are walked.
+        surface: The surface the widgets belong to.
+        labels: Widget ids to their labels.
+        fields: The field names the surface was built from.
+        parent: The path prefix the children are numbered under.
+    """
     nodes: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
     for index, child in enumerate(_widget_children(widget)):
@@ -49,6 +58,13 @@ def _surface_node(
 
 
 def unnamed_findings(widget: Any, role: str, node_id: str) -> list[dict[str, Any]]:
+    """The findings for one widget, if it is an unnamed actionable.
+
+    Args:
+        widget: The widget to check.
+        role: The widget's role.
+        node_id: The widget's node id.
+    """
     from ._snapshot import ACTIONABLE
 
     if not node_id.startswith("#") or role not in ACTIONABLE:
@@ -66,6 +82,12 @@ def unnamed_findings(widget: Any, role: str, node_id: str) -> list[dict[str, Any
 
 
 def declared(name: str, fields: Sequence[str]) -> dict[str, str] | None:
+    """What a node's ``objectName`` declares: a field, a button, or nothing.
+
+    Args:
+        name: The node's ``objectName``.
+        fields: The field names the surface was built from.
+    """
     namespace, _, member = name.partition("/")
     if not member:
         return None
@@ -77,6 +99,11 @@ def declared(name: str, fields: Sequence[str]) -> dict[str, str] | None:
 
 
 def label_map(surface: object) -> dict[int, str]:
+    """Widget ids to the labels of the widgets that name them.
+
+    Args:
+        surface: The surface whose labels are read.
+    """
     labels: dict[int, str] = {}
     for widget in _widgets(surface):
         if role(widget) != "label":
@@ -88,6 +115,11 @@ def label_map(surface: object) -> dict[int, str]:
 
 
 def role(widget: Any) -> str:
+    """The snapshot role of a widget, by its class.
+
+    Args:
+        widget: The widget to classify.
+    """
     from ._snapshot import ROLES
 
     for klass in type(widget).__mro__:
@@ -98,6 +130,12 @@ def role(widget: Any) -> str:
 
 
 def value(widget: Any, role: str) -> Any:
+    """The snapshot value of a widget, by its role.
+
+    Args:
+        widget: The widget to read.
+        role: The widget's role.
+    """
     from ._snapshot import VALUE_METHOD
 
     method = VALUE_METHOD.get(role)
@@ -113,6 +151,12 @@ def value(widget: Any, role: str) -> Any:
 
 
 def position(widget: Any, surface: object) -> tuple[int, int]:
+    """A widget's position in its surface.
+
+    Args:
+        widget: The widget to place.
+        surface: The surface it is placed in.
+    """
     x = y = 0
     node: Any = widget
     while node is not None and node is not surface:
@@ -126,6 +170,11 @@ def position(widget: Any, surface: object) -> tuple[int, int]:
 
 
 def size(surface: Any) -> dict[str, int]:
+    """A surface's size, as a mapping.
+
+    Args:
+        surface: The surface to measure.
+    """
     return {
         "width": int(call(surface, "width", 0)),
         "height": int(call(surface, "height", 0)),
@@ -133,16 +182,33 @@ def size(surface: Any) -> dict[str, int]:
 
 
 def text(widget: Any) -> str | None:
+    """A widget's text, or ``None``.
+
+    Args:
+        widget: The widget to read.
+    """
     text = call(widget, "text", None)
     return text if isinstance(text, str) else None
 
 
 def object_name(widget: Any) -> str:
+    """A widget's ``objectName``, or its positional id.
+
+    Args:
+        widget: The widget to name.
+    """
     name = call(widget, "objectName", "")
     return name if isinstance(name, str) else ""
 
 
 def call(value: object, name: str, default: Any) -> Any:
+    """Call ``name`` on ``value``, or answer ``default``.
+
+    Args:
+        value: The object to call on.
+        name: The method name.
+        default: What to answer when the method is missing.
+    """
     member = getattr(value, name, None)
     if not callable(member):
         return default

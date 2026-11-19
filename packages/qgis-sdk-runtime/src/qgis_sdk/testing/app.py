@@ -37,7 +37,13 @@ __all__ = ["FakeAppBackend", "FakeAppSurface", "FakeLoop"]
 
 @dataclass
 class FakeLoop:
-    """A named loop a test can start, stop and inspect."""
+    """A named loop a test can start, stop and inspect.
+
+    Attributes:
+        name: The loop's name, as the host knows it.
+        running: Whether it has been started and not stopped.
+        stops: How many times it was stopped.
+    """
 
     name: str = "job-pump"
     running: bool = False
@@ -55,7 +61,18 @@ class FakeLoop:
 
 @dataclass
 class FakeAppSurface:
-    """The context and UI one fake run got, plus what was done to them."""
+    """The context and UI one fake run got, plus what was done to them.
+
+    Attributes:
+        context: The plugin context the run was handed.
+        gui: Whether the run asked for a window.
+        title: The title the run was built with.
+        loops: The loops the host started.
+        runtime: The plugin runtime, once it was bound.
+        binds: How many times it was bound.
+        closes: How many times it was closed.
+        closer: Called by ``close``, so a test can watch the UI come down.
+    """
 
     context: PluginContext
     gui: bool = False
@@ -70,7 +87,11 @@ class FakeAppSurface:
     """Called by :meth:`close`, so a test can watch the UI come down."""
 
     def bind(self, runtime: PluginRuntime) -> tuple[NamedLoop, ...]:
-        """Record the runtime and start the loops, as the real surface does."""
+        """Record the runtime and start the loops, as the real surface does.
+
+        Args:
+            runtime: The runtime the surface is bound to.
+        """
         self.binds += 1
         self.runtime = runtime
         for loop in self.loops:
@@ -88,7 +109,23 @@ class FakeAppSurface:
 
 @dataclass
 class FakeAppBackend:
-    """An ``AppBackend`` that does nothing Qt, and records everything asked."""
+    """An ``AppBackend`` that does nothing Qt, and records everything asked.
+
+    Attributes:
+        host: What the backend reports about the host it runs in.
+        loops: The loops the backend starts.
+        workers: The worker service jobs are offloaded to.
+        exec_code: The code the fake reports from its event loop.
+        init_error: What ``init`` raises, when the test scripts a failure.
+        build_error: What ``build`` raises, when the test scripts a failure.
+        surface_closer: What ``close`` runs, as a real window teardown does.
+        notifications: The notifications this backend delivered.
+        calls: Every lifecycle call, in order.
+        argv: The arguments the run was started with.
+        gui: Whether the run asked for a window.
+        surfaces: The surfaces built, oldest first.
+        exits: How many times ``exit`` was called.
+    """
 
     host: Host = Host.APP
     """Which host the built context reports; ``APP`` unless a test wants a lie."""
@@ -122,6 +159,12 @@ class FakeAppBackend:
     exits: int = 0
 
     def init(self, argv: Sequence[str], *, gui: bool = False) -> None:
+        """Record the start and the arguments the run was given.
+
+        Args:
+            argv: The arguments the run was started with.
+            gui: Whether the run asked for a window.
+        """
         self.calls.append("init")
         self.argv = tuple(argv)
         self.gui = gui
@@ -129,6 +172,13 @@ class FakeAppBackend:
             raise self.init_error
 
     def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> FakeAppSurface:
+        """Record the build and answer the surface the run would show.
+
+        Args:
+            app: The plugin class the run builds.
+            gui: Whether the run asked for a window.
+            title: The title the window is shown with.
+        """
         self.calls.append("build")
         if self.build_error is not None:
             raise self.build_error
@@ -152,16 +202,20 @@ class FakeAppBackend:
         return surface
 
     def exec(self) -> int:
+        """Record the event loop and answer the scripted exit code."""
         self.calls.append("exec")
         return self.exec_code
 
     def process_events(self) -> None:
+        """Record that the host asked for one turn of the event loop."""
         self.calls.append("process_events")
 
     def quit(self) -> None:
+        """Record the quit request."""
         self.calls.append("quit")
 
     def exit(self) -> None:
+        """Record the shutdown; a test asserts it happens exactly once."""
         self.calls.append("exit")
         self.exits += 1
 

@@ -35,7 +35,16 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class LogRecord:
-    """One written record, as a backend or a subscriber sees it."""
+    """One written record, as a backend or a subscriber sees it.
+
+    Attributes:
+        level: Which of the four levels it was written at.
+        message: The sentence the caller wrote.
+        plugin: The id of the plugin that wrote it.
+        fields: The key/value pairs attached to it.
+        time: When it was written, as a Unix timestamp.
+        correlation: The id that ties it to a job or a request, if any.
+    """
 
     level: LogLevel
     message: str
@@ -55,15 +64,52 @@ class LogRecord:
 class Log(Protocol):
     """Write structured records at one of four levels; watch them arrive."""
 
-    def debug(self, message: str, **fields: Any) -> None: ...
+    def debug(self, message: str, **fields: Any) -> None:
+        """Write a record at the lowest level.
 
-    def info(self, message: str, **fields: Any) -> None: ...
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
+        ...
 
-    def warning(self, message: str, **fields: Any) -> None: ...
+    def info(self, message: str, **fields: Any) -> None:
+        """Write a record at the ordinary level.
 
-    def error(self, message: str, **fields: Any) -> None: ...
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
+        ...
 
-    def subscribe(self, listener: LogListener) -> Callable[[], None]: ...
+    def warning(self, message: str, **fields: Any) -> None:
+        """Write a record at the level a user may need to see.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
+        ...
+
+    def error(self, message: str, **fields: Any) -> None:
+        """Write a record at the level that reports a failure.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
+        ...
+
+    def subscribe(self, listener: LogListener) -> Callable[[], None]:
+        """See every record written from now on.
+
+        Args:
+            listener: What each record is handed to.
+
+        Returns:
+            The callable that removes the listener again.
+        """
+        ...
 
 
 class LogBase:
@@ -85,19 +131,50 @@ class LogBase:
         return self._plugin
 
     def debug(self, message: str, **fields: Any) -> None:
+        """Write a record at the lowest level.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
         self._write("debug", message, fields)
 
     def info(self, message: str, **fields: Any) -> None:
+        """Write a record at the ordinary level.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
         self._write("info", message, fields)
 
     def warning(self, message: str, **fields: Any) -> None:
+        """Write a record at the level a user may need to see.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
         self._write("warning", message, fields)
 
     def error(self, message: str, **fields: Any) -> None:
+        """Write a record at the level that reports a failure.
+
+        Args:
+            message: The sentence to write.
+            **fields: Key/value pairs to attach to it.
+        """
         self._write("error", message, fields)
 
     def subscribe(self, listener: LogListener) -> Callable[[], None]:
-        """See every record written from now on; returns the unsubscribe."""
+        """See every record written from now on; returns the unsubscribe.
+
+        Args:
+            listener: What each record is handed to.
+
+        Returns:
+            The callable that removes the listener again.
+        """
         self._listeners.append(listener)
 
         def unsubscribe() -> None:

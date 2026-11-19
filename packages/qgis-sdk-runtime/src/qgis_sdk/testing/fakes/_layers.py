@@ -19,13 +19,11 @@ from qgis_sdk.testing.rasters import FakeRasters
 from ._algorithms import (
     EMPTY_COLLECTION,
     OtherKindLayers,
-    other_dataset,
-    vector_dataset,
 )
-from ._declarations import OtherLayerDeclaration, VectorLayerDeclaration
+from ._layer_declarations import LayerDeclarations
 
 
-class FakeLayers(OtherKindLayers):
+class FakeLayers(LayerDeclarations, OtherKindLayers):
     """A ``Layers`` backend over datasets declared in the test.
 
     The fake carries an owner scope like every real backend, so a pure test can
@@ -36,6 +34,12 @@ class FakeLayers(OtherKindLayers):
     def __init__(
         self, scope: ResourceScope, *, rasters: FakeRasters | None = None
     ) -> None:
+        """Build the layer fake over one scope.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            rasters: The raster sibling fake, when a test built one.
+        """
         self._scope = scope
         self._datasets: dict[str, dict[str, object]] = {}
         self._layers: dict[str, VectorLayerInfo] = {}
@@ -53,30 +57,12 @@ class FakeLayers(OtherKindLayers):
         self._rasters = rasters
         scope.on_close(self._release)
 
-    def register(self, declaration: VectorLayerDeclaration) -> None:
-        """Declare a vector dataset; ``dataset_path`` models a container URI."""
-        self._datasets[str(declaration.source)] = vector_dataset(declaration)
-
-    def register_layer(self, declaration: OtherLayerDeclaration) -> None:
-        """Declare a mesh, point cloud, vector tile or tiled scene dataset."""
-        self._datasets[str(declaration.source)] = other_dataset(declaration)
-
-    def register_annotation(
-        self, name: str, *, item_count: int = 0, crs: str | None = None
-    ) -> None:
-        """Declare what opening the annotation layer ``name`` answers.
-
-        An annotation layer has no dataset to open, so what a test declares is
-        the layer a project already holds - its items and its CRS - and opening
-        an undeclared name creates an empty one.
-        """
-        AnnotationLayerInfo(id="declared", name=name, item_count=item_count, crs=crs)
-        self._annotations[name] = AnnotationLayerInfo(
-            id="declared", name=name, item_count=item_count, crs=crs
-        )
-
     def open_annotation(self, name: str) -> AnnotationLayerInfo:
-        """Create an annotation layer, empty unless the test declared one."""
+        """Create an annotation layer, empty unless the test declared one.
+
+        Args:
+            name: The dataset path to open.
+        """
         self._scope.ensure_open()
         layer_id = f"layer-{len(self._layers) + len(self._others) + 1}"
         declared = self._annotations.get(name)
@@ -90,7 +76,11 @@ class FakeLayers(OtherKindLayers):
         return info
 
     def open_vector(self, source: Path) -> VectorLayerInfo:
-        """Return a new layer for a declared dataset."""
+        """Return a new layer for a declared dataset.
+
+        Args:
+            source: The dataset to open.
+        """
         self._scope.ensure_open()
         declared = self._datasets.get(str(source))
         if declared is None:
@@ -123,7 +113,11 @@ class FakeLayers(OtherKindLayers):
         return tuple(opened)
 
     def layer(self, layer_id: str) -> LayerInfo:
-        """Return one opened layer, of either kind."""
+        """Return one opened layer, of either kind.
+
+        Args:
+            layer_id: The id the layer was opened under.
+        """
         self._scope.ensure_open()
         if layer_id in self._others:
             return self._others[layer_id]
@@ -132,13 +126,22 @@ class FakeLayers(OtherKindLayers):
         return self._require(layer_id)
 
     def selection(self, layer_id: str) -> tuple[int, ...]:
-        """Return the fake layer's current selection."""
+        """Return the fake layer's current selection.
+
+        Args:
+            layer_id: The layer whose selection is read.
+        """
         self._scope.ensure_open()
         self._require(layer_id)
         return self._selections[layer_id]
 
     def select(self, layer_id: str, feature_ids: Sequence[int]) -> None:
-        """Set the selection; setup, because selection is a host action."""
+        """Set the selection; setup, because selection is a host action.
+
+        Args:
+            layer_id: The layer the selection belongs to.
+            feature_ids: The features to select.
+        """
         self._scope.ensure_open()
         self._require(layer_id)
         self._selections[layer_id] = tuple(feature_ids)
@@ -153,6 +156,11 @@ class FakeLayers(OtherKindLayers):
         declared algorithm output is not); what it exercises is everything
         around the writer - refusal, staging, commit and cleanup - which is the
         contract a workflow depends on.
+
+        Args:
+            layer_id: The layer to export.
+            destination: The file ref to write to.
+            overwrite: Whether an existing file may be replaced.
         """
         self._scope.ensure_open()
         self._require(layer_id)
@@ -211,15 +219,31 @@ class FakeSettings:
         scope: ResourceScope,
         values: Mapping[str, str] | None = None,
     ) -> None:
+        """Build the settings fake over one scope and its starting values.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            values: The values the store starts with.
+        """
         self._scope = scope
         self._values = dict(values or {})
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        """Return the stored value, else the default."""
+        """Return the stored value, else the default.
+
+        Args:
+            key: The setting to read.
+            default: What to answer when it is not set.
+        """
         self._scope.ensure_open()
         return self._values.get(key, default)
 
     def set(self, key: str, value: str) -> None:
-        """Store a value."""
+        """Store a value.
+
+        Args:
+            key: The setting to write.
+            value: The string to store.
+        """
         self._scope.ensure_open()
         self._values[key] = value

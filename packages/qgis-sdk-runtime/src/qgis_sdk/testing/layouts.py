@@ -93,6 +93,14 @@ class FakeLayouts(LayoutService):
         files: Any = None,
         working_directory: Path,
     ) -> None:
+        """Build the layout fake over the collaborators a render needs.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            workers: The worker service the job forms submit through.
+            files: The file authority the destinations are resolved through.
+            working_directory: The directory relative destinations resolve inside.
+        """
         self._scope = scope
         self._directory = Path(working_directory)
         self._layouts: dict[str, LayoutInfo] = {}
@@ -111,7 +119,12 @@ class FakeLayouts(LayoutService):
     # -- what a test declares ---------------------------------------------------
 
     def declare_layout(self, name: str, *, pages: int = 1) -> LayoutInfo:
-        """Declare a layout with ``pages`` pages and no atlas."""
+        """Declare a layout with ``pages`` pages and no atlas.
+
+        Args:
+            name: The layout name the test asks for.
+            pages: How many pages it reports.
+        """
         info = LayoutInfo(id=name, name=name, page_count=pages)
         self._layouts[name] = info
         return info
@@ -124,18 +137,21 @@ class FakeLayouts(LayoutService):
         feature_ids: Sequence[int],
         pages: int = 1,
     ) -> LayoutInfo:
-        """Declare a layout whose atlas covers ``feature_ids`` of ``coverage_layer``."""
+        """Declare a layout whose atlas covers ``feature_ids`` of ``coverage_layer``.
+
+        Args:
+            name: The layout name the test asks for.
+            coverage_layer: The layer whose features drive the pages.
+            feature_ids: The features the atlas writes a page for.
+            pages: How many pages the layout itself holds.
+        """
         if not feature_ids:
             raise ValueError("an atlas covers at least one feature")
         info = LayoutInfo(
             id=name,
             name=name,
             page_count=pages,
-            atlas=AtlasInfo(
-                enabled=True,
-                coverage_layer=coverage_layer,
-                filename_expression="'sheet-' || @atlas_featureid",
-            ),
+            atlas=atlas_of(coverage_layer),
         )
         self._layouts[name] = info
         self._coverage[name] = tuple(int(feature_id) for feature_id in feature_ids)
@@ -282,3 +298,19 @@ def _check_format(format: str, destination: str) -> None:
                 )
             ],
         )
+
+
+def atlas_of(coverage_layer: str) -> AtlasInfo:
+    """The atlas configuration a declared layout carries.
+
+    Args:
+        coverage_layer: The layer whose features drive the pages.
+
+    Returns:
+        An enabled atlas that names each page after its feature id.
+    """
+    return AtlasInfo(
+        enabled=True,
+        coverage_layer=coverage_layer,
+        filename_expression="'sheet-' || @atlas_featureid",
+    )

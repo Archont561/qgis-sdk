@@ -1,185 +1,8 @@
-from collections.abc import Iterable
-from typing import Literal
+"""The remaining job-layer errors: forms, surfaces, the bridge and the network."""
 
-from ._base import QgisSdkError, QgisSdkValidationIssue
+from __future__ import annotations
 
-
-class QgisSdkContractValidationError(QgisSdkError):
-    """A request or result did not satisfy its declared wire contract."""
-
-    code = "contract_validation_failed"
-
-    def __init__(
-        self,
-        direction: Literal["request", "result"],
-        issues: Iterable[QgisSdkValidationIssue],
-    ) -> None:
-        self.direction = direction
-        self.issues = tuple(issues)
-        super().__init__(f"{direction.title()} contract validation failed")
-
-    def as_dict(self) -> dict[str, object]:
-        """Return stable error metadata without raw input or validator internals."""
-        return {
-            "code": self.code,
-            "direction": self.direction,
-            "issues": [issue.as_dict() for issue in self.issues],
-        }
-
-
-class QgisSdkJobCancelledError(QgisSdkError):
-    """Cancellation reached a job at its next suspension point.
-
-    The scheduler throws this into the coroutine so author ``finally`` blocks
-    run; suppressing it lets the work continue, because cancellation is
-    cooperative and never proof that the worker stopped.
-    """
-
-    code = "job_cancelled"
-
-    def __init__(self, job_id: int) -> None:
-        self.job_id = job_id
-        super().__init__(f"Job {job_id} was cancelled at its next suspension point")
-
-
-class QgisSdkJobRejectedError(QgisSdkError):
-    """A job submission was refused before any author code ran.
-
-    ``problems`` name what was wrong with the submission - inputs of the wrong
-    type, most often - without repeating the submitted values.
-    """
-
-    code = "job_rejected"
-
-    def __init__(self, job_id: str, problems: Iterable[str]) -> None:
-        self.job_id = job_id
-        self.problems = tuple(problems)
-        listed = "; ".join(self.problems)
-        super().__init__(f"Job {job_id!r} was refused: {listed}")
-
-
-class QgisSdkJobPrerequisiteError(QgisSdkError):
-    """A job declared with ``ctx.jobs.after(...)`` never started.
-
-    ``ctx.jobs.after(handle)`` orders a job behind work already submitted. The
-    ordering is enforced before the body reaches a worker, so the dependent job
-    fails with this error - naming the prerequisite and how it ended - instead
-    of running against a result that does not exist.
-    """
-
-    code = "job_prerequisite_failed"
-
-    def __init__(
-        self, job_id: str, prerequisite_id: str, prerequisite_status: object
-    ) -> None:
-        self.job_id = job_id
-        self.prerequisite_id = prerequisite_id
-        self.prerequisite_status = str(prerequisite_status)
-        super().__init__(
-            f"Job {job_id!r} waits for {prerequisite_id!r}, which ended "
-            f"{self.prerequisite_status}; its body never ran"
-        )
-
-
-class QgisSdkJobNotSettledError(QgisSdkError):
-    """A result was asked for before the job reached a terminal state."""
-
-    code = "job_not_settled"
-
-    def __init__(self, job_id: str, status: str) -> None:
-        self.job_id = job_id
-        self.status = status
-        super().__init__(f"Job {job_id!r} is still {status}; it has no result yet")
-
-
-class QgisSdkJobWaitRefusedError(QgisSdkError):
-    """A blocking wait for a job was attempted on the GUI thread.
-
-    Waiting there would freeze the thread that delivers the outcome. Subscribe
-    with ``on_success``/``on_failure``/``on_cancelled`` or read the ``result``
-    property after a terminal callback instead.
-    """
-
-    code = "job_wait_refused"
-
-    def __init__(self, job_id: str) -> None:
-        self.job_id = job_id
-        super().__init__(
-            f"Job {job_id!r}: a blocking wait is refused on the GUI thread; "
-            "subscribe to the outcome instead"
-        )
-
-
-class QgisSdkSchedulingBlockedError(QgisSdkError):
-    """The scheduler refused a submission or in-process replacement.
-
-    Work that cannot reach a safe point is named as the blocker: replacing the
-    runtime anyway would delete native resources under a running worker.
-    """
-
-    code = "scheduling_blocked"
-
-    def __init__(self, blockers: Iterable[str]) -> None:
-        self.blockers = tuple(blockers)
-        listed = "; ".join(self.blockers)
-        super().__init__(f"Scheduling is blocked: {listed}")
-
-
-class QgisSdkAlgorithmRejectedError(QgisSdkError):
-    """An algorithm request was refused before it could touch any data.
-
-    ``reasons`` are short statements about what made the request unsafe or
-    ambiguous - an unspecified or geographic working CRS, units that are not
-    metres, a distance that is not positive. They never include the rejected
-    values themselves, so the error can be logged as-is.
-    """
-
-    code = "algorithm_rejected"
-
-    def __init__(self, request: str, reasons: Iterable[str]) -> None:
-        self.request = request
-        self.reasons = tuple(reasons)
-        listed = "; ".join(self.reasons)
-        super().__init__(f"Algorithm request {request!r} was refused: {listed}")
-
-
-class QgisSdkAlgorithmNotFoundError(QgisSdkError):
-    """No algorithm with this id is registered on the host (or in the catalogue)."""
-
-    code = "algorithm_not_found"
-
-    def __init__(self, algorithm_id: str) -> None:
-        self.algorithm_id = algorithm_id
-        super().__init__(f"Algorithm {algorithm_id!r} is not registered")
-
-
-class QgisSdkAlgorithmFailedError(QgisSdkError):
-    """Processing ran the algorithm and it failed.
-
-    ``detail`` describes the failure. SDK-owned staging is cleaned up on a
-    best-effort basis; external provider side effects cannot be rolled back.
-    """
-
-    code = "algorithm_failed"
-
-    def __init__(self, algorithm_id: str, detail: str) -> None:
-        self.algorithm_id = algorithm_id
-        self.detail = detail
-        super().__init__(f"Algorithm {algorithm_id!r} failed: {detail}")
-
-
-class QgisSdkAlgorithmCancelledError(QgisSdkError):
-    """Cancellation was observed at an algorithm phase boundary.
-
-    Cancellation is cooperative: this says the request was not run (or its
-    result was not accepted), never that a native operation stopped mid-flight.
-    """
-
-    code = "algorithm_cancelled"
-
-    def __init__(self, algorithm_id: str) -> None:
-        self.algorithm_id = algorithm_id
-        super().__init__(f"Algorithm {algorithm_id!r} was cancelled")
+from ._base import QgisSdkError
 
 
 class QgisSdkFormError(QgisSdkError):
@@ -303,6 +126,11 @@ class QgisSdkNetworkError(QgisSdkError):
     Every subclass carries the request's ``method`` and ``url`` so a log line
     says what failed; the URL never contains credentials, because the client
     refuses user-info in URLs before a transport is touched.
+
+    Args:
+        message: What went wrong, without repeating the request.
+        method: The HTTP method of the request that failed.
+        url: The URL it was sent to, never with credentials.
     """
 
     code = "network_error"
@@ -333,7 +161,13 @@ class QgisSdkConnectionError(QgisSdkNetworkError):
 
 
 class QgisSdkRequestTimeoutError(QgisSdkNetworkError):
-    """No complete response within the request's timeout."""
+    """No complete response within the request's timeout.
+
+    Args:
+        timeout_seconds: The limit that expired, in seconds.
+        method: The HTTP method of the request that timed out.
+        url: The URL it was sent to.
+    """
 
     code = "request_timeout"
 

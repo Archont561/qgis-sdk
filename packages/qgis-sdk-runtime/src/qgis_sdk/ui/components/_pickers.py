@@ -68,6 +68,10 @@ class LayerPicker(_Picker):
     project is consulted first so the picker matches the tree's order, and a
     layer the project holds but the layer service no longer knows is skipped
     rather than listed as a dead id.
+
+    Args:
+        name: The handler parameter this input fills.
+        **options: ``kind``, ``label``, ``value`` and ``required``.
     """
 
     kind = "layer"
@@ -139,6 +143,10 @@ class FieldPicker(_Picker):
 
     ``of`` is the :class:`LayerPicker` to follow: when its layer changes the
     field list is re-read and a field the new layer lacks is dropped.
+
+    Args:
+        name: The handler parameter this input fills.
+        **options: ``of``, ``label``, ``value`` and ``required``.
     """
 
     kind = "field"
@@ -197,7 +205,14 @@ class FieldPicker(_Picker):
 
 
 class CrsPicker(Input):
-    """A coordinate reference system; the value is its authority id (``EPSG:4326``) or ``None``."""
+    """A coordinate reference system; the value is its authority id (``EPSG:4326``) or ``None``.
+
+    Args:
+        name: The handler parameter this input fills.
+        label: The text shown for it, or ``None`` for none.
+        value: The value it starts with.
+        required: Whether a form refuses to submit it empty.
+    """
 
     kind = "crs"
 

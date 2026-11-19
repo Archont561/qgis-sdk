@@ -22,7 +22,11 @@ _SNAPSHOT = Path(__file__).with_name("catalogue.json")
 
 @cache
 def load_catalogue(path: Path) -> Catalogue:
-    """Parse one ``catalogue.json`` once per path."""
+    """Parse one ``catalogue.json`` once per path.
+
+    Args:
+        path: The ``catalogue.json`` to parse.
+    """
     return Catalogue.from_json(Path(path).read_text(encoding="utf-8"))
 
 

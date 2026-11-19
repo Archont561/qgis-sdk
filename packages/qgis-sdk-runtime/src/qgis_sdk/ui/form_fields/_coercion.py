@@ -9,7 +9,11 @@ from ._number_state import CcReturn, CcState, cc_number_p1, cc_number_p2, cc_num
 
 
 def label_for(name: str) -> str:
-    """Render a field name as a form label: ``buffer_distance`` -> ``Buffer distance``."""
+    """Render a field name as a form label: ``buffer_distance`` -> ``Buffer distance``.
+
+    Args:
+        name: The field name to render.
+    """
     return name.replace("_", " ").strip().capitalize()
 
 
@@ -22,12 +26,23 @@ def coerce_value(spec: FieldSpec, value: object, *, owner: str = "form") -> obje
     This is the rule behind :func:`coerce_values` and behind every catalogue
     component's ``set_value`` (:mod:`qgis_sdk.ui.components`), so a value a
     form refuses is a value the component refuses, with the same words.
+
+    Args:
+        spec: The field specification to convert against.
+        value: The value to convert.
+        owner: What the value belongs to, for the refusal.
     """
     return coerce(owner, spec, value)
 
 
 def coerce(owner: str, spec: FieldSpec, value: object) -> object:
-    """Convert one submitted value, or refuse it with the expected type."""
+    """Convert one submitted value, or refuse it with the expected type.
+
+    Args:
+        owner: What the value belongs to, for the refusal.
+        spec: The field specification to convert against.
+        value: The value to convert.
+    """
     if value is None and spec.nullable:
         return None
     converter = _CONVERTERS.get(spec.widget)
@@ -81,7 +96,13 @@ def _ref(owner: str, spec: FieldSpec, value: object) -> FileRef:
 
 
 def number(owner: str, spec: FieldSpec, value: object) -> object:
-    """Coerce a numeric field, keeping ``int`` and ``float`` distinct."""
+    """Coerce a numeric field, keeping ``int`` and ``float`` distinct.
+
+    Args:
+        owner: What the value belongs to, for the refusal.
+        spec: The field specification to convert against.
+        value: The value to convert.
+    """
     _s = CcState(owner=owner, spec=spec, value=value)
     for _p in (cc_number_p1, cc_number_p2, cc_number_p3):
         _r = _p(_s)
@@ -91,7 +112,11 @@ def number(owner: str, spec: FieldSpec, value: object) -> object:
 
 
 def as_number(spec: FieldSpec) -> FieldSpec:
-    """A range stores an int or a float; coerce as the stored type says."""
+    """A range stores an int or a float; coerce as the stored type says.
+
+    Args:
+        spec: The field specification to read the range from.
+    """
     integral = all(
         isinstance(spec.details.get(key), int) for key in ("minimum", "maximum")
     )
@@ -105,7 +130,13 @@ def as_number(spec: FieldSpec) -> FieldSpec:
 
 
 def refuse(owner: str, spec: FieldSpec, expected: str) -> QgisSdkFormError:
-    """Build the one error shape every coercion failure uses."""
+    """Build the one error shape every coercion failure uses.
+
+    Args:
+        owner: What the value belongs to.
+        spec: The field specification that refused it.
+        expected: What the field expected instead.
+    """
     return QgisSdkFormError(f"{owner}: field {spec.name} expects {expected}")
 
 
