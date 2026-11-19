@@ -8,11 +8,17 @@
  * allowed only with a recorded reason. These tests pin each arm.
  */
 import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	type Budget,
 	checkRatchet,
+	loadBudget,
 	parseBudget,
 	type RatchetPage,
+	ratchetProblems,
+	readPages,
 } from "../scripts/lib/ratchet";
 
 function page(
@@ -161,5 +167,78 @@ describe("parseBudget", () => {
 		expect(() =>
 			parseBudget(JSON.stringify({ pages: { "a.mdx": { words: -1 } } })),
 		).toThrow("no word count");
+	});
+});
+
+describe("the corpus readers", () => {
+	async function corpus(files: Record<string, string>): Promise<string> {
+		const dir = await mkdtemp(join(tmpdir(), "ratchet-"));
+		for (const [name, content] of Object.entries(files)) {
+			const path = join(dir, name);
+			await mkdir(join(path, ".."), { recursive: true });
+			await writeFile(path, content, "utf8");
+		}
+		return dir;
+	}
+
+	test("readPages reads the kind and the prose count, skipping the reference", async () => {
+		const dir = await corpus({
+			"python/a.mdx": '---\ntitle: "A"\nkind: how-to\n---\nTwo words here.\n',
+			"b.md": "---\ntitle: B\n---\nNo kind declared.\n",
+			"reference/python/c.mdx":
+				"---\ntitle: C\nkind: reference\n---\nIgnored.\n",
+		});
+		const pages = await readPages(dir);
+		expect(pages).toHaveLength(2);
+		const a = pages.find((p) => p.source === "python/a.mdx");
+		expect(a?.kind).toBe("how-to");
+		expect(a?.words).toBe(3);
+		const b = pages.find((p) => p.source === "b.md");
+		expect(b?.kind).toBeNull();
+	});
+
+	test("readPages reads a quoted kind", async () => {
+		const dir = await corpus({
+			"a.mdx": '---\ntitle: "A"\nkind: "tutorial"\n---\nOne.\n',
+		});
+		const pages = await readPages(dir);
+		expect(pages[0]?.kind).toBe("tutorial");
+	});
+
+	test("loadBudget reads the committed budget", async () => {
+		const dir = await corpus({
+			"prose-budget.json": JSON.stringify({
+				version: 1,
+				pages: { "a.mdx": { words: 3 } },
+			}),
+		});
+		const budget = await loadBudget(join(dir, "prose-budget.json"));
+		expect(budget.pages["a.mdx"]).toEqual({ words: 3 });
+	});
+
+	test("ratchetProblems is clean when the corpus holds its budget", async () => {
+		const dir = await corpus({
+			"a.mdx": '---\ntitle: "A"\nkind: tutorial\n---\nOne two three.\n',
+			"prose-budget.json": JSON.stringify({
+				version: 1,
+				pages: { "a.mdx": { words: 3 } },
+			}),
+		});
+		expect(await ratchetProblems(dir, join(dir, "prose-budget.json"))).toEqual(
+			[],
+		);
+	});
+
+	test("ratchetProblems reports a page that grew", async () => {
+		const dir = await corpus({
+			"a.mdx": '---\ntitle: "A"\nkind: tutorial\n---\nOne two three four.\n',
+			"prose-budget.json": JSON.stringify({
+				version: 1,
+				pages: { "a.mdx": { words: 3 } },
+			}),
+		});
+		const problems = await ratchetProblems(dir, join(dir, "prose-budget.json"));
+		expect(problems).toHaveLength(1);
+		expect(problems[0]?.message).toContain("grew to 4");
 	});
 });
