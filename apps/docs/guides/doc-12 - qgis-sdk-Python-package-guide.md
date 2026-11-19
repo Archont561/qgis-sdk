@@ -990,11 +990,11 @@ agents read and the tests that drive a window find widgets by `objectName`.
 
 ## Desktop bindings and native surfaces
 
-A plugin reaches QGIS Desktop through bindings and registered native surfaces.
-A binding places an action or surface on the toolbar, under a menu or behind a
-shortcut; a surface is a `Dialog` or `Dock` subclass. `@app.surface` registers
-and returns the original class, so it stacks with bindings in either order.
-For a class declared in another module, `app.add_surface(TheSurface)` also works.
+A plugin reaches QGIS Desktop through bindings and registered native surfaces: a
+binding places an action or surface on the toolbar, under a menu or behind a
+shortcut, and a surface is a `Dialog` or `Dock` subclass. `@app.surface` registers
+and returns the class, so it stacks with bindings either way, and
+`app.add_surface(TheSurface)` registers one declared elsewhere.
 
 ```python
 from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
@@ -1029,42 +1029,31 @@ def open_buffer(ctx: PluginContext) -> None:
 def buffer(ctx: PluginContext, layer_id: str, distance: float) -> str: ...
 ```
 
-`@toolbar`, `@menu` and `@shortcut` stack with `@app.action` in either order
-or apply to a surface class. `describe_bindings(app)` and
-`describe(app).bindings` report placements and registered surfaces; an action's
-own `describe()` reports its stacked bindings. Bindings are not serialized into
-the bridge contract. Icon paths are relative to the package's `icons/` directory.
+`@toolbar`, `@menu` and `@shortcut` stack with `@app.action` in either order, or
+apply to a surface class. `describe_bindings(app)` reports placements and
+registered surfaces; bindings are not serialized into the bridge contract, and
+icon paths are relative to `icons/`.
 
-**The trigger rule.** A placed action for a *surface* opens it. A placed
-action for an *action* calls the handler with no arguments; an action that
-takes inputs cannot be run from a button, so `qgis-sdk check` reports it as
-`UI003` and the Desktop warns in the message bar instead of guessing. Give it
-a surface that collects the inputs and calls `self.ctx.actions.<id>(...)`, as
-`BufferDialog` does above. A handler that raises a `QgisSdkError` is reported
-in the bar and re-raised; one that returns a `JobHandle` (an action that
-submits a job and returns its handle) gets a progress widget in the bar and a
-"finished"/"failed" message when the job settles - the handler itself stays on
-the GUI thread, so offload the work with a `@job` and return the handle rather
-than blocking the button.
+**The trigger rule.** A placed action for a *surface* opens it; for an *action*
+it calls the handler with no arguments, so an action taking inputs cannot run from
+a button - `qgis-sdk check` reports `UI003` and the Desktop warns in the message
+bar. Give it a surface that collects the inputs and calls
+`self.ctx.actions.<id>(...)`. A handler that raises a `QgisSdkError` is reported
+and re-raised; one that returns a `JobHandle` gets a progress widget and a
+"finished"/"failed" message, while the handler itself stays on the GUI thread -
+offload with a `@job` rather than blocking the button.
 
-**Lifetimes.** A `Dialog` is a fresh instance per opening: the host
-constructs it, binds `self.ctx` (a `UiContext`) and `self.initial` on the
-instance, calls `build()`, shows the window parented to the QGIS main window,
-and on close calls `on_close()`, closes the view's scope (jobs, timers and
-network it owned) and deletes the widget. A `Dock` is one instance per
-running plugin, created lazily, placed with `iface.addDockWidget` in its
-`area`; its binding is a checkable toggle, its visibility is written to
-`ctx.settings` under `ui.<surface id>.visible` and restored on the next start,
-and `unload` removes it. `self.ctx.view.request_close()` closes a dialog or
-hides a dock.
+**Lifetimes.** A `Dialog` is a fresh instance per opening: the host binds
+`self.ctx` and `self.initial`, calls `build()`, shows the window parented to the
+main window, and on close calls `on_close()`, closes the view's scope and deletes
+it. A `Dock` is one instance per plugin, created lazily and placed with
+`iface.addDockWidget`; its visibility persists in `ui.<surface id>.visible`.
+`self.ctx.view.request_close()` closes a dialog or hides a dock.
 
 **Surface-first: services without actions.** A plugin can consist entirely of
-registered surfaces; an action is not needed just to open a dialog or use an
-SDK service. A view's `UiContext` exposes `algorithms`, `styles`, `desktop`
-and `ui` when its host supplies them, in addition to `layers`, `project`,
-`files`, `settings`, `network` and `log`. `ctx.ui.open(...)` opens another
-registered surface, and `ctx.desktop.iface` is the native QGIS escape hatch,
-not a portable or sandboxed interface. For example:
+registered surfaces: opening a dialog needs no action. A view's `UiContext`
+carries what its host supplied (see *Desktop host* above), and
+`ctx.desktop.iface` is the native escape hatch:
 
 ```python
 from qgis_sdk import QgisSdkPlugin, menu
@@ -1087,51 +1076,39 @@ class Tools(Dialog):
         self.ctx.ui.open(Details, initial={"algorithm": algorithm.id})
 ```
 
-The Desktop host shares the plugin's service instances with each view, not
-copies. `ctx.has(name)` probes availability; reading an absent capability raises
-`QgisSdkUnsupportedCapabilityError` and reading through a closed view context
-raises `QgisSdkScopeClosedError`. Services retained before the view closes
-still have their own plugin-level lifetime: do not use a retained service or
-schedule callbacks on behalf of a closed view. Opening a second dialog creates
-its own view scope, which does not close just because the first dialog closes.
-Surface handlers and direct algorithm calls are synchronous, usually on the GUI
-thread; `UiContext` does not automatically offload work. Provider registration
-and worker ownership are not exposed by this extension. `fake_ui_context`
-accepts the same capabilities as keyword arguments for pure surface tests.
+The host shares the plugin's service instances with each view rather than
+copying them. `ctx.has(name)` probes availability; an absent capability raises
+`QgisSdkUnsupportedCapabilityError`, a closed view context
+`QgisSdkScopeClosedError`. A service retained before the view closed keeps its
+plugin-level lifetime, so never use it for that view. Handlers and direct
+algorithm calls are synchronous on the GUI thread, so `UiContext` offloads
+nothing. `fake_ui_context` takes the same capabilities as keywords.
 
-**`ctx.ui.open` and `UiContext.actions`.** From an action,
-`ctx.ui.open(Surface, initial={...})` opens a registered surface (an
-unlisted class is refused by name); outside QGIS Desktop the `ui` service is
-absent and `ctx.ui` raises `QgisSdkUnsupportedCapabilityError` naming it.
-Inside a surface, `self.ctx.actions.<id>(**values)` (or
-`self.ctx.actions.call("<id>", **values)`) dispatches the plugin's own action
-through the same validated path a bridge call takes - unknown ids and fields
-refused by name, values coerced with the form rules - with the *view's*
-authority: while that action still runs from this view (a plain handler, or
-a job whose handle has not settled) a second call from the same view is
-refused, so a double-click cannot submit twice. `ctx.actions.ids` and
-`ctx.actions.running("<id>")` are the introspection.
+**`ctx.ui.open` and `UiContext.actions`.** `ctx.ui.open(Surface, initial={...})`
+opens a registered surface (an unlisted class is refused by name), and outside
+QGIS Desktop the absent `ui` service makes `ctx.ui` raise
+`QgisSdkUnsupportedCapabilityError`. Inside a surface, `self.ctx.actions.<id>(**values)`
+dispatches the plugin's own action as a bridge call does - unknown ids and fields
+refused by name, values coerced - with the *view's* authority: a second call while
+that action still runs from the view is refused, so a double-click cannot submit
+twice. `ctx.actions.ids` and `ctx.actions.running("<id>")` are the introspection.
 
-**Testing without QGIS.** `qgis_sdk.testing.FakeUi(scope,
-app=app)` stands in for the service: `ctx.ui.open(...)` records an
-`OpenedSurface` (`surface`, `initial`, `id`) instead of building anything,
-and `FakeViewControl` records `request_close`. `qgis-sdk new --ui native`
-writes this shape with a passing starter test; `qgis-sdk check` adds `UI002`,
-`UI003`, `UI004` and `ICON001` (a `@toolbar` icon that is not a file under
-`<package>/icons/`). `build()` may return plain PyQt, one catalogue component
-or nothing at all when `ui = "file.ui"` names a Designer form; *Wiring*,
-*Containers, feedback, buttons and `Custom`* and *Testing surfaces without
-QGIS* below are the rest of the picture.
+**Testing without QGIS.** `FakeUi(scope, app=app)` stands in for the service:
+`ctx.ui.open(...)` records an `OpenedSurface` (`surface`, `initial`, `id`) and
+`FakeViewControl` records `request_close`. `qgis-sdk new --ui native` writes this
+shape with a passing starter test, and `qgis-sdk check` adds `UI002`-`UI004` and
+`ICON001` (an icon that is not a file under `<package>/icons/`). `build()` may
+return plain PyQt, one component, or nothing when `ui = "file.ui"` names a
+Designer form.
 
 ### Input components
 
 `qgis_sdk.ui` ships the eleven input components of the catalogue
-(decision-55 point 3). Each is *state first, widget second*: it holds a
-model value without Qt - a layer id, a field name, a CRS authority id, a
-`FileRef`, a number, a `str`, a `bool`, a colour string - and `mount()`
-builds the QGIS widget that mirrors it. Importing `qgis_sdk.ui` loads no
-Qt; the Qt half lives in `qgis_sdk.adapters.qgis.components` and is looked
-up by name when a component is mounted.
+(decision-55 point 3). Each is *state first, widget second*: it holds a model
+value without Qt - a layer id, a field name, a CRS authority id, a `FileRef`, a
+number, a `str`, a `bool`, a colour string - and `mount()` builds the QGIS widget
+that mirrors it. Importing `qgis_sdk.ui` loads no Qt; the Qt half lives in
+`qgis_sdk.adapters.qgis.components` and is looked up by name at mount.
 
 | Component | Value | Native widget |
 |---|---|---|
@@ -1148,25 +1125,19 @@ up by name when a component is mounted.
 | `Colour(name, alpha=True)` | `#rrggbbaa` (`#rrggbb` when `alpha=False`) | `QgsColorButton` |
 
 Every component has `name` (the handler's parameter name), `label`,
-`object_name` (`form/<name>`, set on the widget so a test or an agent
-selects it by path), `value()`, `set_value(value)`, `changed(listener)`
-returning the unsubscribe, `refresh()`, `snapshot()` (the semantic node of
-decision-51: `type`, `name`, `label`, `objectName`, `kind`, `value` and the
-component's details such as `minimum`/`maximum`, `options`, `filters`, `of`)
-and `spec` (the `FieldSpec` it validates with). `set_value` refuses what a
-declared form refuses, with the same words (`QgisSdkFormError` from
-`qgis_sdk.ui.coerce_value`), and a refused value changes nothing. Pickers
-add `options()` -> `(Option(id, label), ...)`; a `LayerPicker` refuses an id
-the project does not hold and a `FieldPicker` a name its layer lacks.
+`object_name` (`form/<name>`, so a test or agent selects it by path),
+`value()`/`set_value(value)`, `changed(listener)` returning the unsubscribe,
+`refresh()`, `snapshot()` (the semantic node of decision-51) and `spec`, the
+`FieldSpec` it validates with. `set_value` refuses what a declared form refuses,
+in the same words (`QgisSdkFormError` from `qgis_sdk.ui.coerce_value`), and
+changes nothing when it does; pickers add `options()`.
 
-**Attach, then mount.** `component.attach(self.ctx)` binds it to the
-surface's `UiContext` (once; a second context is refused): pickers list from
-`ctx.project`/`ctx.layers`, `FileInput`/`DirectoryInput` mint through
-`ctx.files`, and when the context's scope closes every listener is dropped
-and the widget disconnected. `mount(parent=None)` builds the widget and
-returns it (`.widget` afterwards; idempotent); without QGIS it refuses by
-name. When `build()` returns a component the host attaches and mounts it
-for you:
+**Attach, then mount.** `component.attach(self.ctx)` binds it to the surface's
+`UiContext` once, refusing a second: pickers list from `ctx.project`/`ctx.layers`,
+file inputs mint through `ctx.files`, and a closing scope drops every listener.
+`mount(parent=None)` builds and returns the widget (idempotent, `.widget`
+afterwards) and refuses by name without QGIS. When `build()` returns a component
+the host attaches and mounts it:
 
 ```python
 from qgis_sdk.ui import Dialog, LayerPicker
@@ -1180,37 +1151,26 @@ class PickLayer(Dialog):
 ```
 
 `Input` is the base of the eleven; `Component` above it is what `Button`,
-`Column` and `Form` share (`attach` reaches every child, `dispose` disposes
-them). Every input accepts `required=`; `Form` sets it from the schema. To
-compose components, return a `Column(name, [form, button])` from `build()`
-or `mount(parent)` each into a layout of your own.
+`Column` and `Form` share. Every input accepts `required=`, which `Form` sets from
+the schema; to compose, return a `Column(name, [form, button])` from `build()`.
 
-**Files.** `FileInput.set_path(path)` / `DirectoryInput.set_path(path)` mint
-a `FileRef` through `ctx.files` and make it the value - this is what the
-native file widget does when the user picks - so a handler receives a ref,
-never a path (decision-20), and `ctx.files.resolve(ref)` is how it reaches
-the file (see *`ctx.files`* below). `set_value(ref)` accepts a ref `ctx.files`
-can resolve and refuses a stranger; `path()` is the resolved path of the
-current ref.
+**Files.** `FileInput.set_path(path)` and `DirectoryInput.set_path(path)` mint a
+`FileRef` through `ctx.files`, as the native widget does when the user picks, so a
+handler receives a ref and never a path (decision-20). `set_value(ref)` accepts
+only a ref `ctx.files` can resolve, and `path()` is the current ref's path.
 
-**Under the fake.** A pure test attaches a component to a `UiContext` built
-over `FakeLayers`/`FakeProject`/`FakeFiles` and never mounts it; the same
-contract tests the runtime runs natively (`tests/ui_component_contract.py`)
-pass against that state. `LayerPicker.refresh()` re-reads the project under
-the fake (natively `QgsMapLayerComboBox` follows the project on its own), and
-every kind filters the same list, so `kind="mesh"` offers the meshes the fake
-holds and `kind="any"` offers all seven. Note the names `FileInput`, `DirectoryInput` and
-`Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
-handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
-surface shows); import the one you mean, or alias.
+**Under the fake.** A pure test attaches a component to a `UiContext` over
+`FakeLayers`/`FakeProject`/`FakeFiles` and never mounts it, and the contract the
+runtime tests natively (`tests/ui_component_contract.py`) passes against that
+state. `FileInput`, `DirectoryInput` and `Colour` are both markers in
+`qgis_sdk.models` and components in `qgis_sdk.ui`.
 
 ### Wiring: `@on`, `@subscribe`, `ctx.on`
 
 A surface's methods are connected to its widgets *after* `build()` and
-disconnected when the window goes, by the host under QGIS and by
-`build_surface` under the fake (decision-55 point 2). Nothing is connected
-by hand and nothing is wrapped: the decorators mark the method and add `describe()`, so a
-test calls it directly.
+disconnected when the window goes, by the host under QGIS and by `build_surface`
+under the fake (decision-55 point 2). Nothing is connected by hand: the decorators
+mark the method and add `describe()`, so a test calls it directly.
 
 ```python
 from qgis_sdk.ui import Column, Dialog, Distance, LogView, RunButton, StreamEvent, on, subscribe
@@ -1233,47 +1193,39 @@ class Buffer(Dialog):
     def progress(self, event: StreamEvent) -> None: ...
 ```
 
-**`@on(name).<signal>`** names a component or widget by the `name` it was
-built with (`"distance"`, which is `form/distance` on the Qt side; a bare
-`objectName` of a hand-built or Designer widget also works) and one of the
-catalogue's listener names: `changed`, `clicked`, `toggled`, `edited`,
-`selected`, `accepted`, `cancelled`, `finished`. On a component the
-listener is used (`Component.changed(...)`, `RunButton.finished(...)`); on
-a plain widget the matching Qt signal is (`valueChanged`, `textChanged`,
-`toggled`, `clicked`, ...). An unknown listener name is an `AttributeError`
-at class creation. **`@on(name, "signal")`** connects a Qt signal by its
-own name. Both pass as many positional arguments as the method declares,
-so `def go(self)` on a `clicked(bool)` signal is fine. A name `build()` did
-not produce, or a widget without that signal, is refused when the surface
-opens, naming both; `qgis-sdk check` reports the Designer-file case
-statically as `UI002`.
+**`@on(name).<signal>`** names a component or widget by the `name` it was built
+with (`"distance"`, which is `form/distance` on the Qt side; a bare `objectName`
+of a hand-built or Designer widget also works) and one catalogue listener:
+`changed`, `clicked`, `toggled`, `edited`, `selected`, `accepted`, `cancelled`,
+`finished`. On a component the listener is used, on a plain widget the matching Qt
+signal is; an unknown listener name is an `AttributeError` at class creation.
+**`@on(name, "signal")`** connects a Qt signal by its own name, and both pass as
+many positional arguments as the method declares. A name `build()` did not
+produce, or a widget without that signal, is refused when the surface opens;
+`qgis-sdk check` reports the Designer-file case as `UI002`.
 
 **`@subscribe(stream, **request)`** subscribes the method to one of the
-application's `@app.stream` functions for the view's lifetime with the request
-validated the way a page's subscribe is (unknown or ill-typed arguments
-refused by name). The method receives a `StreamEvent(stream, kind,
-payload, echo, terminal)`: `kind` is the declared event kind, `"complete"`
-or `"error"`; `echo` is `True` when the event was caused by this view's own
-`ctx.actions` call (a synchronous push during the call - a pull iterator
-never echoes), so a panel can ignore what it just did. Events reach the
-method on the GUI thread only: a push from another thread waits for the
-host's pump (every 50 ms while something is pending; nothing runs once the
-view's scope closed). **`ctx.on(stream, callback, **request)`** is the
-imperative form and returns the `ViewSubscription` (`open`, `pending`,
-`dispose()`); `ctx.streams.open` lists the view's live subscriptions. Closing the window closes every subscription and asks a
-`PushSource` to `close()`.
+application's `@app.stream` functions for the view's lifetime, validating the
+request as a page's subscribe does. The method receives a
+`StreamEvent(stream, kind, payload, echo, terminal)`: `kind` is the declared kind,
+`"complete"` or `"error"`; `echo` is `True` when this view's own `ctx.actions`
+call caused the event (a pull iterator never echoes), so a panel can ignore what
+it just did. Events arrive on the GUI thread only, a cross-thread push waiting for
+the host's pump (every 50 ms while something is pending). **`ctx.on(stream,
+callback, **request)`** is the imperative form and returns the `ViewSubscription`
+(`open`, `pending`, `dispose()`); closing the window closes every subscription and
+asks a `PushSource` to `close()`.
 
-**Hooks.** `on_accept()` is what the Accept button of a `HasAcceptCancel`
-surface runs (returning `False` keeps the window open); `on_close()` runs
-once the window closes, before the view's scope disposes.
+**Hooks.** `on_accept()` is what the Accept button of a `HasAcceptCancel` surface
+runs (returning `False` keeps the window open); `on_close()` runs once the window
+closes, before the view's scope disposes.
 
 ### The declarative form: components as class attributes
 
-A surface whose tree does not depend on `ctx` can skip `build()` and the
-names altogether. A component assigned to a class attribute takes the
-attribute's name; the default `build()` returns the declared components no
-other declared component contains (one root as it is, several stacked in a
-`Column` named after the class); `@on` accepts the component itself:
+A surface whose tree does not depend on `ctx` can skip `build()` and the names
+altogether: a component assigned to a class attribute takes the attribute's name,
+the default `build()` returns the declared components no other declared component
+contains, and `@on` accepts the component itself.
 
 ```python
 from qgis_sdk.ui import Button, Dock, Group, LogView, ResultTable, Row, RunButton, on
@@ -1296,52 +1248,39 @@ class ResultsDock(Dock, area="right"):
         self.results.set_rows([])
 ```
 
-The class attributes are prototypes. Every opening gets its own deep copy
-of the whole set before `build()` - the host and `build_surface` both do
-this - so `self.results` in a method is that window's table, two docks never
-share a listener or a widget, and a `RunButton(progress=progress)` on the
-instance points at the instance's `JobProgress`. Shared state belongs on
-the plugin, not on a component. A `Custom` declared this way needs a
-factory (a widget instance cannot be copied; the refusal names the
-attribute). Every catalogue class takes its arguments by keyword for this
+The class attributes are prototypes: every opening gets its own deep copy before
+`build()`, by the host and `build_surface` alike, so `self.results` is that
+window's table, two docks never share a listener, and
+`RunButton(progress=progress)` points at the instance's own `JobProgress`. Shared
+state belongs on the plugin. A declarative `Custom` needs a factory, since a widget
+instance cannot be copied. Every catalogue class therefore takes keywords
 (`Row([a, b])`, `Group([...], label=)`, `RunButton(action_id=)`,
-`Button(text=)`, `ResultTable(columns=)`, `Custom(widget=)`); the
-positional `Name("name", ...)` forms are unchanged, and an explicit name
-wins over the attribute's. A component without a name refuses to attach or
-snapshot and says what to do.
+`Button(text=)`, `ResultTable(columns=)`, `Custom(widget=)`), the positional
+`Name("name", ...)` forms still work, and an explicit name wins over the
+attribute's; a component without a name refuses to attach or snapshot.
 
-A `Form` takes declared inputs too: `Form([value, note], action_id="ping")`
-in the class body keys its fields by name the first time anything asks
-(`fields`, `values()`, `attach`) - by then the inputs have their attribute
-names - and refuses two of one name then. The form's copy holds the
-window's copies of the inputs, and a field's change reaches the window's
-form, not the prototype. `Form.for_action` still needs `ctx` and so a
-`build()`; `Form.from_schema(schema)` can be declared.
+A `Form` takes declared inputs too: `Form([value, note], action_id="ping")` in
+the class body keys its fields by name the first time anything asks (`fields`,
+`values()`, `attach`) and refuses two of one name then. `initial` reaches every
+declared `Input` at any depth whose name it holds, and refuses a key no declared
+input carries (`PingDialog has no input 'typo'; it has: ...`); an author's own
+`build()` reads `self.initial` as it pleases. `Form.for_action` still needs `ctx`
+and so a `build()`, while `Form.from_schema(schema)` can be declared.
 
-`initial` reaches the declared inputs by name: the default `build()` sets
-every declared `Input` (at any depth - inside a declared `Form`, `Group` or
-`Row` too) whose name is a key of `self.initial`, and refuses a key no
-declared input carries (`PingDialog has no input 'typo'; it has: ...`), the
-way `Form.for_action(initial=)` does. An author's `build()` reads
-`self.initial` as it pleases, as before.
+A snapshot node of a declared component carries `"attribute"` - the class
+attribute it came from - next to `"name"`, which is what an agent reading the
+snapshot back can address in the source.
 
-A snapshot node of a declared component carries `"attribute"`, the class
-attribute it came from, next to `"name"` - the two differ only when the
-name was given explicitly (`explicit = Button("named")`) - which is what an
-agent that reads the snapshot back can address in the source.
-
-`@on(component)` on a component the class does not declare is refused when
-the surface opens unless `build()` placed that very object in the tree.
-`qgis-sdk check` reads the declarative form as far as the source shows it
-(`UI005`): an `@on(attribute)` whose attribute is a string or a number, or a
-bare name the class never binds, and a `Custom` declared with a widget
-built at class definition (`Custom(widget=QLabel(...))`); a call it cannot
-see into (`helper = make_button()`) and a module-level name are left to the
-host, and a module-level `NAME = "..."` constant resolves for `UI002`.
-Mixing is fine: an author's `build()` sees the copies
-(`Column("root", [self.note, ...])`), and `BufferDialog` in the example
-keeps `build()` because `Form.for_action` needs `ctx`, while `ResultsDock`
-and the scaffold's `PingDialog` are declared.
+`@on(component)` on a component the class does not declare is refused when the
+surface opens unless `build()` placed that very object in the tree. `qgis-sdk
+check` reads the declarative form as far as the source shows it (`UI005`): an
+`@on(attribute)` whose attribute is a string or a number, or a bare name the class
+never binds, and a `Custom` declared with a widget built at class definition; a
+call it cannot see into (`helper = make_button()`) is left to the host, and a
+module-level `NAME = "..."` constant resolves for `UI002`. Mixing is fine: an
+author's `build()` sees the copies, `BufferDialog` keeps `build()` because
+`Form.for_action` needs `ctx`, and `ResultsDock` and the scaffold's `PingDialog`
+are declared.
 
 ### Containers, feedback, buttons and `Custom`
 
@@ -1362,17 +1301,16 @@ state and a semantic `snapshot()`, mounted as QGIS widgets by the host:
 | `ResultTable(name, columns)` | rows of mappings under `columns` (keys or `(key, heading)`): `set_rows`, `rows()`, `cells()`, `select(i)`, `selected()`, `selected_row()`, `changed` | `QTableWidget`, `feedback/<name>` |
 | `Custom(name, widget_or_factory)` | any `QWidget` you built, or a zero-argument factory called at mount | the widget itself, `custom/<name>` |
 
-`Container.find(name)` reaches a descendant by name; `attach(ctx)` and
+`Container.find(name)` reaches a descendant by name, and `attach(ctx)` and
 `dispose()` walk the children. `ui_snapshot(widget_or_component)` (decision-51)
-lists the semantic nodes of a mounted tree or of an unmounted component tree,
-so an agent and a pure test read the same structure.
+lists the semantic nodes of a mounted or unmounted tree, so an agent and a pure
+test read the same structure.
 
-**The widget form.** A plain class - typically a `QWidget` subclass you
-already have - with `kind = "dialog"` or `kind = "dock"` and a constructor
-taking the `UiContext` is accepted in `surfaces` as it is; the host shows the
-instance, binds `initial` when it can and calls `on_close()` if present.
-It opens only under a host (the class *is* Qt), so keep it in a module
-declared native and reach it from tests through the desktop harness.
+**The widget form.** A plain class - typically a `QWidget` subclass you already
+have - with `kind = "dialog"` or `"dock"` and a constructor taking the `UiContext`
+is accepted in `surfaces`: the host shows the instance, binds `initial` when it can
+and calls `on_close()` if present. It opens only under a host, so keep it in a
+module declared native and reach it through the desktop harness.
 
 ### Behaviour mixins
 
@@ -1393,58 +1331,47 @@ class Export(RunsJobs, HasAcceptCancel, Dialog):
         return False  # keep the window open while it runs
 ```
 
-- **`RunsJobs`**: `self.run(action_id, **values)` calls the action through
-  `ctx.actions`; a returned job handle is tracked (`self.jobs`), bound to
-  the `JobProgress` stored as `self.progress` (`progress_attribute` renames
-  it) and cancelled when the window closes; `cancel_jobs()` does it early.
-- **`SubscribesStreams`**: `self.subscribe(stream, callback, **request)`
-  and `self.subscriptions`/`unsubscribe_all()` over `ctx.on`.
-- **`HasAcceptCancel`**: wires the `AcceptCancel` row named `buttons`
-  (`"dialog_buttons"` by default; a `QDialogButtonBox` of that `objectName`
-  in a hand-built or Designer tree works too): Accept runs `on_accept()`
-  and closes unless it returned `False`; Cancel runs `on_cancel()` and
-  closes.
+| Mixin | Adds |
+| :-- | :-- |
+| `RunsJobs` | `self.run(action_id, **values)` calls the action through `ctx.actions`; a returned job handle is tracked in `self.jobs`, bound to the `JobProgress` stored as `self.progress` (`progress_attribute` renames it) and cancelled when the window closes, with `cancel_jobs()` for earlier |
+| `SubscribesStreams` | `self.subscribe(stream, callback, **request)`, `self.subscriptions` and `unsubscribe_all()` over `ctx.on` |
+| `HasAcceptCancel` | wires the `AcceptCancel` row named `buttons` (`"dialog_buttons"` by default; a `QDialogButtonBox` of that `objectName` in a hand-built or Designer tree works too): Accept runs `on_accept()` and closes unless it returned `False`, Cancel runs `on_cancel()` and closes |
 
 ### Designer files and the pure-PyQt path
 
-`ui = "buffer.ui"` on a surface names a Qt Designer file relative to the
-class's module; the default `build()` loads it with `uic` under the host,
-and `@on` names are the file's `objectName`s. Under the fake,
-`build_surface` reads the same XML into a `FakeUiTree` of `FakeWidget`s
-whose signals (`clicked`, `valueChanged`, ... by widget class) a test
-`emit`s. `qgis_sdk.ui.load_ui(cls)` is the loader when a `build()` wants to
-add to the loaded form. The pure-PyQt path stays: `build()` may construct
-Qt widgets itself (import Qt *inside* `build()`), name the interactive ones
-(`UI001`) and still use `@on(name, "signal")` and the mixins over them -
-the scaffold's `PingDialog` is written that way.
+`ui = "buffer.ui"` names a Qt Designer file relative to the class's module; the
+default `build()` loads it with `uic` under the host, and `@on` names are the
+file's `objectName`s. Under the fake, `build_surface` reads the same XML into a
+`FakeUiTree` of `FakeWidget`s whose signals a test `emit`s, and
+`qgis_sdk.ui.load_ui(cls)` is the loader for a `build()` that adds to the form.
+The pure-PyQt path stays: `build()` may construct widgets itself (import Qt inside
+it), name the interactive ones (`UI001`) and still use `@on(name, "signal")` and
+the mixins - the scaffold's `PingDialog` is written that way.
 
 ### Testing surfaces without QGIS: `build_surface`
 
-`qgis_sdk.testing.build_surface(Surface, ctx, initial=)` runs `build()`
-exactly as the host would, minus Qt: the instance gets `ctx` and `initial`,
-the returned component is attached (never mounted), a `ui =` surface gets
-the fake tree, and the `@on`/`@subscribe` methods and the mixins are wired.
-It returns a `BuiltSurface` (`surface`, `root`, `ctx`, `find(name)`,
-`close()`); `fake_ui_context(scope, runtime=started_runtime, **services)`
-builds the `UiContext` over `RecordingNotifications`, `FakeViewControl`,
-`RecordingLog` and - given the runtime - real `ViewActions`/`ViewStreams`,
-so a button click under the fake dispatches the plugin's own handler and a
-`@subscribe` receives what the plugin's stream pushes. The example's
-`tests/test_workflow_pure.py` drives `BufferDialog` and `ResultsDock` this
-way; its `test_workflow_qgis.py` opens them under the host and checks the
-same names on the Qt tree.
+`qgis_sdk.testing.build_surface(Surface, ctx, initial=)` runs `build()` as the
+host would, minus Qt: the instance gets `ctx` and `initial`, the returned component
+is attached but never mounted, a `ui =` surface gets the fake tree, and
+`@on`/`@subscribe` and the mixins are wired. It returns a `BuiltSurface`
+(`surface`, `root`, `ctx`, `find(name)`, `close()`), and
+`fake_ui_context(scope, runtime=started_runtime, **services)` builds the
+`UiContext` over the recording fakes plus, given the runtime, real
+`ViewActions`/`ViewStreams` - so a click runs the plugin's own handler and a
+`@subscribe` receives what its stream pushes. The example's
+`test_workflow_pure.py` drives `BufferDialog` and `ResultsDock` this way.
 
 ### Snapshots: the tree, the PNG and the tools
 
 `SurfaceHost.snapshot(surface_id=None, *, screenshot=True)` captures the
-surfaces *this plugin's host* opened: a dialog it showed, a dock it built and
-left visible. That is the whole scope rule (decision-51 point 6) - there is no
-tree-walk of the QGIS main window, so a capture can never hold another plugin's
-window. An unknown id is refused with the ids that are open.
+surfaces *this plugin's host* opened - a dialog it showed, a dock it built and
+left visible - and nothing else: with no tree-walk of the QGIS main window, a
+capture can never hold another plugin's window (decision-51 point 6). An unknown
+id is refused with the ids that are open.
 
-Each capture is canonical JSON (sorted keys, no spaces, one trailing newline)
-plus a PNG taken with `QWidget.grab()` under the offscreen QPA as well, so two
-captures of an unchanged surface are byte-identical:
+Each capture is canonical JSON (sorted keys, no spaces, one trailing newline) plus
+a PNG taken with `QWidget.grab()` under the offscreen QPA, so two captures of an
+unchanged surface are byte-identical:
 
 ```json
 {
@@ -1461,21 +1388,17 @@ captures of an unchanged surface are byte-identical:
 }
 ```
 
-`role` is the semantic node - `textbox`, `combobox`, `spinbox`, `checkbox`,
-`button`, `label`, `group`, `map`, `crs`, `colour`, `file`, `slider`, … - and
-sits in front of the Qt class in `type`, so a snapshot reads as the catalogue
-component that made it rather than as whatever widget the adapter chose.
-`value` is the role's own value (a spin box's number, a combo box's current
-text, a button's text), `label` comes from `QLabel.buddy()` and the form's rows,
-`geometry` is in surface coordinates, and `declared` links `form/<field>` back
-to the field and `buttons/<name>` to the button. An actionable widget with no
-`objectName` gets a positional id (`#0/1`) and a `UI001` finding, which is the
-same rule `qgis-sdk check` reports before the plugin ever runs.
+`role` is the semantic node - `textbox`, `combobox`, `spinbox`, `button`, `map`,
+`crs`, `colour`, `file`, … - and sits in front of the Qt class in `type`, so a
+snapshot reads as the catalogue component that made it. `value` is the role's own
+value, `label` comes from `QLabel.buddy()` and the form's rows, `geometry` is in
+surface coordinates, and `declared` links `form/<field>` to the field and
+`buttons/<name>` to the button. An actionable widget with no `objectName` gets a
+positional id (`#0/1`) and a `UI001` finding.
 
-**Driving a surface from the command line.** The surfaces are Qt objects that
-only exist where the plugin runs, so each command writes a request into
-`.qgis-sdk/ui/` and runs the probe in a QGIS interpreter - the CLI process never
-touches a widget:
+**Driving a surface from the command line.** Surfaces are Qt objects that exist
+only where the plugin runs, so each command writes a request into `.qgis-sdk/ui/`
+and runs the probe in a QGIS interpreter; the CLI process never touches a widget:
 
 ```sh
 qgis-sdk ui list                          # the surfaces the plugin declares
@@ -1487,18 +1410,14 @@ qgis-sdk ui diff .qgis-sdk/ui/buffer_dialog.json tests/__snapshots__/buffer_dial
 ```
 
 `act` sends `click`, `focus`, `select`, `set` and `type` through `QTest` - the
-same event path a user's click takes - and then captures the surface again, so
-the second file (`<surface>.json`, after `<surface>-before.json`) shows the new
-state. It reports the value each widget holds afterwards. `diff` exits `1` when
-anything but the image changed and prints one line per difference. Every
-command takes `--format yaml` for reading; the files on disk are always the
-canonical JSON, and YAML lives in the tools, never in the runtime.
+path a user's click takes - then captures again into `<surface>.json` (after
+`<surface>-before.json`) and reports each value; `diff` exits `1` when anything
+but the image changed. Every command takes `--format yaml`; the files stay
+canonical JSON.
 
-`act` is developer tooling: the runtime a plugin ZIP vendors never mentions
-`QtTest`, and the MCP server marks it `DEVELOPER_ONLY`. The reading tools -
-`list`, `open`, `snapshot`, `diff` - are what a client gets without that
-tooling. Nothing of this reaches the plugin's HTTP API, which can name only
-declared actions and streams.
+`act` is developer tooling: the vendored runtime never mentions `QtTest` and the
+MCP server marks it `DEVELOPER_ONLY`, while `list`, `open`, `snapshot` and `diff`
+are what a client gets without it. None of this reaches the plugin's HTTP API.
 
 **Approving a surface in a test.** The `ui_snapshot` fixture captures a surface
 and compares it with what the project approved under the test module's
@@ -1511,19 +1430,18 @@ def test_buffer_dialog(ui_snapshot, host):
 ```
 
 Pass the `SurfaceCapture` the host made and the capture stays inside the
-plugin's scope; a widget the test built itself also works, with a name:
-`ui_snapshot(dialog, name="standalone")`. After the test the fixture fails any
-surface that changed structurally, and prints where the approval is:
+plugin's scope; a widget the test built itself works too, with a name
+(`ui_snapshot(dialog, name="standalone")`). A structural change fails, printing
+where the approval is:
 
 ```text
 buffer_dialog (tests/__snapshots__/buffer_dialog.json):
 form/distance: value 0.0 -> 25.0
 ```
 
-A different PNG does **not** fail: a screenshot is for a human or an agent to
-look at, and a renderer bump is not a regression. To write or refresh an
-approval, call `approve()` on what the fixture returned - it writes
-`<surface>.json` and `<surface>.png` and the run passes:
+A different PNG does **not** fail - a screenshot is for a human or an agent to
+look at, and a renderer bump is not a regression. To write or refresh an approval,
+call `approve()` on what the fixture returned and commit the two files:
 
 ```python
 def test_buffer_dialog(ui_snapshot, host):
@@ -1531,28 +1449,26 @@ def test_buffer_dialog(ui_snapshot, host):
     ui_snapshot(host.snapshot("buffer_dialog")[0]).approve()
 ```
 
-Commit the two files. A snapshot that has no approval fails with the path it
-expected, so a forgotten `approve()` is visible in CI rather than silent.
-`qgis_sdk_tools.ui_diff.diff_snapshots(before, after)` is the comparison behind
-both the fixture and `qgis-sdk ui diff`, and `SnapshotDiff.render()` is the text
-a failure shows.
+A snapshot with no approval fails with the path it expected, so a forgotten
+`approve()` shows in CI. `qgis_sdk_tools.ui_diff.diff_snapshots(before, after)` is
+the comparison behind the fixture and `qgis-sdk ui diff` alike, and
+`SnapshotDiff.render()` is the text a failure shows.
 
 ### `ctx.log`
 
-`ctx.log.info|warning|error(message, **fields)` is the plugin's structured
-log (decision-63): a `LogRecord(level, message, fields, plugin, time)` goes to the
-QGIS message log under the plugin's tab on the Desktop (`NativeLog`) and to
-`RecordingLog.records`/`.messages` in tests; `subscribe(listener)` is how
-`LogView` follows it. `UiContext` carries `log` as well, so a surface logs
-what it did and every `LogView` of the plugin shows it.
+`ctx.log.info|warning|error(message, **fields)` is the plugin's structured log
+(decision-63): a `LogRecord(level, message, fields, plugin, time)` goes to the
+QGIS message log under the plugin's tab (`NativeLog`) and to
+`RecordingLog.records` in tests, and `subscribe(listener)` is how `LogView`
+follows it. `UiContext` carries `log` too, so every `LogView` shows what a
+surface did.
 
 ### `ctx.notifications`
 
-Four levels and one button (decision-55 point 3). `info`, `success`,
-`warning` and `critical` take a message; `with_action(label, action_id,
-**arguments)` returns the same service with a button attached, and pressing
-it runs that declared action with those arguments through the plugin's own
-`runtime.actions`:
+Four levels and one button (decision-55 point 3): `info`, `success`, `warning`
+and `critical` take a message, and `with_action(label, action_id, **arguments)`
+returns the same service with a button that runs that declared action through the
+plugin's own `runtime.actions`:
 
 ```python
 self.ctx.notifications.with_action("Undo", "undo_buffer", layer_id=output.id).success(
@@ -1560,33 +1476,27 @@ self.ctx.notifications.with_action("Undo", "undo_buffer", layer_id=output.id).su
 )
 ```
 
-On the Desktop the message lands on the QGIS message bar at its level with a
-`QPushButton` named `notifications/<action_id>`; headless (`NativeNotifications`)
-it goes to the message log with the label written after the message; under
-`RecordingNotifications` every text is in `messages`, every
-`Notification(level, message, action)` in `records`, and `press(index=-1)`
-runs the button once `bind_actions(...)` named the dispatcher (the Desktop
-host binds it at `initGui`). The wire keeps `notifications.info` only: a page
-draws its own buttons over `actions.call`, and levelled feedback for pages
-arrives with the bridge store slice so `HOST_FINGERPRINT` does not
-move mid-train.
+On the Desktop the message lands on the message bar at its level with a
+`QPushButton` named `notifications/<action_id>`; headless it goes to the message
+log with the label after the message; under `RecordingNotifications` every text is
+in `messages`, every `Notification(level, message, action)` in `records`, and
+`press(index=-1)` runs the button once `bind_actions(...)` named the dispatcher.
+The wire keeps `notifications.info` only - a page draws its own buttons over
+`actions.call` - and levelled feedback for pages arrives with the bridge store
+slice, so `HOST_FINGERPRINT` does not move mid-train.
 
 ### `ctx.files`
 
-`ctx.files` is the plugin's door from a `FileRef` to the filesystem, and the
-one place its own code mints refs: `grant_file(path, operations=("read",),
-overwrite=False)`, `grant_directory(path)` and `resolve(ref, operation="read")
--> Path`. It is backed by the runtime's one `HostAuthority` (decision-20),
-the same instance the Processing toolbox mints picker refs through and the
-WebEngine host (`HostServices.from_context`) grants a page's refs with, so a
-ref a handler received from any of them resolves here - and only here: a
-forged ref, a ref minted for another view, a read ref asked to write or a
-ref whose grant has expired is refused (`QgisSdkUnknownHandleError`,
-`QgisSdkGrantRefusedError`, ...). Closing the plugin's scope revokes what the
-service minted. `qgis_sdk.testing.FakeFiles(scope)` is the same class over a
-private authority (there is no simpler rule to fake); `granted` lists its
-live refs. `UiContext` carries `files`, `layers` and `project` as well, so a
-surface's components reach them without the plugin context.
+`ctx.files` is the plugin's door from a `FileRef` to the filesystem and the one
+place its code mints refs: `grant_file(path, operations=("read",),
+overwrite=False)`, `grant_directory(path)` and `resolve(ref, operation="read") ->
+Path`. One `HostAuthority` backs it (decision-20) - the instance the Processing
+toolbox mints picker refs through and the WebEngine host grants a page's refs
+with - so a ref from any of them resolves here and only here: a forged ref, one
+minted for another view, a read ref asked to write or an expired grant is refused
+(`QgisSdkUnknownHandleError`, `QgisSdkGrantRefusedError`, ...), and closing the
+plugin's scope revokes what it minted. `qgis_sdk.testing.FakeFiles(scope)` is the
+same class over a private authority, with `granted` listing its live refs.
 
 ## Processing algorithms and safe outputs
 
