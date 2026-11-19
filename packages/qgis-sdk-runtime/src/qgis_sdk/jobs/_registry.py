@@ -156,6 +156,10 @@ class JobRegistry:
     message says which plugin declared the bad job. An empty registry is the
     normal state of a plugin that declares none: ``ctx.jobs`` still exists and
     refuses every name by listing what it has.
+
+    Args:
+        entries: Each name mapped to its function and declaration.
+        path: How the owner is named in a refusal.
     """
 
     __slots__ = ("_entries", "_path")
@@ -170,7 +174,14 @@ class JobRegistry:
 
     @classmethod
     def empty(cls, path: str = "this plugin") -> JobRegistry:
-        """A registry with no names; every lookup is refused by name."""
+        """A registry with no names; every lookup is refused by name.
+
+        Args:
+            path: How the owner is named in a refusal.
+
+        Returns:
+            The empty registry.
+        """
         return cls({}, path)
 
     @classmethod
@@ -182,6 +193,13 @@ class JobRegistry:
         same snake_case rule ``@job`` uses for a bare id, without the module
         suffix that would make ``ctx.jobs.count_features_3f2a91`` the only way
         to reach a job.
+
+        Args:
+            declaration: What the plugin class listed under ``jobs =``.
+            path: How the owner is named in a refusal.
+
+        Returns:
+            The registry, or an empty one when nothing was declared.
         """
         _s = _CcState(cls=cls, declaration=declaration, path=path)
         for _p in (
@@ -218,11 +236,22 @@ class JobRegistry:
         return iter(self._entries)
 
     def function(self, name: str) -> Callable[..., Any]:
-        """The ``@job`` function declared as ``name``."""
+        """The ``@job`` function declared as ``name``.
+
+        Args:
+            name: The name ``ctx.jobs`` reaches it by.
+
+        Raises:
+            AttributeError: No job of that name is declared.
+        """
         return self._entry(name)[0]
 
     def description(self, name: str) -> JobDescription:
-        """The validated description of ``name``."""
+        """The validated description of ``name``.
+
+        Args:
+            name: The name ``ctx.jobs`` reaches it by.
+        """
         return self._entry(name)[1]
 
     def descriptions(self) -> tuple[JobDescription, ...]:

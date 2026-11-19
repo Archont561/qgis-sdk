@@ -38,7 +38,12 @@ class NamedLoop(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class LoopState:
-    """One loop's name and whether it is still armed."""
+    """One loop's name and whether it is still armed.
+
+    Attributes:
+        name: How the host named it.
+        running: Whether it was armed when the report was taken.
+    """
 
     name: str
     running: bool
@@ -54,6 +59,9 @@ class LoopRegistry:
     each is for, and a duplicate is a programming error rather than a silent
     overwrite - the report would otherwise name a loop that is no longer the one
     running under that name.
+
+    Args:
+        loops: The loops to register up front, each under its own name.
     """
 
     __slots__ = ("_loops",)
@@ -64,7 +72,14 @@ class LoopRegistry:
             self.add(loop)
 
     def add(self, loop: NamedLoop) -> NamedLoop:
-        """Record ``loop`` under its name; returns it for chaining."""
+        """Record ``loop`` under its name; returns it for chaining.
+
+        Args:
+            loop: The loop to register.
+
+        Raises:
+            ValueError: A loop of that name is already registered.
+        """
         name = loop.name
         if any(existing.name == name for existing in self._loops):
             raise ValueError(f"a loop named {name!r} is already registered")
@@ -72,14 +87,25 @@ class LoopRegistry:
         return loop
 
     def run(self, loop: NamedLoop) -> NamedLoop:
-        """Start and record ``loop``: the one call a host makes."""
+        """Start and record ``loop``: the one call a host makes.
+
+        Args:
+            loop: The loop to start; a loop without ``start`` is only recorded.
+
+        Returns:
+            The loop, so a host can keep hold of it.
+        """
         start = getattr(loop, "start", None)
         if start is not None:
             start()
         return self.add(loop)
 
     def get(self, name: str) -> NamedLoop | None:
-        """The loop registered as ``name``, or ``None``."""
+        """The loop registered as ``name``, or ``None``.
+
+        Args:
+            name: The name the host registered it under.
+        """
         return next((loop for loop in self._loops if loop.name == name), None)
 
     def inventory(self) -> tuple[LoopState, ...]:

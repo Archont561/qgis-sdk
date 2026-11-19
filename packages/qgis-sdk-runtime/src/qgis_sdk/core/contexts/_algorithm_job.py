@@ -31,6 +31,12 @@ class AlgorithmContext(Context):
     what one execution legitimately needs. ``project`` is a capability so an
     algorithm that composes another through ``invoke`` can still add the
     result to the project when its host has one; ``network`` likewise.
+
+    Args:
+        progress: The sink the body reports through.
+        cancellation: The signal the body has to check.
+        scope: The invocation's scope, closed when it returns.
+        services: The rest of what the invocation is handed.
     """
 
     __slots__ = (
@@ -84,6 +90,10 @@ class WorkerContext:
     (TASK-117) and the runtime refuses what reaches the context, but neither
     proves thread safety. Prepare GUI state before submission and apply GUI
     updates in a callback, which is delivered on the driving thread.
+
+    Args:
+        progress: The sink the body reports through.
+        cancellation: The signal the body has to check.
     """
 
     __slots__ = ("cancellation", "progress")
@@ -152,6 +162,12 @@ class JobServices:
     A job can reach a worker pool, the network, Processing and its owner's
     project; a host that has none of them leaves them ``None`` so reading the
     capability fails by name instead of silently doing nothing (decision-39).
+
+    Attributes:
+        workers: The pool a body offloads part of its work to.
+        network: HTTP, under the host's grants.
+        algorithms: Runs through the host's Processing.
+        project: The project the attempt adds its results to.
     """
 
     workers: Workers | None = None
@@ -173,6 +189,12 @@ class JobContext(Context):
     ``project`` are capabilities: ``await ctx.workers.offload(work)`` on a host
     without a pool fails by name, and so does ``invoke(buffer, ctx, ...)`` on
     a host without Processing (decision-42).
+
+    Args:
+        progress: The sink the attempt reports through.
+        cancellation: The signal the attempt has to check.
+        scope: The attempt's own scope.
+        services: The rest of what the attempt may reach.
     """
 
     __slots__ = (

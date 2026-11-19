@@ -54,7 +54,14 @@ class _JobsMixin1:
         return self.registry.names
 
     def describe(self, name: str) -> JobDescription:
-        """The declared description of ``name``: its title, inputs and result."""
+        """The declared description of ``name``: its title, inputs and result.
+
+        Args:
+            name: The job's declared name.
+
+        Raises:
+            QgisSdkDeclarationError: No job of this plugin has that name.
+        """
         return self.registry.description(name)
 
     def after(self, *handles: JobHandle) -> OrderedJobs:
@@ -64,6 +71,12 @@ class _JobsMixin1:
         handed to a worker until the first succeeded, and a first job that
         failed or was cancelled fails the second one with
         ``QgisSdkJobPrerequisiteError`` instead of running it.
+
+        Args:
+            handles: The jobs to wait for; each must be submitted already.
+
+        Returns:
+            The names, with the ordering baked in.
         """
         return OrderedJobs(self, as_handles(handles))
 
@@ -85,7 +98,14 @@ class _JobsMixin1:
         return Jobs(self._service.plugin)
 
     def scoped(self, scope: ResourceScope) -> Jobs:
-        """The same names, submitted on behalf of ``scope`` (a view's, usually)."""
+        """The same names, submitted on behalf of ``scope`` (a view's, usually).
+
+        Args:
+            scope: The owner work is submitted under.
+
+        Returns:
+            A facade that submits into that owner's scope.
+        """
         return Jobs(self._service.scoped(scope))
 
     # -- what is running
@@ -110,6 +130,11 @@ class _JobsMixin1:
         facade's scope, so a view that closes stops hearing about the job
         before anything else runs. A handle that already settled replays
         once, immediately.
+
+        Args:
+            handle: The attempt to hear from.
+            options: The callbacks to subscribe: ``on_progress``, ``on_success``,
+                ``on_failure``, ``on_cancelled``.
         """
         values = _WatchValues1(**options)
         owner = self._service.scope
@@ -133,6 +158,9 @@ class Jobs(_JobsMixin1):
     adds nothing to the engine but the names, so ``ctx.jobs.<name>`` is a
     :class:`~qgis_sdk.jobs.BoundJob` and the rest reads the same whichever
     context it came from.
+
+    Args:
+        service: The service the names are submitted to.
     """
 
     __slots__ = ("_service",)
@@ -165,7 +193,12 @@ class Jobs(_JobsMixin1):
 
 
 class OrderedJobs:
-    """``ctx.jobs.after(...)``: the same names, with an ordering baked in."""
+    """``ctx.jobs.after(...)``: the same names, with an ordering baked in.
+
+    Args:
+        jobs: The facade whose names are submitted.
+        handles: The jobs every attempt is ordered behind.
+    """
 
     __slots__ = ("_handles", "_jobs")
 

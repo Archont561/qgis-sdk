@@ -100,6 +100,9 @@ class Handoff:
     this handoff. It runs at most once, on the thread that called
     :meth:`Job.cancel`, and the job still resumes only when the worker reports:
     the hook is a request, not proof that the worker stopped.
+
+    Args:
+        on_cancel: What to call when the job suspended on it is cancelled.
     """
 
     __slots__ = ("_box", "_dropped", "_on_cancel", "_owner")
@@ -129,11 +132,19 @@ class Handoff:
         return self._dropped
 
     def resolve(self, value: object = None) -> None:
-        """Report success; the awaiting job keeps waiting until its next step."""
+        """Report success; the awaiting job keeps waiting until its next step.
+
+        Args:
+            value: What the job's ``await`` evaluates to.
+        """
         self._report(_Report(None, value))
 
     def fail(self, error: BaseException) -> None:
-        """Report failure; the awaiting job keeps waiting until its next step."""
+        """Report failure; the awaiting job keeps waiting until its next step.
+
+        Args:
+            error: The exception the job's ``await`` raises.
+        """
         self._report(_Report(error, None))
 
     def _report(self, report: _Report) -> None:

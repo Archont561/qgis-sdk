@@ -108,6 +108,12 @@ class _JobHandleMixin1:
         ``timeout`` seconds, raises ``QgisSdkJobNotSettledError`` when that
         runs out, re-raises a failure, and raises ``QgisSdkJobCancelledError``
         for a cancelled job.
+
+        Args:
+            timeout: Seconds to wait, or ``None`` to wait for as long as it takes.
+
+        Returns:
+            What the job body returned.
         """
         attempt = self._attempt
         if attempt.runtime.gui_thread():
@@ -120,13 +126,26 @@ class _JobHandleMixin1:
     def on_progress(
         self, callback: Callable[[float], None], *, owner: ResourceScope | None = None
     ) -> JobSubscription:
-        """Hear the latest fraction once per tick it changed; replays the current one."""
+        """Hear the latest fraction once per tick it changed; replays the current one.
+
+        Args:
+            callback: What each delivery calls with the fraction.
+            owner: The scope the subscription ends with, or ``None`` for none.
+
+        Returns:
+            The subscription, which ``close()`` ends early.
+        """
         return self._attempt.subscribe("progress", callback, owner)
 
     def on_success(
         self, callback: Callable[[Any], None], *, owner: ResourceScope | None = None
     ) -> JobSubscription:
-        """Hear the typed result exactly once."""
+        """Hear the typed result exactly once.
+
+        Args:
+            callback: What the delivery calls with the result.
+            owner: The scope the subscription ends with, or ``None`` for none.
+        """
         return self._attempt.subscribe("success", callback, owner)
 
 
@@ -137,13 +156,23 @@ class _JobHandleMixin2:
         *,
         owner: ResourceScope | None = None,
     ) -> JobSubscription:
-        """Hear the exception exactly once."""
+        """Hear the exception exactly once.
+
+        Args:
+            callback: What the delivery calls with the exception.
+            owner: The scope the subscription ends with, or ``None`` for none.
+        """
         return self._attempt.subscribe("failure", callback, owner)
 
     def on_cancelled(
         self, callback: Callable[[], None], *, owner: ResourceScope | None = None
     ) -> JobSubscription:
-        """Hear acknowledged cancellation exactly once."""
+        """Hear acknowledged cancellation exactly once.
+
+        Args:
+            callback: What the delivery calls, with no arguments.
+            owner: The scope the subscription ends with, or ``None`` for none.
+        """
         return self._attempt.subscribe("cancelled", callback, owner)
 
 
@@ -153,6 +182,9 @@ class JobHandle(_JobHandleMixin1, _JobHandleMixin2):
     Everything on a handle is safe to call from the driving thread. ``cancel``
     and the read-only properties are safe from any thread; ``get`` is for any
     thread *but* the GUI thread.
+
+    Args:
+        attempt: The attempt record the handle reads and subscribes to.
     """
 
     __slots__ = ("_attempt",)
@@ -207,7 +239,14 @@ JobHandle.__qgis_sdk_wire__ = _job_handle_wire  # type: ignore[attr-defined]
 
 @dataclass(frozen=True, slots=True)
 class BoundJob:
-    """A job function bound to an owner; ``delay`` submits one attempt."""
+    """A job function bound to an owner; ``delay`` submits one attempt.
+
+    Attributes:
+        description: The declaration ``@job`` recorded.
+        function: The body, called with the attempt's context and inputs.
+        service: The service the attempt is submitted to.
+        prerequisites: Work that has to succeed before the body starts.
+    """
 
     description: JobDescription
     function: Callable[..., Any]
@@ -221,6 +260,12 @@ class BoundJob:
         worker until every one of them succeeded - the backend never sees work
         it must not start yet. A prerequisite that fails or is cancelled fails
         this job with ``QgisSdkJobPrerequisiteError`` before its body runs.
+
+        Args:
+            handles: The jobs to wait for; anything else is a ``TypeError``.
+
+        Returns:
+            A new bound job; ``self`` is unchanged.
         """
         return BoundJob(
             self.description,
@@ -230,5 +275,12 @@ class BoundJob:
         )
 
     def delay(self, **arguments: Any) -> JobHandle:
-        """Submit one attempt with the inputs as keywords; no author code runs yet."""
+        """Submit one attempt with the inputs as keywords; no author code runs yet.
+
+        Args:
+            arguments: The declared inputs, by name.
+
+        Returns:
+            The handle the caller waits on and subscribes to.
+        """
         return self.service._submit(self, arguments)

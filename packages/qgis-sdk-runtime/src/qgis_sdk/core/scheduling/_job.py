@@ -80,7 +80,12 @@ class _JobMixin2:
 
 
 class Job(JobMixin1, _JobMixin2):
-    """Handle for one submitted job: state, outcome and cancellation request."""
+    """Handle for one submitted job: state, outcome and cancellation request.
+
+    Args:
+        identifier: The number the runtime assigned it, unique while it runs.
+        coro: The coroutine the job advances, one bounded step per tick.
+    """
 
     __slots__ = (
         "_awaiting",
@@ -116,6 +121,10 @@ class StepScheduler:
     The scheduler owns no thread and no timer: a runtime adapter calls
     :meth:`tick` from the event loop it already has, which is what makes GUI-thread
     handoff observable instead of implied by the presence of ``async def``.
+
+    Args:
+        scope: The scope the jobs belong to; closing it disposes them.
+        max_steps_per_job: How many steps one job takes per tick.
     """
 
     def __init__(
@@ -155,7 +164,17 @@ class StepScheduler:
         return sum(handoff.dropped_reports for handoff in self._discarded)
 
     def submit(self, coro: Coroutine[object, None, object]) -> Job:
-        """Register a coroutine as a job without running any author code yet."""
+        """Register a coroutine as a job without running any author code yet.
+
+        Args:
+            coro: The coroutine to advance; it is closed if the job is refused.
+
+        Returns:
+            The job, whose state starts at queued.
+
+        Raises:
+            QgisSdkScopeClosedError: The scheduler's scope is closed.
+        """
         try:
             self._scope.ensure_open()
         except QgisSdkScopeClosedError:
@@ -181,7 +200,14 @@ class StepScheduler:
         return steps
 
     def drain(self, *, max_ticks: int | None = None) -> int:
-        """Tick until no job remains active or ``max_ticks`` is reached."""
+        """Tick until no job remains active or ``max_ticks`` is reached.
+
+        Args:
+            max_ticks: The most ticks to run, or ``None`` to run until done.
+
+        Returns:
+            How many ticks it took.
+        """
         ticks = 0
         while self._active and (max_ticks is None or ticks < max_ticks):
             self.tick()
@@ -194,6 +220,12 @@ class StepScheduler:
         Refusal is a result rather than an exception: the host keeps the current
         generation running and names the blocker, instead of deleting native
         resources under a worker that never acknowledged the stop request.
+
+        Args:
+            max_ticks: How many ticks to give the jobs to reach a safe point.
+
+        Returns:
+            Whether it was refused, and what blocked it.
         """
         self._quiescing = True
         for job in tuple(self._active.values()):
@@ -241,6 +273,9 @@ class StepScheduler:
         A job that already settled is left alone - there is nothing to drop and
         its outcome is the one its owner can still read - so this answers
         ``False`` instead of overwriting it.
+
+        Args:
+            job: The job to drop.
         """
         if job.id not in self._active:
             return False

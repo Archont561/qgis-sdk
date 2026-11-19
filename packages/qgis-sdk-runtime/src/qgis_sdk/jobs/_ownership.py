@@ -44,6 +44,9 @@ def invoking(scope: ResourceScope | None) -> Iterator[None]:
     Nested dispatches (an action that calls another action) restore the outer
     owner rather than clearing it, so the innermost caller always wins and the
     outer call still knows what it was.
+
+    Args:
+        scope: The owner the call runs on behalf of, or ``None``.
     """
     token = INVOKING_SCOPE.set(scope)
     try:

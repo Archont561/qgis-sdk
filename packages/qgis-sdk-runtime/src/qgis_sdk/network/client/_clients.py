@@ -42,6 +42,11 @@ class BlockingNetworkClient:
 
     It shares the client's transport, scope and defaults; the transport decides
     whether the calling thread may block, and refuses the GUI thread.
+
+    Args:
+        transport: Where the request leaves through.
+        scope: The owner; closing it refuses the next request.
+        defaults: What every request sends unless the call overrides it.
     """
 
     def __init__(
@@ -55,17 +60,44 @@ class BlockingNetworkClient:
         self._defaults = defaults
 
     def get(self, url: str, **options: Unpack[RequestOptions]) -> Response:
-        """Perform a GET on the calling thread."""
+        """Perform a GET on the calling thread.
+
+        Args:
+            url: The address, resolved against the client's base URL.
+            options: ``params``, ``headers``, ``timeout``, and a body for the
+                methods that take one.
+
+        Returns:
+            The buffered response.
+        """
         return self.request("GET", url, **options)
 
     def post(self, url: str, **options: Unpack[RequestOptions]) -> Response:
-        """Perform a POST on the calling thread."""
+        """Perform a POST on the calling thread.
+
+        Args:
+            url: The address, resolved against the client's base URL.
+            options: ``json`` or ``data`` for the body, plus ``params``,
+                ``headers`` and ``timeout``.
+
+        Returns:
+            The buffered response.
+        """
         return self.request("POST", url, **options)
 
     def request(
         self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Response:
-        """Perform any supported method on the calling thread."""
+        """Perform any supported method on the calling thread.
+
+        Args:
+            method: The verb: ``GET``, ``POST``, ``PUT``, ``PATCH`` or ``DELETE``.
+            url: The address, resolved against the client's base URL.
+            options: The per-call knobs, as :class:`RequestOptions`.
+
+        Returns:
+            The buffered response.
+        """
         request = build_request(self._defaults, method, url, options)
         self._scope.ensure_open()
         return check_size(request, self._transport.send_blocking(request))
@@ -77,6 +109,12 @@ class NetworkClient:
     Build one per owner scope. :meth:`configure` returns a derived client that
     shares the transport and scope but not the defaults, so a typed service
     client can carry its base URL and headers without touching the plugin's.
+
+    Args:
+        transport: Where the request leaves through.
+        scope: The owner; closing it cancels what is in flight.
+        defaults: What every request sends unless the call overrides it.
+        _in_flight: The shared cancellation registry, for a derived client.
     """
 
     def __init__(
@@ -121,24 +159,59 @@ class NetworkClient:
         return BlockingNetworkClient(self._transport, self._scope, self._defaults)
 
     def configure(self, **options: Unpack[ConfigureOptions]) -> NetworkClient:
-        """Derive a client with these defaults layered over the current ones."""
+        """Derive a client with these defaults layered over the current ones.
+
+        Args:
+            options: The defaults to change: ``base_url``, ``headers``,
+                ``timeout``, ``auth_config``, ``max_redirects``,
+                ``max_body_bytes``.
+
+        Returns:
+            The derived client; this one is unchanged.
+        """
         derived = derive_defaults(self._defaults, configure_values(options))
         return NetworkClient(
             self._transport, self._scope, defaults=derived, _in_flight=self._in_flight
         )
 
     async def get(self, url: str, **options: Unpack[RequestOptions]) -> Response:
-        """GET ``url``; suspends the job until the response is buffered."""
+        """GET ``url``; suspends the job until the response is buffered.
+
+        Args:
+            url: The address, resolved against the client's base URL.
+            options: The per-call knobs, as :class:`RequestOptions`.
+
+        Returns:
+            The buffered response.
+        """
         return await self.request("GET", url, **options)
 
     async def post(self, url: str, **options: Unpack[RequestOptions]) -> Response:
-        """POST to ``url`` with a ``json`` or ``data`` body."""
+        """POST to ``url`` with a ``json`` or ``data`` body.
+
+        Args:
+            url: The address, resolved against the client's base URL.
+            options: ``json`` or ``data``, plus ``params``, ``headers`` and
+                ``timeout``.
+
+        Returns:
+            The buffered response.
+        """
         return await self.request("POST", url, **options)
 
     async def request(
         self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Response:
-        """Send any supported method and await its buffered response."""
+        """Send any supported method and await its buffered response.
+
+        Args:
+            method: The verb: ``GET``, ``POST``, ``PUT``, ``PATCH`` or ``DELETE``.
+            url: The address, resolved against the client's base URL.
+            options: The per-call knobs, as :class:`RequestOptions`.
+
+        Returns:
+            The buffered response.
+        """
         request = build_request(self._defaults, method, url, options)
         self._scope.ensure_open()
         return await self._deliver(request)

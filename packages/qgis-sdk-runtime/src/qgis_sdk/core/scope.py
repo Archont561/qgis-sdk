@@ -18,7 +18,12 @@ def _attempt_cleanup(cleanup: Callable[[], None], failures: list[Exception]) -> 
 
 @dataclass(frozen=True, slots=True)
 class QuiesceOutcome:
-    """Whether an owner reached a safe point for an in-process replacement."""
+    """Whether an owner reached a safe point for an in-process replacement.
+
+    Attributes:
+        refused: Whether the replacement has to wait.
+        blockers: What refused it, by name, for the host to report.
+    """
 
     refused: bool
     blockers: tuple[str, ...]
@@ -83,7 +88,14 @@ class ResourceScope:
         return child
 
     def on_close(self, cleanup: Callable[[], None]) -> None:
-        """Register a cleanup action (last registered, first run)."""
+        """Register a cleanup action (last registered, first run).
+
+        Args:
+            cleanup: What to run when the scope closes.
+
+        Raises:
+            QgisSdkScopeClosedError: The scope is already closed.
+        """
         self.ensure_open()
         self._callbacks.append(cleanup)
 
@@ -93,7 +105,12 @@ class ResourceScope:
         *,
         resume: Callable[[], None] | None = None,
     ) -> None:
-        """Register an owner's safe-point check, and how to accept work again."""
+        """Register an owner's safe-point check, and how to accept work again.
+
+        Args:
+            check: What the owner answers when a replacement is asked for.
+            resume: How it accepts work again, or ``None`` if it cannot.
+        """
         self.ensure_open()
         self._quiescers.append((check, resume))
 
