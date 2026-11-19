@@ -17,6 +17,7 @@
 import { posix } from "node:path";
 import { directiveText, expandDirectives } from "./directives";
 import { escapeMdx } from "./mdx-text";
+import { slugify } from "./slug";
 
 export interface Guide {
 	/** The backlog document id, e.g. `doc-12`. */
@@ -178,14 +179,8 @@ export interface RenderWarning {
 
 const GUIDES_DIR = "apps/docs/guides";
 
-/** GitHub's heading anchor: lower-case, punctuation dropped, spaces to hyphens. */
-export function slugify(heading: string): string {
-	return heading
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}\s-]/gu, "")
-		.trim()
-		.replace(/\s+/g, "-");
-}
+/** GitHub's heading anchor; re-exported so the route map and the directives agree. */
+export { slugify };
 
 /** Split markdown into prose and fenced-code segments, so code is never rewritten. */
 function segments(markdown: string): { code: boolean; text: string }[] {
