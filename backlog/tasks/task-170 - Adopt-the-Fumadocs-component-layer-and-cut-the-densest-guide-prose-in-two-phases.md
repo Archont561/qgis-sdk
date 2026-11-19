@@ -33,9 +33,9 @@ The site already runs on Fumadocs (fumadocs-ui 16.18.4, fumadocs-core, fumadocs-
 - [x] #3 A generated-page component gate fails the build when a page whose source carries a component directive renders without that component's markup; the gate is proven against a deliberately unregistered component and against JSX placed in a .md page, so the silent-drop failure mode cannot ship.
 - [x] #4 Guide sources stay readable on GitHub: components are introduced through a documented, plain-text directive layer expanded by the generator (remark plugin or directive blocks), and a test asserts no JSX tag appears in apps/docs/guides/*.md.
 - [ ] #5 Five guide-derived pages carry components instead of paragraphs - python/scoped-jobs (question headings as Accordions), typescript/host-namespaces (one service per Tab), python/desktop-bindings-and-native-surfaces (catalogue as TypeTable, tree as Files), python/project-scaffold (Files) and python/desktop-host-host-and-the-project-manifest (Steps or Files, whichever the section is) - with no page's link count falling and no heading anchor lost.
-- [ ] #6 The two hand-written guides (guides/test-a-plugin, guides/web-plugin) use Steps, and start/installation.mdx uses Tabs for the pip, pixi and from-source paths, each tab carrying a copyable command and its working directory.
+- [x] #6 The two hand-written guides (guides/test-a-plugin, guides/web-plugin) use Steps, and start/installation.mdx uses Tabs for the pip, pixi and from-source paths, each tab carrying a copyable command and its working directory.
 - [ ] #7 TypeTable content is generated from api/python.json (name, shape, tier, the guide section that explains it) rather than typed by hand or produced through fumadocs-typescript, and the docs suite fails when a stable name in the inventory has no row.
-- [ ] #8 Prose is reduced by at least 25 percent on the five AC 5 pages and start/installation, measured by a scripted word count with fenced code and tables excluded; the numbers are recorded in this task against the cbdc41d baseline in the description, and /reference/api-index (table density, not prose) is explicitly out of scope for the target.
+- [x] #8 Prose is reduced by at least 25 percent on the five AC 5 pages and start/installation, measured by a scripted word count with fenced code and tables excluded; the numbers are recorded in this task against the cbdc41d baseline in the description, and /reference/api-index (table density, not prose) is explicitly out of scope for the target.
 - [ ] #9 Nothing is lost in the swap: internal link count does not fall (check-links was 11,128 on cbdc41d), the docs boundary suite still passes, every removed paragraph is accounted for as either moved to a reference page or proven redundant in the implementation notes, and the accessibility qualifications in TASK-138 AC 2 hold (text alternatives, keyboard access, contrast, responsive).
 - [ ] #10 The decision is recorded: this task supersedes TASK-138 AC 2, 3, 4, 7, 8, 10 and 11 and adds them as dependencies of that record, while TASK-138 keeps AC 1, 5, 6, 9 and 12 for the components it owns; TASK-130, TASK-132, TASK-135 and TASK-136 keep their own scopes and are neither duplicated nor pre-empted.
 - [ ] #11 The rejected paths are stated in the implementation notes with the reason, so they are not re-proposed: no UnoCSS or PostCSS swap (zero text reduction, re-implements fumadocs' own Tailwind v4 theme layer), no AutoTypeTable (fumadocs-typescript needs built .d.ts and plain next build in apps/docs does not build packages first), no graph view (no such export in fumadocs-ui 16.18.4), no landing or robots/sitemap rebuild (both already ship and are green).
@@ -124,10 +124,53 @@ which is what markdown was rendering anyway. After that the build is clean. The
 rewrites show up in 2 `\{` and 2 `\<` across the 108 exported `.md` files;
 everything else is byte-identical.
 
+### P1: the six pages, measured
+
+`bun run measure-prose` (`scripts/measure-prose.ts`) counts body prose with
+fences, table rows, `:::` markers, `data-qgis-sdk` wrappers and standalone JSX-tag
+lines excluded; `tests/measure-prose.test.ts` pins what counts. Before/after on
+this branch, against the numbers in the description:
+
+| Page | Before | After | Cut |
+| :-- | --: | --: | --: |
+| `python/desktop-bindings-and-native-surfaces` | 3,758 | 2,814 | 25.1% |
+| `typescript/host-namespaces` | 3,074 | 2,299 | 25.2% |
+| `python/scoped-jobs` | 2,931 | 2,128 | 27.4% |
+| `python/desktop-host-host-and-the-project-manifest` | 2,424 | 1,807 | 25.5% |
+| `python/project-scaffold` | 1,443 | 1,042 | 27.8% |
+| `start/installation` | 304 | 218 | 28.3% |
+
+AC 6 in full: `guides/test-a-plugin` and `guides/web-plugin` are `.mdx` with
+`<Steps>`, and `start/installation.mdx` carries `<Tabs>` for pip, pixi and
+from-source with a copyable command per tab. Both hand-written guides keep every
+heading, so every anchor and all four internal links per page survive.
+
+Every conversion keeps its heading set, so no anchor moved: `check-links` reports
+11,347 internal links on 150 pages with 0 broken, one more than the 11,346
+baseline because `python/scoped-jobs` now points at the 0.9.0 migration notes it
+duplicated. The component gate runs over the converted pages on every build
+(`postbuild: component gate over N pages with directives, 0 problems`).
+
+One P0 gap surfaced the moment a generated page used `:::tabs`: a `:::tab`
+recorded its name in `lib/generated/components.json` but rendered no
+`data-qgis-sdk` marker, so the gate failed every page that used tabs. The marker
+now sits inside the panel - a wrapper beside a `<Tab>` would break `Tabs`, which
+reads its own children - and `tests/directives.test.ts` pins it.
+
 ### Still open
 
-P1 (AC 5, 6), P2 (AC 7) and P3 (AC 8-11) are untouched: no page has been
-converted yet, so `lib/generated/components.json` is `{}` and the gate has
-nothing to check beyond the `.md` arm. The registry, the emission, the gate and
-the directive layer are all in place for those phases.
+- **AC 5's component shapes.** The word-count and no-lost-anchor halves are met
+  on all five pages, but the shape each page names is only partly applied:
+  `python/project-scaffold` uses `:::files` for the generated tree, and the other
+  four are converted by prose compression rather than by the named component
+  (`scoped-jobs` question headings as Accordions, `host-namespaces` one service
+  per Tab, `desktop-bindings` catalogue as TypeTable and its tree as Files,
+  `desktop-host` Steps or Files). Converting a `##` section into an accordion
+  drops the heading and leaves the anchor to the accordion id, so each of those
+  needs the same before/after anchor check the six pages already had.
+- **P2 (AC 7)** - TypeTable from `api/python.json`. `desktop-bindings`'s
+  catalogue table is the natural first consumer, which is why its AC 5 shape
+  waits for this phase rather than being hand-written twice.
+- **P3 (AC 8-11)** - the numbers are recorded above; the loss audit, the
+  accessibility qualifications and the board records remain.
 <!-- SECTION:NOTES:END -->
