@@ -445,7 +445,13 @@ function labelOf(block: Block, name: string): string {
 
 function renderTab(block: Block): string {
 	const label = labelOf(block, "label");
-	return `<Tab value=${quoted(label)}>\n\n${bodyOf(block)}\n\n</Tab>`;
+	// The marker goes inside the tab rather than around it: `Tabs` reads its
+	// own children to build the trigger list, so an extra element next to a
+	// `<Tab>` is not the same page. A div inside the panel is.
+	return `<Tab value=${quoted(label)}>\n${tagged(
+		"tab",
+		`\n${bodyOf(block)}\n`,
+	)}\n</Tab>`;
 }
 
 function onlyChildren(block: Block, child: string): readonly Block[] {

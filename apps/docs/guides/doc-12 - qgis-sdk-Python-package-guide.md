@@ -3784,14 +3784,10 @@ What to move:
 ## Project scaffold
 
 `qgis-sdk new <directory>` writes a minimal but genuinely loadable QGIS plugin
-project, built from the public declaration API instead of generated boilerplate.
-The command is a thin Typer layer in `src/qgis_sdk_tools/__main__.py` over the
-public `qgis_sdk_tools.scaffold` API, so a pip or `pixi add --pypi` install gets
-the console script and `python -m qgis_sdk_tools` reaches the identical entry
-point. The tools tree is separate from the runtime package `qgis_sdk` a plugin
-imports (decision-35): it may use Typer and pytest, the runtime may not, and the
-runtime never imports it. Typer is a
-runtime dependency of the wheel for this command alone:
+project from the public declaration API instead of generated boilerplate. The
+command is a thin Typer layer in `src/qgis_sdk_tools/__main__.py` over
+`qgis_sdk_tools.scaffold`, a tree separate from the runtime package `qgis_sdk` a
+plugin imports (decision-35). Three ways in, one behaviour:
 
 ```sh
 qgis-sdk new /tmp/demo --title "Demo Tools"            # installed console script
@@ -3799,40 +3795,46 @@ python -m qgis_sdk_tools new /tmp/demo --title "Demo Tools"  # same command via 
 pixi run -e default python -m qgis_sdk_tools new /tmp/demo   # from workspace source
 ```
 
-`scaffold` was the command's name through 0.3.0; it still runs, hidden from
-`--help` and marked deprecated, and goes away in a later minor.
+(`scaffold` was the name through 0.3.0; it still runs, hidden and deprecated.)
+`ScaffoldOptions.resolve` validates everything first: a lowercase Python
+identifier neither QGIS nor the standard library owns, and dot-separated digits
+for versions. The result is an in-memory plan with LF endings, so the same
+options always produce the same bytes:
 
-`ScaffoldOptions.resolve` validates everything before a single byte is written: the
-plugin name must be a lowercase Python identifier that neither QGIS nor the
-standard library already owns, and the version fields must be dot-separated
-digits. The result is an in-memory plan written with LF endings, so the same
-options always produce the same bytes: `.gitignore`, `README.md`,
-`pyproject.toml`, `<plugin>/__init__.py` (empty), `<plugin>/plugin.py` and
-`tests/test_plugin.py`. There is no template directory to keep in sync;
-`--dry-run` prints the plan without touching disk, and an existing file is refused
-unless `--force` is passed.
+:::files
+- demo/
+  - pyproject.toml
+  - README.md
+  - .gitignore
+  - demo/
+    - __init__.py
+    - plugin.py
+  - tests/
+    - test_plugin.py
+:::
 
-`--host server` writes a project for the other entry point. The files are the
-same six, and two of them differ: `[tool.qgis-sdk] hosts = ["server"]` says which
-host loads it, and `<plugin>/__init__.py` is no longer empty - it holds
+No template directory keeps this in sync; `--dry-run` prints the plan, and an
+existing file is refused unless `--force` is passed. `--host` picks one of three
+shapes, and the files above are the Desktop one:
+
+:::tabs
+:::tab desktop
+The default. `hosts = ["desktop"]`; `build`/`dev` append a `classFactory`
+through `host()` (decision-43).
+:::
+:::tab server
+`hosts = ["server"]`. `<plugin>/__init__.py` is no longer empty - it holds
 `serverClassFactory`, because QGIS Server imports the package and calls that
-name, so a generated entry has to exist in the source tree (a Desktop
-`classFactory` is still appended by `build`/`dev`, decision-43). `<plugin>/plugin.py`
+name, so the entry has to exist in the source tree. `<plugin>/plugin.py`
 declares a `@filter`, a `@service` and a `@access_control` hook instead of
 actions, and `tests/test_plugin.py` drives them through
 `qgis_sdk.testing.FakeServerInterface`.
-
-The flags that only one host can honour are refused rather than silently
-dropped: `--web`, `--ui` and `--algorithm` need `iface` or a Processing
-registry, and a `ServerContext` has neither, so `qgis-sdk new --host server
---web vanilla` fails with the reason. A plugin for both hosts is a Desktop
-project that declares `hosts = ["desktop", "server"]` and keeps its surfaces for
-the Desktop one.
-
-`--host app` writes the third host: `[tool.qgis-sdk] hosts = ["app"]`, the same
-empty `<plugin>/__init__.py` (there is no QGIS to call a factory), the same
-`<plugin>/plugin.py`, plus `<plugin>/__main__.py` - the entry `python -m
-<plugin>`, `qgis-sdk run` and a built distribution's console script all call:
+:::
+:::tab app
+`hosts = ["app"]`, the same empty `<plugin>/__init__.py` (there is no QGIS to
+call a factory) and the same `<plugin>/plugin.py`, plus `<plugin>/__main__.py` -
+the entry `python -m <plugin>`, `qgis-sdk run` and a built distribution's
+console script all call:
 
 ```python
 from qgis_sdk.app import main as run_app
@@ -3845,12 +3847,23 @@ def main(argv=None) -> int:
 ```
 
 Its starter test drives `qgis_sdk.app.run` over `FakeAppBackend`, so the
-generated suite proves the app host starts, delivers and stops without QGIS or a
-display. `--ui native` and `--algorithm` are allowed on this host - a standalone
-app with `gui=True` has a window and a live application - while `--web` is not:
-the page is placed through the Desktop adapter's `iface`, so a project with a
-page and an app declares both hosts. See
-[The app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
+generated suite proves the app host starts, delivers and stops without QGIS or
+a display.
+:::
+:::
+
+The app host is not a fourth file set: `qgis_sdk.app.run` starts the same
+declaration with its own `QgsApplication`, a window when `gui=True`, and a
+bounded shutdown - [The
+app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
+
+Flags one host cannot honour are refused rather than silently dropped: `--web`,
+`--ui` and `--algorithm` need `iface` or a Processing registry, and a
+`ServerContext` has neither, so `qgis-sdk new --host server --web vanilla` fails
+with the reason. A project for both hosts is a Desktop project that declares
+`hosts = ["desktop", "server"]` and keeps its surfaces for the Desktop one, and
+`--web` is Desktop-only because the page is placed through the Desktop
+adapter's `iface`.
 
 There is no `metadata.txt` and no `classFactory` in the project (decision-43):
 `pyproject.toml` carries `[project]` (name, version, description, authors, the
@@ -3863,23 +3876,16 @@ without QGIS. Tests pin that the generated project imports nothing native.
 
 ### Choosing Desktop or standalone Qt mode
 
-The README the scaffold writes teaches both modes; they differ in one thing, whether a host
-`iface` exists:
+The two modes differ in one thing - whether a host `iface` exists:
 
 | Mode | How it runs | What the SDK sees |
 | :-- | :-- | :-- |
 | Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.desktop` succeeds and messages reach the real message bar |
 | Standalone Qt | call `host("<plugin>.plugin:app")(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
-The starter tests are the standalone mode: in the generated project,
-`PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
-unload through the SDK runtime with no QGIS installation at all.
-
-`host(...)(None)` is the *plugin lifecycle* without QGIS, which is what a
-Desktop plugin's own tests need. A project that declares the app host gets the
-other half too: `qgis_sdk.app.run` starts the same declaration with its own
-`QgsApplication`, a window when `gui=True`, and a bounded shutdown -
-[The app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
+The starter tests are the standalone mode; a project that declares the app host
+gets the other half too: [The
+app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
 
 ### Processing starter: `--algorithm`
 
@@ -3892,41 +3898,33 @@ Metres, working_crs: CrsInput) -> VectorLayerInfo`, the same shape as
 `buffer` action through `invoke(algorithms.buffer_layer, ctx, ...)`.
 `tests/test_plugin.py` gains a fourth test that runs the function over
 `FakeLayers`/`FakeAlgorithms`/`FakeProject` and asserts the exact
-`BufferRequest` Processing would have received. `build` renders
-`hasProcessingProvider=yes` from the declaration, and the
-scaffold Desktop smoke test (`pytest -m smoke`) scaffolds this variant so real QGIS
-Desktop proves the provider is in `processingRegistry()` while the plugin runs
-and gone after unload. The README gets a "Processing" section naming the
-toolbox entry `<plugin>:buffer`. It combines with `--web`.
+`BufferRequest`. `build` renders `hasProcessingProvider=yes`; the Desktop smoke
+test (`pytest -m smoke`) scaffolds this variant so real QGIS proves the provider
+is registered while the plugin runs and gone after unload. Combines with
+`--web`.
 
 ### Native UI starter: `--ui native`
 
-`qgis-sdk new --ui native` adds `<plugin>/ui.py` with `PingDialog`, a
-`Dialog` subclass bound to `Plugins/<Title>` in the declarative form: a
-`Number` (`form/value`), a `Form([value], action_id="ping")`, a `Button`
-(`buttons/ping`) and a `LogView` over `ctx.log` as class attributes, no
-`build()` and no Qt import anywhere in the package; `@on(ping).clicked`
-submits the form and logs the answer. `plugin.py` lists it on the class
-(`surfaces = (PingDialog,)`) and binds a no-input `open_ping` action to the
-toolbar that calls `ctx.ui.open(PingDialog, initial={"value": 7})`,
-which the default `build()` seeds into `form/value`. `tests/test_plugin.py`
-gains a test that runs the action under `FakeUi` and asserts what was
-opened. The README gets a "Native UI" section naming `UI001`-`UI005` and
-`ICON001`, and says in one sentence that a `build()` returning any QWidget
-(plain PyQt, imported inside the method) is the escape hatch.
-It combines with `--algorithm` and `--web`; the `QGIS_SDK_DEVTOOLS=1`
-harness scaffolds this variant so `qgis-sdk dev` inside real QGIS Desktop
-proves the toolbar action opens the dialog and an edit to `ui.py` is what
-the next opening builds after a reload.
+`qgis-sdk new --ui native` adds `<plugin>/ui.py` with `PingDialog`, a `Dialog`
+subclass bound to `Plugins/<Title>` declaratively - a `Number` (`form/value`),
+a `Form([value], action_id="ping")`, a `Button` (`buttons/ping`) and a `LogView`
+over `ctx.log` as class attributes, no `build()`, no Qt import. `@on(ping).clicked`
+submits and logs. `plugin.py` lists it (`surfaces = (PingDialog,)`) and binds a
+no-input `open_ping` action that calls `ctx.ui.open(PingDialog, initial={"value": 7})`,
+which the default `build()` seeds into `form/value`; a test runs that action
+under `FakeUi`. A `build()` returning any QWidget (plain PyQt, imported inside
+the method) is the escape hatch. Combines with `--algorithm` and `--web`; the
+`QGIS_SDK_DEVTOOLS=1` harness scaffolds it so `qgis-sdk dev` inside real QGIS
+proves the action opens the dialog and an edit to `ui.py` is what the next
+opening builds.
 
 ### Web UI: vanilla or React, dialog or dock
 
-`new` can add a page (decision-18). On a terminal it asks four questions -
-web UI (`none`/`vanilla`/`react`), placement (`dialog`/`dock`), package
-manager (`npm`/`pnpm`/`bun`), install now (`no`/`yes`) - and the answers feed
-the same `ScaffoldOptions.resolve(web=, placement=, package_manager=)` the
-flags do, so a script and a human get one validated plan. Any web flag
-silences the questions; `--no-input` or a pipe means no questions and, without
+`new` can add a page (decision-18). A terminal asks four questions - web UI
+(`none`/`vanilla`/`react`), placement (`dialog`/`dock`), package manager
+(`npm`/`pnpm`/`bun`), install now - and the answers feed the same
+`ScaffoldOptions.resolve(web=, placement=, package_manager=)` the flags do. Any
+web flag silences them; `--no-input` or a pipe means no questions and, without
 flags, no page.
 
 ```sh
@@ -3934,38 +3932,37 @@ qgis-sdk new field_tools --web react --placement dock --package-manager bun --in
 qgis-sdk new field_tools --no-input          # a plain plugin, as before
 ```
 
-`--sdk-dependency SPEC` replaces the one value a plugin inside this repository
-needs changed: what `web/package.json` depends on for `@archont561/qgis-sdk`.
-Without it the page gets the exact bridge release this `qgis-sdk-tools` was
-qualified with (`SDK_NPM_VERSION` in `scaffold/web.py`, moved by every bridge
-release through `release.py stamp --scope typescript`); with it, any npm spec
-you pass - the example plugin and the workspace harnesses use `workspace:*`
-and a `file:<tarball>` of the checkout's bridge respectively, never a guessed
-path (decision-41). Like `--placement`, it is refused without `--web`.
+`--sdk-dependency SPEC` replaces what `web/package.json` depends on for
+`@archont561/qgis-sdk`: without it, the exact bridge release this
+`qgis-sdk-tools` was qualified with (`SDK_NPM_VERSION`, stamped by every bridge
+release); with it, any npm spec - the example plugin uses `workspace:*` and the
+harnesses a `file:<tarball>`, never a guessed path (decision-41). It is
+refused without `--web`, like `--placement`.
 
-What the web plan adds:
+The plan adds a Vite page - every dependency pinned exactly, Vite and Vitest for
+every manager, never Bunup - plus a `[tool.qgis-sdk.web]` section holding
+`placement` and an empty `grants` list, and no Python at all:
 
-- `web/` - a Vite app: `package.json` (every dependency pinned exactly,
-  `@archont561/qgis-sdk` at the version this release was qualified with
-  unless `--sdk-dependency` says otherwise; Vite and Vitest for every
-  manager, never Bunup), `vite.config.ts` (`base: "./"`
-  for `file:` pages, output into `<plugin>/web`, Chromium target of the
-  oldest supported QGIS), `tsconfig.json`, `index.html` (loads Qt's
-  `qwebchannel.js`), `src/bridge.schema.ts` (the schema module rendered from
-  the plugin's declarations and checked in - `<pm> run bindings` is the CI
-  drift check), the page (`main.ts`/`app.ts` or `main.tsx`/`App.tsx`, three
-  statements on `QgisSdk.fromBridgeSchema`) and a Vitest test against
-  `@archont561/qgis-sdk/testing`.
-- `[tool.qgis-sdk.web]` in `pyproject.toml` - `placement` and an empty
-  `grants` list. No Python is added: `host()` opens the built page (see
-  *Desktop host* above), and the starter test binds `classFactory` with the
-  same placement.
+:::files
+- demo/web/
+  - package.json
+  - vite.config.ts
+  - tsconfig.json
+  - index.html
+  - src/
+    - bridge.schema.ts
+    - main.ts
+  - app.test.ts
+:::
 
-Installing is opt-in: `--install` (or answering `yes`) runs the manager's
-install in `web/` after every file is written. A failure keeps the project and
-prints the retry (`cd <target>/web && npm install`) with exit code 1; nothing
-is rolled back and nothing else is ever downloaded. A package named `web` or
-`tests` is refused because the project owns those directories.
+`src/bridge.schema.ts` is rendered from the plugin's declarations and checked
+in, so `<pm> run bindings` is the CI drift check; `host()` opens the built page
+(see *Desktop host* above) and the starter test binds `classFactory` with the
+same placement. `--install` (or answering `yes`) runs the manager's install
+after every file is written; a failure keeps the project, prints the retry
+(`cd <target>/web && npm install`) and exits 1 - nothing is rolled back and
+nothing else is downloaded. A package named `web` or `tests` is refused because
+the project owns those directories.
 
 ## Grants, the console and the HTTP allowlist
 
