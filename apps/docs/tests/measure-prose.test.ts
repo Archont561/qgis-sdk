@@ -35,6 +35,12 @@ describe("proseWords", () => {
 		expect(proseWords(source)).toBe(1);
 	});
 
+	test("drops a generated TypeTable, whose rows are a lookup", () => {
+		const source =
+			'Before.\n\n<div data-qgis-sdk="typetable">\n<TypeTable type={{\n"Thing": { type: "(x: int) -> None", description: "Tier `stable`." },\n"Other": { type: "class", description: "Tier `stable`." }\n}} />\n</div>\n\nAfter.\n';
+		expect(proseWords(source)).toBe(2);
+	});
+
 	test("keeps headings, which are prose a reader reads", () => {
 		expect(proseWords("## How do I name a job?\n")).toBe(6);
 	});

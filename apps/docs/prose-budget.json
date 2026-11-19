@@ -135,11 +135,11 @@
 		},
 		"python/desktop-bindings-and-native-surfaces.mdx": {
 			"words": 2814,
-			"reason": "Answers four needs at once (tutorial, how-to, reference, explanation); the split into single-kind pages is scheduled. The allowance may only fall."
+			"reason": "Answers four needs at once (tutorial, how-to, reference, explanation); catalogue converted to TypeTable (TASK-170 AC 5/7). The split into single-kind pages is scheduled. The allowance may only fall."
 		},
 		"python/desktop-host-host-and-the-project-manifest.mdx": {
 			"words": 1807,
-			"reason": "Long explanation carrying how-to steps; conversion to a single kind is scheduled. The allowance may only fall."
+			"reason": "Long explanation carrying how-to steps; app-build tree converted to Files (TASK-170 AC 5). Conversion to a single kind is scheduled. The allowance may only fall."
 		},
 		"python/developing-against-qgis-qgis-sdk-dev.mdx": {
 			"words": 1063
@@ -250,8 +250,8 @@
 			"words": 495
 		},
 		"python/scoped-jobs.mdx": {
-			"words": 2128,
-			"reason": "How-to over the 700 budget; the question-heading conversion to Accordions is scheduled (TASK-170 AC 5). The allowance may only fall."
+			"words": 2092,
+			"reason": "How-to over the 700 budget; question headings converted to Accordions (TASK-170 AC 5). The allowance may only fall."
 		},
 		"python/scoped-plugin-runtime.mdx": {
 			"words": 599
@@ -313,8 +313,8 @@
 			"reason": "Reference page carrying explanatory prose; move to the guide or trim. The allowance may only fall."
 		},
 		"typescript/host-namespaces.mdx": {
-			"words": 2299,
-			"reason": "One service per Tab conversion is scheduled (TASK-170 AC 5); the allowance may only fall."
+			"words": 2251,
+			"reason": "Services converted to Tabs (TASK-170 AC 5); still over the explanation budget. The allowance may only fall."
 		},
 		"typescript/index.mdx": {
 			"words": 303

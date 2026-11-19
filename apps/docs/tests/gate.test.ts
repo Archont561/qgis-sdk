@@ -150,7 +150,16 @@ describe("the site as generated", () => {
 	});
 });
 
-/** `callout` -> `Callout`: a directive name to the component it renders. */
+/**
+ * `callout` -> `Callout`: a directive name to the component it renders.
+ *
+ * `typetable` is the one name where that is not a capitalisation: the
+ * component is `TypeTable`, two words, and a second capitalisation rule would
+ * drift from the registry on the next compound name.
+ */
 function capitalise(name: string): string {
+	if (name === "typetable") {
+		return "TypeTable";
+	}
 	return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 }

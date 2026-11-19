@@ -42,6 +42,7 @@ import {
 } from "./lib/guides";
 import { readInventory } from "./lib/inventory";
 import { collectStats } from "./lib/stats";
+import { renderTypeTable } from "./lib/typetable";
 
 const DOCS_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(DOCS_DIR, "../../..");
@@ -110,9 +111,33 @@ async function main(): Promise<void> {
 			});
 		}
 	}
+	// The inventory and the section routes, read before the guides render: a
+	// `:::typetable` directive renders from them, and the API index reuses
+	// both below.
+	const inventory = await readInventory(INVENTORY);
+	const routes = new Map<string, string>();
+	for (const guide of GUIDES) {
+		const split = splitGuide(
+			inputs.find((input) => input.guide.id === guide.id)?.markdown ?? "",
+		);
+		for (const section of split.sections) {
+			routes.set(
+				`${guide.id}:${section.heading}`,
+				`/${guide.section}/${section.slug}`,
+			);
+		}
+	}
+	const typeTables = (module: string): string | null =>
+		module in inventory.modules
+			? renderTypeTable({ inventory, notes: API_MODULE_NOTES, routes }, module)
+			: null;
 	// Root-relative routes: the links Next renders carry the deployment's
 	// basePath already, so prefixing it here would double it.
-	const pages = renderGuides(inputs, { base: "", repository: REPOSITORY });
+	const pages = renderGuides(inputs, {
+		base: "",
+		repository: REPOSITORY,
+		typeTables,
+	});
 
 	// Every directory the guides render into is theirs alone, so a page whose
 	// section was renamed or removed does not linger from an earlier run.
@@ -196,22 +221,7 @@ async function main(): Promise<void> {
 	await mkdir(join(CONTENT_DIR, dirname(DECISIONS_PAGE)), { recursive: true });
 	await writeFile(join(CONTENT_DIR, DECISIONS_PAGE), table.content);
 	console.log(`generate: ${DECISIONS_PAGE} from ${decisions.length} records`);
-	// The API index is the inventory with prose: the section routes are taken
-	// from the pages rendered above, so a renamed heading breaks the generator's
-	// input rather than the site's links.
-	const routes = new Map<string, string>();
-	for (const guide of GUIDES) {
-		const split = splitGuide(
-			inputs.find((input) => input.guide.id === guide.id)?.markdown ?? "",
-		);
-		for (const section of split.sections) {
-			routes.set(
-				`${guide.id}:${section.heading}`,
-				`/${guide.section}/${section.slug}`,
-			);
-		}
-	}
-	const inventory = await readInventory(INVENTORY);
+	// The API index is the inventory with prose, over the routes built above.
 	// The Python reference is written by `automation.docs.reference` in the
 	// environment that has Fumero (decision-86), so it is here or it is not: a
 	// build without that step renders the rest of the reference and says which

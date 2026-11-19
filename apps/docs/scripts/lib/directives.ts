@@ -37,6 +37,9 @@
  * The answer.
  * :::
  * :::
+ *
+ * :::typetable module="qgis_sdk.ui"
+ * :::
  * ```
  *
  * Every block opens with `:::name` and closes with a bare `:::`; `tabs` and
@@ -45,6 +48,11 @@
  * unknown name, a directive inside a block that takes text, a block left open -
  * is an error with its line number, because a directive that is silently left
  * alone renders as `:::steps` in the middle of a page.
+ *
+ * `typetable` is the one directive whose content the author does not write:
+ * it names a module and the generator renders the table from
+ * `api/python.json` (TASK-170 AC 7), so the rows cannot drift from the
+ * inventory. The layer stays pure by taking a resolver in its context.
  *
  * The expansion wraps each component in `<div data-qgis-sdk="name">`. That
  * wrapper is the build gate's evidence: `scripts/lib/gate.ts` checks the
@@ -77,6 +85,16 @@ export interface Expansion {
 	readonly markdown: string;
 	/** Directive names, in the order they appear, deduplicated. */
 	readonly components: readonly string[];
+}
+
+/**
+ * What a data-driven directive needs from the caller. Most directives render
+ * from the text the author wrote; `typetable` renders from the inventory, so
+ * the generator hands the layer a resolver and the layer stays pure.
+ */
+export interface DirectiveContext {
+	/** The `<TypeTable>` JSX for a module, or `null` when it is unknown. */
+	readonly typeTable?: (module: string) => string | null;
 }
 
 /** The parent each block must sit in; absent means "at the top level only". */
@@ -445,13 +463,17 @@ function labelOf(block: Block, name: string): string {
 
 function renderTab(block: Block): string {
 	const label = labelOf(block, "label");
+	// An optional id keeps a heading anchor alive when a `###` becomes a tab:
+	// the panel carries the id the heading used to, so a deep link still lands.
+	const id = parseAttributes(block.argument).values.get("id");
+	const opening =
+		id === undefined
+			? `<Tab value=${quoted(label)}>`
+			: `<Tab value=${quoted(label)} id=${quoted(id)}>`;
 	// The marker goes inside the tab rather than around it: `Tabs` reads its
 	// own children to build the trigger list, so an extra element next to a
 	// `<Tab>` is not the same page. A div inside the panel is.
-	return `<Tab value=${quoted(label)}>\n${tagged(
-		"tab",
-		`\n${bodyOf(block)}\n`,
-	)}\n</Tab>`;
+	return `${opening}\n${tagged("tab", `\n${bodyOf(block)}\n`)}\n</Tab>`;
 }
 
 function onlyChildren(block: Block, child: string): readonly Block[] {
@@ -475,12 +497,19 @@ function renderTabs(block: Block): string {
 	const tabs = onlyChildren(block, "tab");
 	const labels = tabs.map((tab) => labelOf(tab, "label"));
 	const items = `[${labels.map((label) => quoted(label)).join(", ")}]`;
-	return tagged(
-		"tabs",
-		`<Tabs items={${items}} defaultValue=${quoted(labels[0] ?? "")}>\n${tabs
-			.map(renderTab)
-			.join("\n")}\n</Tabs>`,
-	);
+	// A tab's id is registered for client-side hash navigation, but Radix
+	// renders its own ids on the panels and no panel content server-side, so
+	// the fragment would not exist in the exported HTML. A hidden anchor
+	// before the container keeps the deep link resolvable statically too.
+	const anchors = tabs
+		.map((tab) => parseAttributes(tab.argument).values.get("id"))
+		.filter((id) => id !== undefined)
+		.map((id) => `<span id=${quoted(id)} className="sr-only" />`)
+		.join("\n");
+	const body = `<Tabs items={${items}} defaultValue=${quoted(labels[0] ?? "")}>\n${tabs
+		.map(renderTab)
+		.join("\n")}\n</Tabs>`;
+	return tagged("tabs", anchors === "" ? body : `${anchors}\n${body}`);
 }
 
 function renderAccordion(block: Block): string {
@@ -504,8 +533,44 @@ function renderAccordions(block: Block): string {
 	);
 }
 
+/**
+ * A TypeTable generated from the inventory. The author names the module; the
+ * caller renders it, because the rows come from `api/python.json` and not
+ * from the guide text.
+ */
+function renderTypeTable(
+	block: Block,
+	context: DirectiveContext | undefined,
+): string {
+	const module = required(
+		block,
+		"module",
+		':::typetable needs a module, e.g. module="qgis_sdk.ui"',
+	);
+	const render = context?.typeTable;
+	if (render === undefined) {
+		throw new DirectiveError(
+			block.line,
+			":::typetable needs the inventory; the generator did not supply it",
+		);
+	}
+	const jsx = render(module);
+	if (jsx === null) {
+		throw new DirectiveError(
+			block.line,
+			`:::typetable names ${module}, which is not in the inventory`,
+		);
+	}
+	return tagged("typetable", jsx);
+}
+
 /** The renderer per directive name, and the name the HTML is tagged with. */
-const RENDERERS: Readonly<Record<string, (block: Block) => string>> = {
+const RENDERERS: Readonly<
+	Record<
+		string,
+		(block: Block, context: DirectiveContext | undefined) => string
+	>
+> = {
 	accordion: renderAccordion,
 	accordions: renderAccordions,
 	callout: renderCallout,
@@ -513,25 +578,35 @@ const RENDERERS: Readonly<Record<string, (block: Block) => string>> = {
 	steps: renderSteps,
 	tab: renderTab,
 	tabs: renderTabs,
+	typetable: renderTypeTable,
 };
 
 /** Render one block, checking the name is one this layer knows. */
-function renderBlock(block: Block, used: string[]): string {
+function renderBlock(
+	block: Block,
+	used: string[],
+	context: DirectiveContext | undefined,
+): string {
 	const renderer = RENDERERS[block.name];
 	if (renderer === undefined) {
 		throw new DirectiveError(
 			block.line,
 			`unknown directive :::${block.name}; the layer knows ` +
-				["callout", "steps", "tabs", "files", "accordions"].join(", "),
+				["callout", "steps", "tabs", "files", "accordions", "typetable"].join(
+					", ",
+				),
 		);
 	}
-	for (const name of [
-		block.name,
-		...block.children.map((child) => child.name),
-	]) {
+	// A tab panel is not recorded: Radix renders only the active panel on the
+	// server, so its marker would never reach the exported HTML and the gate
+	// would report a component that did render. The `tabs` container is the
+	// verifiable marker; the panels are its implementation.
+	const children =
+		block.name === "tabs" ? [] : block.children.map((child) => child.name);
+	for (const name of [block.name, ...children]) {
 		if (used.includes(name) === false) used.push(name);
 	}
-	return renderer(block);
+	return renderer(block, context);
 }
 
 /**
@@ -540,7 +615,10 @@ function renderBlock(block: Block, used: string[]): string {
  * Returns the components the page now uses so the generator can record them:
  * that record is what the build gate compares the exported HTML against.
  */
-export function expandDirectives(markdown: string): Expansion {
+export function expandDirectives(
+	markdown: string,
+	context?: DirectiveContext,
+): Expansion {
 	const nodes = parse(markdown);
 	if (nodes.some((node) => node.kind === "block") === false) {
 		return { markdown, components: [] };
@@ -549,7 +627,7 @@ export function expandDirectives(markdown: string): Expansion {
 	const parts = nodes.map((node) =>
 		node.kind === "text"
 			? node.lines.join("\n")
-			: renderBlock(node.block, used),
+			: renderBlock(node.block, used, context),
 	);
 	return { markdown: parts.join("\n"), components: used };
 }

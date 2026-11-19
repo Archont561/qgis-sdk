@@ -278,8 +278,8 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   is the third authority-bearing client and names **action and stream ids**; there
   is no agent namespace to configure (decision-49, withdrawn in 0.8.0).
 
-### Features, expressions and editing from a page
-
+:::tabs
+:::tab Features id="features-expressions-and-editing-from-a-page"
 `features.page` is a stream, not a call: the host asks the provider for one
 bounded page, hands it over and waits, so a page that stops early has cost one
 page rather than the dataset.
@@ -323,9 +323,8 @@ const subscription = await client.subscribe(
   does not have, and nothing here spans two layers. The tested boundaries per
   provider are in [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md)'s
   editing section and in doc-22.
-
-### Processing from a page: `algorithms.*` and `runAlgorithm`
-
+:::
+:::tab Processing id="processing-from-a-page-algorithms-and-runalgorithm"
 The four `algorithms` operations of 0.7.0
 ([decision-64](../../../backlog/decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md))
 sit behind two grants: `algorithms.read` for `providers`, `list` and `describe`
@@ -374,9 +373,8 @@ The root exports what the generated module imports: `runAlgorithm<R, K>`,
 `harness.expectInvoke("algorithms.run", ...)`; `bindings` regenerates the
 schema against the project's QGIS, so a registry that differs is drift, not a
 stale type.
-
-### The map canvas from a page
-
+:::
+:::tab Map canvas id="the-map-canvas-from-a-page"
 The `canvas` namespace is the view the user is looking at. `canvas.read` covers
 `extent()`, `scale()`, `crs()`, `center()`, `themes()` and the `extent_changed`
 stream; `canvas.control` covers `zoom_to`, `refresh`, `apply_theme` and
@@ -410,9 +408,8 @@ const stop = await qgis.host.canvas.extent_changed({}, {
 - **`canvas.extent_changed` is ordered per subscription** (`seq` from zero), and
   a refresh produces no frame. A server host has no canvas: every operation is
   declared and fails by name there.
-
-### Rasters from a page
-
+:::
+:::tab Rasters id="rasters-from-a-page"
 `rasters` reads raster bands, its own namespace because a raster is not a vector
 layer with different fields; `layers.*` only reports *that* one exists.
 
@@ -442,9 +439,8 @@ sample.values; // readonly (number | null)[] - None per band, never 0
 - **No export operation.** A page never names a filesystem destination
   (decision-20): the export is a plugin action that runs as a job and returns a
   `FileRef`.
-
-### Every layer kind from a page
-
+:::
+:::tab Layer kinds id="every-layer-kind-from-a-page"
 Each layer kind has its own interface and its own `open` operation, all behind
 the one grant `layers.open`.
 
@@ -483,9 +479,8 @@ scene.extent;          // { x_min, y_min, x_max, y_max, crs }
 - **Vector-only work still refuses**: `features.*`, `expressions.*`, `editing.*`
   and `layers.export_vector` fail `unsupported_layer_kind`, so a page shows the
   refusal instead of an empty table that reads as "no features".
-
-### Symbology from a page
-
+:::
+:::tab Symbology id="symbology-from-a-page"
 `host.symbology` reads and writes how a layer is drawn, `host.labelling` what it
 is labelled with, and `host.styles` the style manager and QML/SLD text. The
 renderer is a closed union of four interfaces, so `kind` is what reaches a field:
@@ -536,9 +531,8 @@ await qgis.host.styles.import({ layer_id, format: "qml", text: qml.text });
 - **QML keeps the renderer; SLD keeps the drawing.** `styles.export` answers
   `StyleText` with `format` `"qml"` or `"sld"`. QGIS reads a categorized renderer
   back out of SLD as rule-based, so round-trip QML when the kind must survive.
-
-### Connections from a page
-
+:::
+:::tab Connections id="connections-from-a-page"
 `host.connections` browses the provider registry and opens one of its tables;
 `host.auth` lists authentication configurations and re-binds one. The models are
 flat and closed - a description is a name, a provider and an auth config *id*,
@@ -580,8 +574,8 @@ await qgis.host.auth.attach({
   configurations and `auth.write` attaches one.
 - **A browse is one level**: with no `schema`, a schema-capable connection
   answers its `kind: "schema"` entries and a GeoPackage its tables.
-### Print layouts from a page
-
+:::
+:::tab Print layouts id="print-layouts-from-a-page"
 The `layouts` namespace exports what the print designer composed. `layouts.read`
 covers `list()`, `layouts.write` `load_template` (it adds a layout to the
 project) and `layouts.export` `export` and `atlas`.
@@ -628,9 +622,8 @@ atlas.pages[0].feature_id;        // the coverage feature it was drawn for
 - **An atlas answers one ref per page**, in coverage order, each with the
   `feature_id` it was drawn for, plus a `directory` ref; `{index}` and
   `{feature_id}` are the placeholders, and an unknown one fails by name.
-
-### The project from a page
-
+:::
+:::tab Project id="the-project-from-a-page"
 `project` is the open project: the layer tree, the CRS, variables, custom
 properties, bookmarks, the file and the change stream.
 
@@ -664,7 +657,8 @@ const stop = await qgis.host.project.changed({}, {
 - **One frame per change, in order.** `project.changed` emits `{kind,
   layer_ids}` for `layers`, `crs`, `variables`, `properties` and `bookmarks`;
   it never completes, so a page follows the project until it unsubscribes.
-
+:::
+:::
 ## The schema module and `QgisSdk`
 
 `client.invoke<T>(...)` is a transport, not a type guarantee: `T` is asserted by
