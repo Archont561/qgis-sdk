@@ -1,5 +1,6 @@
 ---
 title: For coding agents
+kind: explanation
 description: What an agent needs to write, check, test and build a QGIS SDK plugin without guessing - the command set, the loop, and a copyable AGENTS.md block.
 ---
 

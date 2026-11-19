@@ -11,8 +11,9 @@
  * 4. the checks: every page has its markdown and is listed, every legacy
  *    route still redirects to a page that exists, no compatibility page
  *    leaks into the sitemap or the llms index, no `.md` page holds JSX that
- *    the build dropped, and every page a directive gave a component to
- *    carries that component in the exported HTML.
+ *    the build dropped, every page a directive gave a component to carries
+ *    that component in the exported HTML, and every page holds its prose
+ *    allowance exactly (the ratchet, decision-86 item 2).
  */
 
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,7 @@ import {
 	missingComponentMarkup,
 } from "./lib/gate";
 import { publishedRoutes, verifyLlms, writeLlmsExports } from "./lib/llms";
+import { ratchetProblems } from "./lib/ratchet";
 import {
 	LEGACY_ROUTES,
 	verifyRedirectSurfaces,
@@ -36,6 +38,7 @@ const DOCS = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${DOCS}/out`;
 const CONTENT = `${DOCS}/content/docs`;
 const COMPONENT_USE = `${DOCS}/lib/generated/components.json`;
+const PROSE_BUDGET = `${DOCS}/prose-budget.json`;
 
 /** The generator's record of which pages carry which directive components. */
 async function componentUse(): Promise<
@@ -111,6 +114,13 @@ for (const problem of problems) {
 console.log(
 	`postbuild: component gate over ${Object.keys(use).length} pages with directives, ${problems.length} problems`,
 );
-if (report.broken.length > 0 || problems.length > 0) {
+// The prose ratchet: a page that grew past its allowance, or fell under it
+// without the allowance being lowered, fails the build (decision-86 item 2).
+const ratchet = await ratchetProblems(CONTENT, PROSE_BUDGET);
+for (const problem of ratchet) {
+	console.error(`postbuild: ${problem.where}: ${problem.message}`);
+}
+console.log(`postbuild: prose ratchet, ${ratchet.length} problems`);
+if (report.broken.length > 0 || problems.length > 0 || ratchet.length > 0) {
 	process.exit(1);
 }

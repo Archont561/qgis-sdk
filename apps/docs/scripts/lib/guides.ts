@@ -16,6 +16,7 @@
  */
 import { posix } from "node:path";
 import { directiveText, expandDirectives } from "./directives";
+import { type Kind, kindOf } from "./kinds";
 import { escapeMdx } from "./mdx-text";
 import { slugify } from "./slug";
 
@@ -153,6 +154,12 @@ export interface RenderOptions {
 	readonly repository: string;
 	/** The git ref `repository` links use. Default `main`. */
 	readonly ref?: string;
+	/**
+	 * The kind of a page path. Defaults to the editorial map in
+	 * `scripts/lib/kinds.ts`; tests pass a fixture so a synthetic section
+	 * still declares a kind.
+	 */
+	readonly kinds?: (path: string) => Kind;
 }
 
 export interface Page {
@@ -544,6 +551,7 @@ class Renderer {
 				content:
 					frontmatter({
 						title,
+						kind: (this.options.kinds ?? kindOf)(`${guide.section}/index`),
 						description: describe(directiveText(split.intro), title),
 					}) + index,
 				...(intro.components.length > 0
@@ -557,6 +565,9 @@ class Renderer {
 				const body = this.prose(guide, section.slug, section.body, true);
 				const head = frontmatter({
 					title: pageTitle,
+					kind: (this.options.kinds ?? kindOf)(
+						`${guide.section}/${section.slug}`,
+					),
 					description: describe(
 						directiveText(section.body),
 						`${title}: ${pageTitle}`,

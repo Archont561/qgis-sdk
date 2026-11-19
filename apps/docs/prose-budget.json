@@ -1,0 +1,372 @@
+{
+	"version": 1,
+	"pages": {
+		"contributing/workspace/0100-rc-rehearsal-2026-11-06.mdx": {
+			"words": 512,
+			"reason": "Rehearsal record for 0.10.0 (2026-11-06). A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/0100-release-gate-2026-11-06.mdx": {
+			"words": 1643,
+			"reason": "Release record for 0.10.0 (2026-11-06), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/0110-rc-rehearsal-2026-11-07.mdx": {
+			"words": 644,
+			"reason": "Rehearsal record for 0.11.0 (2026-11-07). A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/0110-release-gate-2026-11-07.mdx": {
+			"words": 2859,
+			"reason": "Release record for 0.11.0 (2026-11-07), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/040-release-gate-2026-10-25.mdx": {
+			"words": 657,
+			"reason": "Release record for 0.4.0 (2026-10-25), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/050-release-gate-2026-10-25.mdx": {
+			"words": 1099,
+			"reason": "Release record for 0.5.0 (2026-10-25), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/060-release-gate-2026-10-26.mdx": {
+			"words": 1556,
+			"reason": "Release record for 0.6.0 (2026-10-26), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/070-release-gate-2026-10-27.mdx": {
+			"words": 1708,
+			"reason": "Release record for 0.7.0 (2026-10-27), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/070-triple-rehearsal-2026-10-27.mdx": {
+			"words": 388
+		},
+		"contributing/workspace/080-rehearsal-2026-10-29.mdx": {
+			"words": 639,
+			"reason": "Rehearsal record for 0.8.0 (2026-10-29). A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/080-release-gate-2026-10-29.mdx": {
+			"words": 2680,
+			"reason": "Release record for 0.8.0 (2026-10-29), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/090-release-gate-2026-10-31.mdx": {
+			"words": 1536,
+			"reason": "Release record for 0.9.0 (2026-10-31), a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"contributing/workspace/build-artifacts.mdx": {
+			"words": 327
+		},
+		"contributing/workspace/contract-generation-checked-example.mdx": {
+			"words": 152
+		},
+		"contributing/workspace/contributing.mdx": {
+			"words": 142
+		},
+		"contributing/workspace/desktop-lifecycle-harnesses.mdx": {
+			"words": 2677,
+			"reason": "Long explanation; conversion to a single kind is scheduled. The allowance may only fall."
+		},
+		"contributing/workspace/developer-scripts.mdx": {
+			"words": 199
+		},
+		"contributing/workspace/development-environments.mdx": {
+			"words": 87
+		},
+		"contributing/workspace/documentation-site.mdx": {
+			"words": 1454
+		},
+		"contributing/workspace/headless-qgis-and-webengine-qualification.mdx": {
+			"words": 336
+		},
+		"contributing/workspace/index.mdx": {
+			"words": 261
+		},
+		"contributing/workspace/python-package-development.mdx": {
+			"words": 120
+		},
+		"contributing/workspace/quick-start.mdx": {
+			"words": 109
+		},
+		"contributing/workspace/repository-layout.mdx": {
+			"words": 0
+		},
+		"contributing/workspace/reproducible-sandbox.mdx": {
+			"words": 63
+		},
+		"contributing/workspace/split-release-pipeline-rehearsal.mdx": {
+			"words": 307
+		},
+		"contributing/workspace/test-build-and-the-pixi-tasks.mdx": {
+			"words": 1317,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"contributing/workspace/test-layers.mdx": {
+			"words": 1555,
+			"reason": "Over the 1,500 budget by 55 words; trim is scheduled. The allowance may only fall."
+		},
+		"contributing/workspace/ui-release-train-rehearsal-2026-10-27.mdx": {
+			"words": 313
+		},
+		"guides/cli-mcp.md": {
+			"words": 563
+		},
+		"guides/experimental-plugin-http.md": {
+			"words": 681
+		},
+		"guides/for-agents.md": {
+			"words": 412
+		},
+		"guides/migrating-from/plugin-builder.md": {
+			"words": 297
+		},
+		"guides/migrating-from/raw-pyqgis.md": {
+			"words": 348
+		},
+		"guides/test-a-plugin.mdx": {
+			"words": 386
+		},
+		"guides/web-plugin.mdx": {
+			"words": 193
+		},
+		"python/building-an-installable-zip-qgis-sdk-build.mdx": {
+			"words": 1045
+		},
+		"python/connections-and-authentication-configurations.mdx": {
+			"words": 618
+		},
+		"python/declarations.mdx": {
+			"words": 821,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/desktop-bindings-and-native-surfaces.mdx": {
+			"words": 2814,
+			"reason": "Answers four needs at once (tutorial, how-to, reference, explanation); the split into single-kind pages is scheduled. The allowance may only fall."
+		},
+		"python/desktop-host-host-and-the-project-manifest.mdx": {
+			"words": 1807,
+			"reason": "Long explanation carrying how-to steps; conversion to a single kind is scheduled. The allowance may only fall."
+		},
+		"python/developing-against-qgis-qgis-sdk-dev.mdx": {
+			"words": 1063
+		},
+		"python/features-expressions-and-editing.mdx": {
+			"words": 1451,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/forms-an-actions-inputs-as-a-window.mdx": {
+			"words": 517
+		},
+		"python/from-the-qgis-python-console.mdx": {
+			"words": 610
+		},
+		"python/going-deeper-where-this-contract-stops.mdx": {
+			"words": 610
+		},
+		"python/grants-the-console-and-the-http-allowlist.mdx": {
+			"words": 283
+		},
+		"python/ide-autocompletion-and-typing.mdx": {
+			"words": 321
+		},
+		"python/index.mdx": {
+			"words": 463
+		},
+		"python/installation.mdx": {
+			"words": 346
+		},
+		"python/layer-kinds-mesh-point-cloud-vector-tile-annotation-and-tiled-scene.mdx": {
+			"words": 989,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/migration/v0-1-experimental-policy.mdx": {
+			"words": 359
+		},
+		"python/migration/v0-10.mdx": {
+			"words": 1963,
+			"reason": "Migration record for 0.10.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-11.mdx": {
+			"words": 2202,
+			"reason": "Migration record for 0.11.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-2.mdx": {
+			"words": 254
+		},
+		"python/migration/v0-3.mdx": {
+			"words": 297
+		},
+		"python/migration/v0-4.mdx": {
+			"words": 975,
+			"reason": "Migration record for 0.4.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-5.mdx": {
+			"words": 287
+		},
+		"python/migration/v0-6.mdx": {
+			"words": 1219,
+			"reason": "Migration record for 0.6.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-7.mdx": {
+			"words": 1314,
+			"reason": "Migration record for 0.7.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-8.mdx": {
+			"words": 1196,
+			"reason": "Migration record for 0.8.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/migration/v0-9.mdx": {
+			"words": 1751,
+			"reason": "Migration record for 0.9.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"python/networking.mdx": {
+			"words": 579
+		},
+		"python/optional-controlled-deployment-adapter.mdx": {
+			"words": 130
+		},
+		"python/print-layouts-and-atlases.mdx": {
+			"words": 879,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/processing-algorithms-and-safe-outputs.mdx": {
+			"words": 1497,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/project-checks.mdx": {
+			"words": 279
+		},
+		"python/project-scaffold.mdx": {
+			"words": 1042
+		},
+		"python/providers-algorithms-in-the-qgis-processing-toolbox.mdx": {
+			"words": 464
+		},
+		"python/pure-contract-layer.mdx": {
+			"words": 856
+		},
+		"python/rasters.mdx": {
+			"words": 867,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/running-an-app-qgis-sdk-run.mdx": {
+			"words": 271
+		},
+		"python/running-tests-qgis-sdk-test.mdx": {
+			"words": 495
+		},
+		"python/scoped-jobs.mdx": {
+			"words": 2128,
+			"reason": "How-to over the 700 budget; the question-heading conversion to Accordions is scheduled (TASK-170 AC 5). The allowance may only fall."
+		},
+		"python/scoped-plugin-runtime.mdx": {
+			"words": 599
+		},
+		"python/stability.mdx": {
+			"words": 391
+		},
+		"python/supported-targets.mdx": {
+			"words": 505,
+			"reason": "Reference page carrying explanatory prose around the matrix; move to the guide or trim. The allowance may only fall."
+		},
+		"python/symbology-labelling-and-the-style-manager.mdx": {
+			"words": 742,
+			"reason": "Over the 700 budget by 42 words; trim is scheduled. The allowance may only fall."
+		},
+		"python/the-map-canvas.mdx": {
+			"words": 723,
+			"reason": "Over the 700 budget by 23 words; trim is scheduled. The allowance may only fall."
+		},
+		"python/the-project.mdx": {
+			"words": 896,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/troubleshooting.mdx": {
+			"words": 1567,
+			"reason": "How-to over the 700 budget; trim to a single task is scheduled. The allowance may only fall."
+		},
+		"python/webengine-bridge-host-side.mdx": {
+			"words": 1556,
+			"reason": "Long explanation; conversion to a single kind is scheduled. The allowance may only fall."
+		},
+		"reference/api-index.md": {
+			"words": 361
+		},
+		"reference/design-decisions.mdx": {
+			"words": 473
+		},
+		"reference/faq.md": {
+			"words": 553
+		},
+		"roadmap.mdx": {
+			"words": 339
+		},
+		"start/concepts.md": {
+			"words": 498
+		},
+		"start/first-plugin.mdx": {
+			"words": 769
+		},
+		"start/installation.mdx": {
+			"words": 218
+		},
+		"typescript/components-archont561qgis-sdk-ui.mdx": {
+			"words": 833,
+			"reason": "Component catalogue carrying prose; the TypeTable conversion (TASK-170 AC 7) is scheduled. The allowance may only fall."
+		},
+		"typescript/exports.mdx": {
+			"words": 548,
+			"reason": "Reference page carrying explanatory prose; move to the guide or trim. The allowance may only fall."
+		},
+		"typescript/host-namespaces.mdx": {
+			"words": 2299,
+			"reason": "One service per Tab conversion is scheduled (TASK-170 AC 5); the allowance may only fall."
+		},
+		"typescript/index.mdx": {
+			"words": 303
+		},
+		"typescript/installation.mdx": {
+			"words": 69
+		},
+		"typescript/migration/v0-2.mdx": {
+			"words": 174
+		},
+		"typescript/migration/v0-3.mdx": {
+			"words": 178
+		},
+		"typescript/migration/v0-4.mdx": {
+			"words": 455,
+			"reason": "Migration record for 0.4.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"typescript/migration/v0-5.mdx": {
+			"words": 434,
+			"reason": "Migration record for 0.5.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"typescript/migration/v0-6.mdx": {
+			"words": 163
+		},
+		"typescript/migration/v0-7.mdx": {
+			"words": 959,
+			"reason": "Migration record for 0.7.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"typescript/migration/v0-8.mdx": {
+			"words": 667,
+			"reason": "Migration record for 0.8.0, a shipped release. A historical archive, not maintained prose; the allowance is the ratchet floor."
+		},
+		"typescript/react-bindings.mdx": {
+			"words": 399
+		},
+		"typescript/stores-the-framework-free-core.mdx": {
+			"words": 488
+		},
+		"typescript/svelte-bindings.mdx": {
+			"words": 64
+		},
+		"typescript/testing-against-a-scripted-host.mdx": {
+			"words": 296
+		},
+		"typescript/the-schema-module-and-qgissdk.mdx": {
+			"words": 761
+		},
+		"typescript/transport-client.mdx": {
+			"words": 433
+		},
+		"typescript/vue-bindings.mdx": {
+			"words": 95
+		}
+	}
+}

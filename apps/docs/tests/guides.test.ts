@@ -15,6 +15,10 @@ import {
 	slugify,
 	splitGuide,
 } from "../scripts/lib/guides";
+import type { Kind } from "../scripts/lib/kinds";
+
+/** The fixtures use synthetic sections; every one declares a kind. */
+const kinds = (_path: string): Kind => "explanation";
 
 const PYTHON: Guide = {
 	id: "doc-12",
@@ -154,7 +158,11 @@ describe("renderGuides", () => {
 			{ guide: PYTHON, markdown: PYTHON_GUIDE, lastUpdated: "2026-10-27" },
 			{ guide: TYPESCRIPT, markdown: TYPESCRIPT_GUIDE },
 		],
-		{ base: "/qgis-sdk", repository: "https://github.com/Archont561/qgis-sdk" },
+		{
+			kinds,
+			base: "/qgis-sdk",
+			repository: "https://github.com/Archont561/qgis-sdk",
+		},
 	);
 	const byPath = new Map(pages.map((p) => [p.path, p.content]));
 
@@ -191,7 +199,7 @@ describe("renderGuides", () => {
 	test("reports a link whose anchor no guide has instead of inventing a route", () => {
 		const broken = renderGuides(
 			[{ guide: PYTHON, markdown: "# T\n\n## A\n\nSee [x](#nowhere).\n" }],
-			{ base: "", repository: "https://github.com/o/r" },
+			{ kinds, base: "", repository: "https://github.com/o/r" },
 		);
 		expect(broken.warnings).toEqual([
 			{
@@ -258,7 +266,7 @@ describe("renderGuides", () => {
 						"# T\n\n## A\n\nSee [AGENTS.md](../../../AGENTS.md), [skills](../../../.agents/skills/tdd/SKILL.md) and [m-6](../../../backlog/milestones/m-6%20-%200.7.0.md).\n",
 				},
 			],
-			{ base: "", repository: "https://github.com/o/r" },
+			{ kinds, base: "", repository: "https://github.com/o/r" },
 		);
 		expect(rules.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"See AGENTS.md, skills and m-6.",
@@ -282,7 +290,7 @@ describe("renderGuides", () => {
 						"# T\n\n## A\n\nSee [doc-26](../../../backlog/docs/specifications/doc-26%20-%20Authority.md#assets).\n",
 				},
 			],
-			{ base: "", repository: "https://github.com/o/r" },
+			{ kinds, base: "", repository: "https://github.com/o/r" },
 		);
 		expect(other.find((p) => p.path === "python/a.mdx")?.content).toContain(
 			"[doc-26](https://github.com/o/r/blob/main/backlog/docs/specifications/doc-26%20-%20Authority.md#assets)",
@@ -311,7 +319,7 @@ describe("renderGuides", () => {
 						"# T\n\n## Next minor (unreleased) migration notes\n\nBody.\n",
 				},
 			],
-			{ base: "", repository: "https://github.com/o/r" },
+			{ kinds, base: "", repository: "https://github.com/o/r" },
 		);
 		const draft =
 			drafts.find((p) => p.path === "python/migration/v0-7.mdx")?.content ?? "";
@@ -374,7 +382,7 @@ describe("migration notes", () => {
 					"# T\n\n## Exports\n\nSee [doc-12 0.4](doc-12%20-%20qgis-sdk-Python-package-guide.md#040-migration-notes).\n\n## 0.3.0 migration notes\n\nBody.\n",
 			},
 		],
-		{ base: "/qgis-sdk", repository: "https://github.com/o/r" },
+		{ kinds, base: "/qgis-sdk", repository: "https://github.com/o/r" },
 	);
 	const byPath = new Map(pages.map((p) => [p.path, p.content]));
 
@@ -467,7 +475,7 @@ describe("a guide with a title of its own", () => {
 					"# P\n\n## A\n\nSee [the harness](doc-14%20-%20W.md#quick-start).\n",
 			},
 		],
-		{ base: "/qgis-sdk", repository: "https://github.com/o/r" },
+		{ kinds, base: "/qgis-sdk", repository: "https://github.com/o/r" },
 	);
 
 	test("titles the index with the override and nests the pages", () => {

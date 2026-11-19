@@ -11,6 +11,7 @@
 		"check-links": "bun run scripts/check-links.ts",
 		"test": "bun test",
 		"measure-prose": "bun run scripts/measure-prose.ts",
+		"ratchet": "bun run scripts/ratchet.ts",
 		"coverage": "bun --cwd=../.. --config=apps/docs/bunfig.toml test --coverage apps/docs/tests"
 	},
 	"dependencies": {
