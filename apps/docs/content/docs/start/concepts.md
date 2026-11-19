@@ -1,5 +1,6 @@
 ---
 title: Concepts and vocabulary
+kind: explanation
 description: The handful of words the QGIS SDK uses everywhere - plugin, action, surface, ctx, services, grants, bridge, scope - defined once, with where each is documented.
 ---
 

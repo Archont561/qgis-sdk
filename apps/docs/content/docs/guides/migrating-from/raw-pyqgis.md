@@ -1,5 +1,6 @@
 ---
 title: Migrating a raw PyQGIS plugin
+kind: how-to
 description: Take a plugin written directly against iface, QgsProject and QgsProcessingProvider and move it onto the SDK's declarations - about an hour for a medium plugin.
 ---
 

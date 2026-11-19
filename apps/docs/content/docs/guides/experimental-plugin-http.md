@@ -1,5 +1,6 @@
 ---
 title: Experimental plugin HTTP API
+kind: how-to
 description: Call explicitly exposed plugin actions and streams from outside QGIS.
 ---
 

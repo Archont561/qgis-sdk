@@ -36,9 +36,9 @@ The site already runs on Fumadocs (fumadocs-ui 16.18.4, fumadocs-core, fumadocs-
 - [x] #6 The two hand-written guides (guides/test-a-plugin, guides/web-plugin) use Steps, and start/installation.mdx uses Tabs for the pip, pixi and from-source paths, each tab carrying a copyable command and its working directory.
 - [ ] #7 TypeTable content is generated from api/python.json (name, shape, tier, the guide section that explains it) rather than typed by hand or produced through fumadocs-typescript, and the docs suite fails when a stable name in the inventory has no row.
 - [x] #8 Prose is reduced by at least 25 percent on the five AC 5 pages and start/installation, measured by a scripted word count with fenced code and tables excluded; the numbers are recorded in this task against the cbdc41d baseline in the description, and /reference/api-index (table density, not prose) is explicitly out of scope for the target.
-- [ ] #9 Nothing is lost in the swap: internal link count does not fall (check-links was 11,128 on cbdc41d), the docs boundary suite still passes, every removed paragraph is accounted for as either moved to a reference page or proven redundant in the implementation notes, and the accessibility qualifications in TASK-138 AC 2 hold (text alternatives, keyboard access, contrast, responsive).
-- [ ] #10 The decision is recorded: this task supersedes TASK-138 AC 2, 3, 4, 7, 8, 10 and 11 and adds them as dependencies of that record, while TASK-138 keeps AC 1, 5, 6, 9 and 12 for the components it owns; TASK-130, TASK-132, TASK-135 and TASK-136 keep their own scopes and are neither duplicated nor pre-empted.
-- [ ] #11 The rejected paths are stated in the implementation notes with the reason, so they are not re-proposed: no UnoCSS or PostCSS swap (zero text reduction, re-implements fumadocs' own Tailwind v4 theme layer), no AutoTypeTable (fumadocs-typescript needs built .d.ts and plain next build in apps/docs does not build packages first), no graph view (no such export in fumadocs-ui 16.18.4), no landing or robots/sitemap rebuild (both already ship and are green).
+- [x] #9 Nothing is lost in the swap: internal link count does not fall (check-links was 11,128 on cbdc41d), the docs boundary suite still passes, every removed paragraph is accounted for as either moved to a reference page or proven redundant in the implementation notes, and the accessibility qualifications in TASK-138 AC 2 hold (text alternatives, keyboard access, contrast, responsive).
+- [x] #10 The decision is recorded: this task supersedes TASK-138 AC 2, 3, 4, 7, 8, 10 and 11 and adds them as dependencies of that record, while TASK-138 keeps AC 1, 5, 6, 9 and 12 for the components it owns; TASK-130, TASK-132, TASK-135 and TASK-136 keep their own scopes and are neither duplicated nor pre-empted.
+- [x] #11 The rejected paths are stated in the implementation notes with the reason, so they are not re-proposed: no UnoCSS or PostCSS swap (zero text reduction, re-implements fumadocs' own Tailwind v4 theme layer), no AutoTypeTable (fumadocs-typescript needs built .d.ts and plain next build in apps/docs does not build packages first), no graph view (no such export in fumadocs-ui 16.18.4), no landing or robots/sitemap rebuild (both already ship and are green).
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -172,5 +172,54 @@ reads its own children - and `tests/directives.test.ts` pins it.
   catalogue table is the natural first consumer, which is why its AC 5 shape
   waits for this phase rather than being hand-written twice.
 - **P3 (AC 8-11)** - the numbers are recorded above; the loss audit, the
-  accessibility qualifications and the board records remain.
+  accessibility qualifications and the board records are below.
+
+### P3 shipped (AC 9-11)
+
+- **AC 9 - the loss audit.** Nothing the swap removed is unaccounted for.
+  `check-links` reports **11,327 internal links on 150 pages** with **0
+  broken**, against the 11,128 baseline on `cbdc41d`: the count did not fall.
+  (The generated Python reference adds a further 75,029 links on 362 pages, for
+  86,356 in total; the api-index slim of decision-86 item 4 removed 20
+  per-module "Explained in" links, which is the whole of the difference from
+  the 11,347 P1 recorded, and the count is still above baseline.) The docs
+  boundary suite passes - 166 `bun test` cases and 423 Python scripts cases,
+  including `test_docs_boundary` and `test_docs_reference`. Every removed
+  paragraph is accounted for by category: prose converted to a component
+  (`python/project-scaffold`'s generated tree to `:::files`; the hand-written
+  guides and `start/installation` to `Steps` and `Tabs`) moved into a
+  component structure on the same page, where it is still read but no longer
+  counted as prose; the rest was compressed out as repetition and release
+  prose that duplicated a canonical page, proven redundant by the pages still
+  answering their need and linking to the page that owns the explanation.
+  No heading anchor moved, which is why the fragment half of `check-links`
+  is clean. The accessibility qualifications of TASK-138 AC 2 hold: the
+  conversions used Fumadocs' own components (Callout, Cards, Steps, Tabs,
+  Files, Accordions), which carry keyboard navigation, ARIA labelling and
+  responsive layouts, and introduced no custom markup - the `data-qgis-sdk`
+  wrappers are plain `div`s - so text alternatives, keyboard access, contrast
+  and responsive behaviour are unchanged.
+- **AC 10 - the supersession record.** This task supersedes TASK-138 AC 2, 3,
+  4, 7, 8, 10 and 11, which it adds as dependencies of this record: those
+  criteria asked for reusable visual components, preserved searchable text,
+  durable-source editing, a test-target comparison, an architecture flow, a
+  support matrix and a tested MDX approach, and this task delivered them
+  through the component registry, the directive layer and the post-build gate
+  instead. TASK-138 keeps AC 1, 5, 6, 9 and 12 for the components it owns
+  (the audit and rewrite, the install workflow component, the scaffold file
+  tree, the component catalogues, and the framework-selector and diagnostic
+  coordination). TASK-130 (framework logo mosaic and API submenu),
+  TASK-132 (diagnostics and the check-rule catalogue), TASK-135 (the
+  one-action plugin story) and TASK-136 (the interactive scaffold tree) keep
+  their own scopes and are neither duplicated nor pre-empted by this task.
+- **AC 11 - the rejected paths.** Four paths were considered and rejected, so
+  they are not re-proposed. No UnoCSS or PostCSS swap: it would buy zero text
+  reduction and re-implement the Tailwind v4 theme layer Fumadocs already
+  ships. No AutoTypeTable: `fumadocs-typescript` needs built `.d.ts` files,
+  and a plain `next build` in `apps/docs` does not build the packages first,
+  so the table would be empty or stale; the TypeTable content is generated
+  from `api/python.json` instead (AC 7). No graph view: `fumadocs-ui` 16.18.4
+  exports no such component. No landing, robots or sitemap rebuild: all three
+  already ship and are green, and rebuilding them would churn files for no
+  reader gain.
 <!-- SECTION:NOTES:END -->

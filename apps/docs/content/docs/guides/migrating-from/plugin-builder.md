@@ -1,5 +1,6 @@
 ---
 title: Migrating from Plugin Builder to the QGIS SDK
+kind: how-to
 description: Move a Plugin Builder-generated plugin onto the SDK's declaration model, step by step - about an hour for a medium plugin.
 ---
 

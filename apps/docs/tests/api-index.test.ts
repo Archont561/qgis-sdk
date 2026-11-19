@@ -1,13 +1,17 @@
 /**
- * The API index: the inventory in, one page out, with no name missing and no
- * name invented.
+ * The API index: the inventory in, one coverage page out, with no module
+ * missing and no member row.
  *
- * The gate TASK-98 asks for in other words - "no stable symbol is
- * undocumented" - is enforced here rather than by a list someone maintains: the
- * committed `api/python.json` is the only source of names, so a page that covers
- * it covers every name by construction. What the tests keep honest is the edges:
- * a module with no note, a note pointing at a heading the guide dropped, and a
- * signature that would break the table it is rendered into.
+ * Since decision-86 the member documentation lives in the generated Python
+ * reference (`reference/python/`), so this page keeps the coverage table -
+ * every module with its tier and name count - and links each module to its
+ * generated page. The gate TASK-98 asks for in other words - "no stable symbol
+ * is undocumented" - is enforced at the module level by
+ * `test_the_scope_is_every_module_the_inventory_publishes`, which holds the
+ * fumero scope to the inventory; fumero renders every name in a module by
+ * construction. What these tests keep honest is the edges: a module with no
+ * note, a note pointing at a heading the guide dropped, and a description that
+ * would break the table it is rendered into.
  */
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -44,12 +48,13 @@ async function routes(): Promise<Map<string, string>> {
 }
 
 describe("renderApiIndex", () => {
-	test("lists every public name of every module", async () => {
+	test("covers every module with its tier and name count, and no member row", async () => {
 		const document = await inventory();
 		const page = renderApiIndex({
 			inventory: document,
 			notes: API_MODULE_NOTES,
 			routes: await routes(),
+			pythonReference: true,
 		});
 		const expected = Object.values(document.modules).reduce(
 			(count, module) => count + Object.keys(module.names).length,
@@ -57,15 +62,52 @@ describe("renderApiIndex", () => {
 		);
 		expect(page.names).toBe(expected);
 		expect(page.names).toBeGreaterThan(0);
-		for (const module of Object.keys(document.modules)) {
-			expect(page.content).toContain(`## \`${module}\``);
-		}
 		for (const [name, module] of Object.entries(document.modules)) {
-			for (const declared of Object.keys(module.names)) {
-				expect(page.content).toContain(`| \`${declared}\` |`);
-			}
+			const counted = Object.keys(module.names).length;
+			expect(page.content).toContain(
+				`| \`${name}\` | \`${module.tier}\` | ${counted} |`,
+			);
 			expect(name.startsWith("qgis_sdk")).toBe(true);
+			// The member rows are not here: the generated Python reference
+			// documents each name (decision-86).
+			for (const declared of Object.keys(module.names)) {
+				expect(page.content).not.toContain(`| \`${declared}\` |`);
+			}
 		}
+	});
+
+	test("links each module to its generated reference page", async () => {
+		const document = await inventory();
+		const page = renderApiIndex({
+			inventory: document,
+			notes: API_MODULE_NOTES,
+			routes: await routes(),
+			pythonReference: true,
+		});
+		for (const name of Object.keys(document.modules)) {
+			const route = `/reference/python/${name.split(".").join("/")}/`;
+			expect(page.content).toContain(`[Python reference](${route})`);
+		}
+	});
+
+	test("omits the reference column when the reference was not generated", () => {
+		const page = renderApiIndex({
+			inventory: {
+				api_version: 1,
+				modules: {
+					"qgis_sdk.one": { tier: "stable", names: { Thing: "() -> None" } },
+				},
+				rules: [],
+				cli: [],
+				host_operations: [],
+				deprecations: [],
+			},
+			notes: { "qgis_sdk.one": { description: "One." } },
+			routes: new Map(),
+			pythonReference: false,
+		});
+		expect(page.content).toContain("| Module | Tier | Names | What it is |");
+		expect(page.content).not.toContain("[Python reference]");
 	});
 
 	test("every module has a note, and every note resolves to a page", async () => {
@@ -74,6 +116,7 @@ describe("renderApiIndex", () => {
 			inventory: document,
 			notes: API_MODULE_NOTES,
 			routes: await routes(),
+			pythonReference: true,
 		});
 		expect(page.undescribed).toEqual([]);
 		expect(page.unresolved).toEqual([]);
@@ -96,6 +139,7 @@ describe("renderApiIndex", () => {
 			},
 			notes: {},
 			routes: new Map(),
+			pythonReference: true,
 		});
 		expect(page.undescribed).toEqual(["qgis_sdk.unnoted"]);
 	});
@@ -119,19 +163,20 @@ describe("renderApiIndex", () => {
 				},
 			},
 			routes: new Map(),
+			pythonReference: true,
 		});
 		expect(page.unresolved).toEqual(["doc-12:No such heading"]);
 		expect(page.content).not.toContain("Explained in");
 	});
 
-	test("a pipe in a signature cannot end its cell", () => {
+	test("a pipe in a description cannot end its cell", () => {
 		const page = renderApiIndex({
 			inventory: {
 				api_version: 1,
 				modules: {
 					"qgis_sdk.one": {
 						tier: "stable",
-						names: { Union: "(value: str | None) -> None" },
+						names: { Thing: "() -> None" },
 					},
 				},
 				rules: [],
@@ -139,30 +184,12 @@ describe("renderApiIndex", () => {
 				host_operations: [],
 				deprecations: [],
 			},
-			notes: { "qgis_sdk.one": { description: "One." } },
+			notes: { "qgis_sdk.one": { description: "One | two." } },
 			routes: new Map(),
+			pythonReference: true,
 		});
-		expect(page.content).toContain(
-			"| `Union` | `(value: str \\| None) -> None` |",
-		);
-	});
-
-	test("a name with no signature prints as a class rather than an empty cell", () => {
-		const page = renderApiIndex({
-			inventory: {
-				api_version: 1,
-				modules: {
-					"qgis_sdk.one": { tier: "stable", names: { Protocol: "" } },
-				},
-				rules: [],
-				cli: [],
-				host_operations: [],
-				deprecations: [],
-			},
-			notes: { "qgis_sdk.one": { description: "One." } },
-			routes: new Map(),
-		});
-		expect(page.content).toContain("| `Protocol` | `class` |");
+		expect(page.content).toContain("One \\| two.");
+		expect(page.content).not.toContain("One | two.");
 	});
 
 	test("counts the surfaces it does not list instead of naming them", () => {
@@ -178,6 +205,7 @@ describe("renderApiIndex", () => {
 			inventory: document,
 			notes: {},
 			routes: new Map(),
+			pythonReference: true,
 		});
 		expect(page.content).toContain("the 1 `qgis-sdk` commands");
 		expect(page.content).toContain("the 2 check rule ids");
@@ -197,6 +225,7 @@ describe("renderApiIndex", () => {
 			inventory: base,
 			notes: {},
 			routes: new Map(),
+			pythonReference: true,
 		});
 		expect(empty.content).toContain(
 			"No name in this release carries a deprecation mark",
@@ -216,6 +245,7 @@ describe("renderApiIndex", () => {
 			},
 			notes: {},
 			routes: new Map(),
+			pythonReference: true,
 		});
 		expect(marked.content).toContain(
 			"`qgis_sdk.models.OldName` (deprecated since 0.9.0, removed in 1.0.0, use `NewName`)",

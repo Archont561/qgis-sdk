@@ -45,4 +45,15 @@ Rewrite the official documentation to reduce verbosity and make concepts and wor
 
 <!-- SECTION:NOTES:BEGIN -->
 Coordinate the first-plugin walkthrough with TASK-135: apps/docs/src/content/docs/start/first-plugin.md is its durable source, with source-excerpt and scaffold-command regression tests in packages/qgis-sdk-python/tests/test_first_plugin_guide.py. Link or reuse it rather than duplicating the action or file tree.
+
+**Supersession (TASK-170 AC 10).** TASK-170 supersedes this task's AC 2, 3, 4,
+7, 8, 10 and 11, and records them as dependencies of its own record: the
+reusable visual components, the preserved searchable text, the durable-source
+editing, the test-target comparison, the architecture flow, the support matrix
+and the tested MDX approach were delivered through TASK-170's component
+registry, directive layer and post-build gate instead. This task keeps AC 1,
+5, 6, 9 and 12 for the components it owns - the audit and rewrite, the install
+workflow component, the scaffold file tree, the component catalogues, and the
+framework-selector and diagnostic coordination. TASK-130, TASK-132, TASK-135
+and TASK-136 keep their own scopes.
 <!-- SECTION:NOTES:END -->

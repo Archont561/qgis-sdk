@@ -1,5 +1,6 @@
 ---
 title: CLI MCP server
+kind: how-to
 description: Use the SDK's developer commands from an MCP client.
 ---
 

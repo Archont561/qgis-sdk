@@ -1,5 +1,6 @@
 ---
 title: FAQ
+kind: explanation
 description: Short answers to the questions asked most before adopting the QGIS SDK, each pointing at the page that explains it.
 ---
 

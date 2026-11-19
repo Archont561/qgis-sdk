@@ -212,7 +212,17 @@ async function main(): Promise<void> {
 		}
 	}
 	const inventory = await readInventory(INVENTORY);
-	const index = renderApiIndex({ inventory, notes: API_MODULE_NOTES, routes });
+	// The Python reference is written by `automation.docs.reference` in the
+	// environment that has Fumero (decision-86), so it is here or it is not: a
+	// build without that step renders the rest of the reference and says which
+	// section is missing rather than linking to a folder that does not exist.
+	const pythonReference = existsSync(join(CONTENT_DIR, "reference/python"));
+	const index = renderApiIndex({
+		inventory,
+		notes: API_MODULE_NOTES,
+		routes,
+		pythonReference,
+	});
 	for (const name of index.unresolved) {
 		console.warn(
 			`generate: api index cites ${name}, which no rendered page holds`,
@@ -227,11 +237,6 @@ async function main(): Promise<void> {
 	console.log(
 		`generate: ${API_INDEX_PAGE} from ${index.names} names in ${Object.keys(inventory.modules).length} modules`,
 	);
-	// The Python reference is written by `automation.docs.reference` in the
-	// environment that has Fumero (decision-86), so it is here or it is not: a
-	// build without that step renders the rest of the reference and says which
-	// section is missing rather than linking to a folder that does not exist.
-	const pythonReference = existsSync(join(CONTENT_DIR, "reference/python"));
 	if (!pythonReference) {
 		console.warn(
 			"generate: reference/python is absent; the site is missing the Python API reference (run `pixi run -e build docs-reference`)",

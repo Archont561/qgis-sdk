@@ -135,6 +135,7 @@ export function renderDecisionsPage(
 	const content = [
 		"---",
 		'title: "Design decisions"',
+		"kind: explanation",
 		'description: "Every architecture decision behind the QGIS SDK in one table: what was decided, its status, and a link to the full record."',
 		"---",
 		INTRO,
