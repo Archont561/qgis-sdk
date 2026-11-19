@@ -44,6 +44,18 @@ def test_every_exclusion_pattern_covers_a_whole_subtree() -> None:
     assert patterns == ("qgis_sdk.adapters*", "qgis_sdk.bridge*")
 
 
+def test_the_group_wrapper_is_not_counted_as_a_parameter(tmp_path: Path) -> None:
+    page = tmp_path / "index.mdx"
+    page.write_text(
+        "<PdxParameters>\n"
+        '<PdxParameter name={"a"} type={"str"}>\n\nA described parameter.\n\n</PdxParameter>\n'
+        "</PdxParameters>\n",
+        encoding="utf-8",
+    )
+
+    assert reference.undescribed_parameters([page]) == (0, 1)
+
+
 def test_a_parameter_with_no_description_is_counted(tmp_path: Path) -> None:
     page = tmp_path / "index.mdx"
     page.write_text(

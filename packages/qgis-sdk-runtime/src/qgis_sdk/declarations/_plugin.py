@@ -97,6 +97,22 @@ def plugin(
     ``@plugin`` alone derives the id (``field_tools_<hash>`` for a class named
     ``FieldTools``) and the title (``Field Tools``); ``id=`` and ``title=``
     override either one.
+
+    Args:
+        cls: The class, when the decorator was used bare. ``None`` when it was
+            called with arguments, in which case the decorator is returned.
+        id: The plugin's identifier, or ``None`` to derive one from the class
+            name. A derived id carries a six-digit suffix, so two plugins whose
+            classes share a name still differ.
+        title: The plugin's label, or ``None`` to derive it.
+
+    Returns:
+        The decorated class, or the decorator when ``cls`` is ``None``.
+
+    Raises:
+        QgisSdkDeclarationError: A given id or title is malformed, the class is
+            decorated twice, or one of its methods carries a binding without
+            being an ``@action``.
     """
     decorate = declare_class(PLUGIN_ATTRIBUTE, "@plugin", id=id, title=title)
 
@@ -119,6 +135,13 @@ def bindings_of(target: object) -> tuple[Any, ...]:
 
     Read from ``vars`` so a binding on a parent class is never the child's;
     innermost decorator first, the way the source reads bottom-up.
+
+    Args:
+        target: The class or function the binding decorators were applied to.
+
+    Returns:
+        The bindings it declares itself, innermost first, or an empty tuple for a
+        target that carries none.
     """
     if not hasattr(target, "__dict__"):
         return ()
@@ -128,7 +151,22 @@ def bindings_of(target: object) -> tuple[Any, ...]:
 def refuse_bindings(
     target: Any, decorator: str, *, instead: str = "bind an @action instead"
 ) -> None:
-    """``@job``/``@stream``/``@tool`` applied over a binding: refuse, with a way forward."""
+    """``@job``/``@stream``/``@tool`` applied over a binding: refuse, with a way forward.
+
+    A binding puts a button on a surface, and a surface invokes an operation by
+    its id - so a binding belongs on an operation a host can invoke, which is an
+    ``@action`` and not a job or a tool. The refusal names the way forward rather
+    than only the mistake: an ``@action`` that calls ``start`` on the tool, or
+    that submits the job.
+
+    Args:
+        target: The function the decorator was applied to.
+        decorator: The decorator's own spelling, for the message.
+        instead: What to do instead, spelled for the reader.
+
+    Raises:
+        QgisSdkDeclarationError: The target carries a binding.
+    """
     if bindings_of(target):
         raise QgisSdkDeclarationError(
             f"{decorator} cannot carry a toolbar, menu or shortcut binding "
@@ -142,6 +180,13 @@ def validate_plugin_bindings(cls: type) -> None:
     ``@tool`` refuses a binding itself, in either order; a plain method is
     refused here, when the class is created, because that is where the
     declaration would have had to be.
+
+    Args:
+        cls: The plugin class being decorated.
+
+    Raises:
+        QgisSdkDeclarationError: A method carries a binding and is neither an
+            ``@action`` nor a ``@tool``.
     """
     for name, member in vars(cls).items():
         function = member.__func__ if isinstance(member, staticmethod) else member
@@ -165,6 +210,20 @@ def action(
 
     ``@action`` alone names the action after the method (``list_layers``, titled
     ``List layers``); ``id=`` and ``title=`` override either one.
+
+    Args:
+        method: The method, when the decorator was used bare. ``None`` when it
+            was called with arguments, in which case the decorator is returned.
+        id: The action's identifier, or ``None`` to derive it from the method
+            name. A method id takes no suffix: it is unique inside its class.
+        title: The action's label, or ``None`` to derive it.
+
+    Returns:
+        The decorated method, or the decorator when ``method`` is ``None``.
+
+    Raises:
+        QgisSdkDeclarationError: A given id or title is malformed, the target is
+            not a method, or the method is already an action or a stream.
     """
     validate_given(id, title)
 
@@ -199,6 +258,21 @@ def stream(
     annotation), and a kind the map does not name is one the host refuses to
     emit. An omitted ``id`` or ``title`` comes from the method name, as for
     ``@action``.
+
+    Args:
+        events: Each event kind the stream emits - ``data``, ``progress`` or
+            ``state`` - mapped to the annotation of that kind's payload.
+        id: The stream's identifier, or ``None`` to derive it from the method
+            name.
+        title: The stream's label, or ``None`` to derive it.
+
+    Returns:
+        The decorator, which returns the method it was given unchanged.
+
+    Raises:
+        QgisSdkDeclarationError: ``events`` is not a mapping, is empty, names a
+            kind the protocol does not carry, or the method is already an action
+            or a stream.
     """
     _s = _CcState(events=events, id=id, title=title)
     for _p in (_cc_stream_p1, _cc_stream_p2, _cc_stream_p3, _cc_stream_p4):
@@ -209,7 +283,16 @@ def stream(
 
 
 def _require_undeclared(method: Any, id: str, decorator: str) -> None:
-    """One method is one operation: it cannot be an action and a stream at once."""
+    """One method is one operation: it cannot be an action and a stream at once.
+
+    Args:
+        method: The method a decorator is about to mark.
+        id: The id the declaration will carry, for the error message.
+        decorator: The decorator's own spelling, for the message.
+
+    Raises:
+        QgisSdkDeclarationError: The method already carries either marker.
+    """
     for marker in ("__qgis_sdk_action__", "__qgis_sdk_stream__"):
         if hasattr(method, marker):
             raise QgisSdkDeclarationError(f"{id}: duplicate {decorator} declaration")
