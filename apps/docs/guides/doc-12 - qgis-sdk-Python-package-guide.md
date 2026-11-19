@@ -3706,7 +3706,7 @@ a warning; fix the body, not the guard.
 
 The step-by-step list - including the plugin owner, ordering, and what a host
 without a worker backend should do - is the
-[0.9.0 migration notes](doc-12.md#090-migration-notes).
+[0.9.0 migration notes](doc-12%20-%20qgis-sdk-Python-package-guide.md#090-migration-notes).
 
 ## Project scaffold
 
