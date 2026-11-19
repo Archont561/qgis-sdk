@@ -136,6 +136,35 @@ describe("renderTypeTable", () => {
 		expect(jsx).toContain("<TypeTable type={{");
 		expect(jsx).toContain('"Thing"');
 		expect(jsx).toContain('type: "(x: int) -> None"');
+		expect(jsx).not.toContain("typeDescriptionLink");
+	});
+
+	test("renders the guide section link when the module has one", async () => {
+		const jsx = renderTypeTable(
+			{
+				inventory: {
+					api_version: 1,
+					modules: {
+						"qgis_sdk.one": {
+							tier: "stable",
+							names: { Thing: "(x: int) -> None" },
+						},
+					},
+					rules: [],
+					cli: [],
+					host_operations: [],
+					deprecations: [],
+				},
+				notes: {
+					"qgis_sdk.one": {
+						section: { guide: "doc-12", heading: "Forms" },
+					},
+				},
+				routes: new Map([["doc-12:Forms", "/python/forms"]]),
+			},
+			"qgis_sdk.one",
+		);
+		expect(jsx).toContain('typeDescriptionLink: "/python/forms/"');
 	});
 });
 
