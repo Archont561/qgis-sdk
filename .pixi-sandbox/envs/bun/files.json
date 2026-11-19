@@ -1,0 +1,1109 @@
+{
+  "schema": 2,
+  "excluded": [
+    "conda-meta/pixi_env_prefix",
+    "conda-meta/.pixi-environment-fingerprint",
+    "etc/conda/activate.d/pixi-sandbox-cargo-home.sh",
+    "etc/conda/activate.d/pixi-sandbox-cargo-home.ps1",
+    "etc/conda/activate.d/pixi-sandbox-cargo-home.bat"
+  ],
+  "files": [
+    {
+      "p": "CACHEDIR.TAG",
+      "h": "5fd8d0f0d1bc590ed69ecd369111ed0e01944ae48cf7da43e99e32db6a367699"
+    },
+    {
+      "p": "bin/bun",
+      "h": "9056ebdb1375cdd62581d37d288746adcbf6c1792cb7fb062575e2f20c1ab53c",
+      "x": true
+    },
+    {
+      "p": "bin/cjpeg",
+      "h": "2c118cc4ae23e909d1be037ec8f0dcdc3360e12b8f1ce4dd967a61cb70da88c1",
+      "x": true
+    },
+    {
+      "p": "bin/djpeg",
+      "h": "916f507218fe0ced1b3dfa5af96f021c1a2b1d3af697a31593868a0a36b50c59",
+      "x": true
+    },
+    {
+      "p": "bin/jpegtran",
+      "h": "383c4c741c69ada95cc0b93ce60ce9f8d8fb9e7543ed4045ad2b736a01f5e801",
+      "x": true
+    },
+    {
+      "p": "bin/libdeflate-gunzip",
+      "h": "f4e8dbb91a97c268e8c5db387196f93eec22d665602ad219e9d98f229fe787e4",
+      "x": true
+    },
+    {
+      "p": "bin/libdeflate-gzip",
+      "h": "f4e8dbb91a97c268e8c5db387196f93eec22d665602ad219e9d98f229fe787e4",
+      "x": true
+    },
+    {
+      "p": "bin/rdjpgcom",
+      "h": "6e5be1325ccf02759f98fa7361343313a9902eacc400284d2ea9001ff3abc9d0",
+      "x": true
+    },
+    {
+      "p": "bin/tjbench",
+      "h": "619fc5e0afa2ac32d66fa809128dc953d23fe7f9f501f6a8564badad968157d0",
+      "x": true
+    },
+    {
+      "p": "bin/wrjpgcom",
+      "h": "06fa7dec9ce2354bffda7647c7bfd0f8fe21fbb6710a3eeac7b2e9688702a52a",
+      "x": true
+    },
+    {
+      "p": "bin/zstd",
+      "h": "71695dac8a28a33b066bd386ef5db2ee53c9fc31fc6448428e4b2d3bb8edea65",
+      "x": true
+    },
+    {
+      "p": "bin/zstdgrep",
+      "h": "9bc769b26542ef2efa14ae29b3178b7f10639cd95544207691cb258fe06bbe17",
+      "x": true
+    },
+    {
+      "p": "bin/zstdless",
+      "h": "60e767b7d41a7eee6204fe34285b47e2b706797cd6ca35ca25989639f1c13159",
+      "x": true
+    },
+    {
+      "p": "conda-meta/_openmp_mutex-4.5-20_gnu.json"
+    },
+    {
+      "p": "conda-meta/bun-1.4.2-pl5321h3d79828_0.json"
+    },
+    {
+      "p": "conda-meta/hdrhistogram-c-0.11.10-h421ea60_0.json"
+    },
+    {
+      "p": "conda-meta/history"
+    },
+    {
+      "p": "conda-meta/libbrotlicommon-1.2.0-h39a168f_4.json"
+    },
+    {
+      "p": "conda-meta/libbrotlidec-1.2.0-ha411449_4.json"
+    },
+    {
+      "p": "conda-meta/libbrotlienc-1.2.0-h018ffa1_4.json"
+    },
+    {
+      "p": "conda-meta/libdeflate-1.25-hd45a770_1.json"
+    },
+    {
+      "p": "conda-meta/libgcc-16.2.0-ha9f2e26_7.json"
+    },
+    {
+      "p": "conda-meta/libgomp-16.2.0-he0feb66_7.json"
+    },
+    {
+      "p": "conda-meta/libhwy-1.4.0-h57c4cff_2.json"
+    },
+    {
+      "p": "conda-meta/libjpeg-turbo-3.2.0-hb03c661_1.json"
+    },
+    {
+      "p": "conda-meta/libsqlite-3.54.0-h0737f62_101.json"
+    },
+    {
+      "p": "conda-meta/libstdcxx-16.2.0-h934c35e_7.json"
+    },
+    {
+      "p": "conda-meta/libwebp-base-1.6.0-hd42ef1d_1.json"
+    },
+    {
+      "p": "conda-meta/libzlib-1.3.2-h25fd6f3_3.json"
+    },
+    {
+      "p": "conda-meta/ls-hpack-2.3.5-h280c20c_0.json"
+    },
+    {
+      "p": "conda-meta/zstd-1.5.7-hb78ec9c_7.json"
+    },
+    {
+      "p": "etc/conda/test-files/zstd/1/cf_test/CMakeLists.txt",
+      "h": "881335987e0be0ff80eb229d1c6ee12fc69aaca2ed4c5b209dfc9c35db91aa7b"
+    },
+    {
+      "p": "include/hdr/hdr_histogram.h",
+      "h": "96d496bd7af19a2d0a3d31a4482a0d0a1eb3cb708c354388c697a55784bc1224"
+    },
+    {
+      "p": "include/hdr/hdr_histogram_log.h",
+      "h": "168bbbcbcff7ac621bf2954149875013ffac07bf2ed37d28943b121458705b2c"
+    },
+    {
+      "p": "include/hdr/hdr_histogram_version.h",
+      "h": "3d49d6dbd5312936b5b38faac4d633413b9f077a5e95698dc0f01a96132f6dcf"
+    },
+    {
+      "p": "include/hdr/hdr_interval_recorder.h",
+      "h": "f2e89a2b7a3069b74c8f30f89743a1a1eaf237d006587494bb3882da6f288a74"
+    },
+    {
+      "p": "include/hdr/hdr_thread.h",
+      "h": "bdafd5aa3cfcaca607a63931dae09bee273b44ca5e1228f672f4803b2875cc48"
+    },
+    {
+      "p": "include/hdr/hdr_time.h",
+      "h": "ca1716799d1b68aef6534cb1d4299aa1f28f36930b7530f2710d86046e37b552"
+    },
+    {
+      "p": "include/hdr/hdr_writer_reader_phaser.h",
+      "h": "f05047f27ffede2e43a217e2c98498253c77ce31e1569169d6193f79beb262ef"
+    },
+    {
+      "p": "include/hwy/abort.h",
+      "h": "2d0f4f0b6e9390324efa4e45258adf3a19308936c15d9a30cd4d2bb46f19062b"
+    },
+    {
+      "p": "include/hwy/aligned_allocator.h",
+      "h": "26b97fc2900922a7c38173a662dfaca4e4cbf0a0a87b4ef1290bf248ed2a7af2"
+    },
+    {
+      "p": "include/hwy/auto_tune.h",
+      "h": "b5474dc4a856fc55ef141bd6730c1c38c654ff4161018c3ba9f745d7483fad61"
+    },
+    {
+      "p": "include/hwy/base.h",
+      "h": "e3f6049a91809d443841ffa7ac29b3b0e88827e429b37f54434cb18d3e1edd64"
+    },
+    {
+      "p": "include/hwy/bit_set.h",
+      "h": "caa32ab69f075da4f0e9f135b128602123ca724c3d946bcaf508d101ce34f26c"
+    },
+    {
+      "p": "include/hwy/cache_control.h",
+      "h": "b95011ff21a4ec8a63f5c34f55df6cb6cd9151715e322f39a5e1c7fe0c528750"
+    },
+    {
+      "p": "include/hwy/contrib/algo/copy-inl.h",
+      "h": "076c6feae94d57fb667bbb755fb9efc1ce22fb6f3f9ed89cfc70fd72c1919da2"
+    },
+    {
+      "p": "include/hwy/contrib/algo/count-inl.h",
+      "h": "dcebe129fe47450037d4f7896f3646e3954f10fd00a4c309896c389916adaefc"
+    },
+    {
+      "p": "include/hwy/contrib/algo/find-inl.h",
+      "h": "c51f6ef0844b43bd5b6c6789d51e486db9130270a1d7eb2fc0e4a0955f9d6235"
+    },
+    {
+      "p": "include/hwy/contrib/algo/minmax-inl.h",
+      "h": "4eff4d74c3da9c9c625fd06bcd245c7f31987c88030e25f6d22bf409f7ac58ae"
+    },
+    {
+      "p": "include/hwy/contrib/algo/transform-inl.h",
+      "h": "19dde250bc003fd91afc1194f35b1594b54bf018faed8d43b2f5925591c85a54"
+    },
+    {
+      "p": "include/hwy/contrib/bit_pack/bit_pack-inl.h",
+      "h": "0d32e525d472085debf1cc8931d1690967e9353c60d875cb63fd3778fcd8be7f"
+    },
+    {
+      "p": "include/hwy/contrib/dot/dot-inl.h",
+      "h": "e81d6f561abeddec26b347f1d168b20e971ec404e9d2c2f3df587fed88f4fd11"
+    },
+    {
+      "p": "include/hwy/contrib/image/image.h",
+      "h": "067762b8ce1bc072fb5a72599ebdccf93e1992c2fae1be5d87370a219d112dd2"
+    },
+    {
+      "p": "include/hwy/contrib/math/fast_math-inl.h",
+      "h": "cc688507fc781f372baee60349fa61ce99831f68e8e882a7b47a3d40a9eda8ea"
+    },
+    {
+      "p": "include/hwy/contrib/math/math-inl.h",
+      "h": "494e5128a3af7a6b25be7ebb4bf3a7febea47c97e23b45db2877e6045a153e18"
+    },
+    {
+      "p": "include/hwy/contrib/matvec/matvec-inl.h",
+      "h": "d7ace09ae6c88a233c0121adc0753d35f3341c396f3ee2f46d35a5ed79053a4e"
+    },
+    {
+      "p": "include/hwy/contrib/random/random-inl.h",
+      "h": "d13167794e40e40e38f300f7f77cef16e4afba6ee01a217b3edc867ce81caa72"
+    },
+    {
+      "p": "include/hwy/contrib/sort/order.h",
+      "h": "7cbf6e26f5afc2fc09e731ea2fa2e70bbda10230980fda7da77a10923d271611"
+    },
+    {
+      "p": "include/hwy/contrib/sort/shared-inl.h",
+      "h": "981ea901025f18a11d9a6a7ce384be5c3587d7358f744e7dc1f0fb59b5bf36b0"
+    },
+    {
+      "p": "include/hwy/contrib/sort/sorting_networks-inl.h",
+      "h": "a19f665d2d458894d412629a6dfd5e42214618167d93e62a114cdd3b9b55635c"
+    },
+    {
+      "p": "include/hwy/contrib/sort/traits-inl.h",
+      "h": "1ff31627d815e2f9690ecb1fdfdd53132c7b11858036bc4b645d848e1503cab7"
+    },
+    {
+      "p": "include/hwy/contrib/sort/traits128-inl.h",
+      "h": "d3a73079d9d4121f5a5dcd0ddb9d8d8d17e5d50b43a670b7caafcd5951a94697"
+    },
+    {
+      "p": "include/hwy/contrib/sort/vqsort-inl.h",
+      "h": "f4e4f3c4a75851f5d4ed4cf448a36fa4950584873f82fd3ab932b31496288058"
+    },
+    {
+      "p": "include/hwy/contrib/sort/vqsort.h",
+      "h": "d3d3415805da15addbd5d6a04bfa2d593aedfeca58134633523fef1281fb93dc"
+    },
+    {
+      "p": "include/hwy/contrib/thread_pool/futex.h",
+      "h": "10510216d65b28691657501cdab3eec0bb8f7e6f1fe01bcfc3ca2bb6e3e5deba"
+    },
+    {
+      "p": "include/hwy/contrib/thread_pool/spin.h",
+      "h": "c1a6fd2d9f169bcb9a80686b1fac228ca47afea423dc8a81053615d4e819cda2"
+    },
+    {
+      "p": "include/hwy/contrib/thread_pool/thread_pool.h",
+      "h": "1171646ede1f73ed7d72a0e3202685e32c69d197bdafa2fad93b97f47cf0d73f"
+    },
+    {
+      "p": "include/hwy/contrib/thread_pool/topology.h",
+      "h": "725152eaf587d906f921fd2727a3720c6f0996bf8bbd1cab55826de7c36376e5"
+    },
+    {
+      "p": "include/hwy/contrib/unroller/unroller-inl.h",
+      "h": "7d32ee2ebe4146501a34390a59128aaed7c79e331a2f840be1cc34fb3f762740"
+    },
+    {
+      "p": "include/hwy/detect_compiler_arch.h",
+      "h": "2efa39d49fab0800a0dd5f91821df02a3cd86a008eebd68ac98c5249cd4fa85d"
+    },
+    {
+      "p": "include/hwy/detect_targets.h",
+      "h": "b387d11b9f70b65ff9b141ce903ed54595a82ba52f1a83a401a408eaddf8a604"
+    },
+    {
+      "p": "include/hwy/foreach_target.h",
+      "h": "880295b229488bba5227d5279504f355f9363330bf1d98ab63baf553deedee03"
+    },
+    {
+      "p": "include/hwy/highway.h",
+      "h": "de01622abb3e9e85a07d24897daef408a30f7a1967bb0b01a57c1637d3c87f9d"
+    },
+    {
+      "p": "include/hwy/highway_export.h",
+      "h": "8a883413b083c721f879163780630aa3ec741b386b3db6d05ac042292b904d45"
+    },
+    {
+      "p": "include/hwy/nanobenchmark.h",
+      "h": "81c65b91f754c36e3792ed0ae9c9f535092d997254a02508bea06a03f7a67f79"
+    },
+    {
+      "p": "include/hwy/ops/arm_neon-inl.h",
+      "h": "ace812565b0442a20cf897add7b131c276f2bd4ae215fb8579c6b2ec8b183ceb"
+    },
+    {
+      "p": "include/hwy/ops/arm_sve-inl.h",
+      "h": "416b3e484974daac4ec981e701a5719369ce8ef33448468f81b670f425ea2e39"
+    },
+    {
+      "p": "include/hwy/ops/emu128-inl.h",
+      "h": "758b3b45ab49ff28d3c8cf36959d48567678b737d0b12209ab564b2e49c0fac4"
+    },
+    {
+      "p": "include/hwy/ops/generic_ops-inl.h",
+      "h": "5be36414ba0d291405c237e946444088dc0d35bbf2a12d951c0e63ef7dc44ca9"
+    },
+    {
+      "p": "include/hwy/ops/inside-inl.h",
+      "h": "c22abcaafe741459fc5c9456230af24f198e0bd24c3372540cf0248d62dd554e"
+    },
+    {
+      "p": "include/hwy/ops/loongarch_lasx-inl.h",
+      "h": "e18e2ef77454f4f3d7f55ab745319b8fffb41d394c95bcebe9c541be66e90828"
+    },
+    {
+      "p": "include/hwy/ops/loongarch_lsx-inl.h",
+      "h": "16a56eb48053206773477dc4b598dd3245464665b492d8119f8998883494defd"
+    },
+    {
+      "p": "include/hwy/ops/ppc_vsx-inl.h",
+      "h": "84df6dc7b58465f145be20e1e890d4ec9f087dfc5dfe2fcdee9e0093081191da"
+    },
+    {
+      "p": "include/hwy/ops/rvv-inl.h",
+      "h": "07affc69a2c4b391f4e07164bc39b50775f55985674798a0e7a80471dba21ca3"
+    },
+    {
+      "p": "include/hwy/ops/scalar-inl.h",
+      "h": "a68a871534af3d51a45451a7c6a0c4cadcc3405228bd06cc6bec30afde13072a"
+    },
+    {
+      "p": "include/hwy/ops/set_macros-inl.h",
+      "h": "a81df5a112aaff90fc86658f55a9833bb6a3273197debfdbf1880e9266d52cf6"
+    },
+    {
+      "p": "include/hwy/ops/shared-inl.h",
+      "h": "c11dc45203d539ccda4037b8f7b3e49f11ff5de0c7a81e0547cceed36927f135"
+    },
+    {
+      "p": "include/hwy/ops/wasm_128-inl.h",
+      "h": "a25e9c5831b17a80f00fdfabedbafe6c8ff31e15796f6bf100438e01f655d51d"
+    },
+    {
+      "p": "include/hwy/ops/x86_128-inl.h",
+      "h": "517cd7afd98fd1c4bcae8c23f1368f63e21184857a368b115df28857edce186a"
+    },
+    {
+      "p": "include/hwy/ops/x86_256-inl.h",
+      "h": "ba5b5b8b0b74fc282c12f72ed7447418ce3fdd3ff16f43146f83d6118209b789"
+    },
+    {
+      "p": "include/hwy/ops/x86_512-inl.h",
+      "h": "2fa4331f2a52c8bf73a6e51ffc2b2e6c356af3bfd781ff1ba8c9ef0a65ff1870"
+    },
+    {
+      "p": "include/hwy/ops/x86_avx3-inl.h",
+      "h": "3ba1ac7fb9b2eb033d4d7bc9fe3101a875c95d24336095de650ff3d1867652ab"
+    },
+    {
+      "p": "include/hwy/per_target.h",
+      "h": "8b44bd7565119df2df3e123a9dbfa82e25166c749979a3fde12e387165e2f0e1"
+    },
+    {
+      "p": "include/hwy/print-inl.h",
+      "h": "35ddebacfc9f665df899c8258d1cbafe83c687f71222b4ee475ceba7f948edae"
+    },
+    {
+      "p": "include/hwy/print.h",
+      "h": "56b755654ac1e40f6fda306f95811770ac9c4802ef6840019f479ad09a6880b3"
+    },
+    {
+      "p": "include/hwy/profiler.h",
+      "h": "178861c9d276cf46dac824b0444f1ce27d6adc0d7264c6d94cadea579d98f1b8"
+    },
+    {
+      "p": "include/hwy/robust_statistics.h",
+      "h": "37a749bb6eb061056a0df35ed54dfedfe5163345d4fef954060b9c9798911b40"
+    },
+    {
+      "p": "include/hwy/stats.h",
+      "h": "ca3b792118ca168a9f22f0cd28335e569cc9f534d037a2ec733d1ad57c00821a"
+    },
+    {
+      "p": "include/hwy/targets.h",
+      "h": "27301595b3bea53b4580382188b7d997a734ec66212cb4752ee8538893bdf25d"
+    },
+    {
+      "p": "include/hwy/tests/hwy_gtest.h",
+      "h": "a6eb126aa3e5952e9270683733e090029ddf60ff94b01572b87d542881a60699"
+    },
+    {
+      "p": "include/hwy/tests/test_util-inl.h",
+      "h": "7d0981c4a9cac084396738e291b681c6808b6d97907e330b43be5079e72c1995"
+    },
+    {
+      "p": "include/hwy/tests/test_util.h",
+      "h": "fc79d6e2e75303f73f967c7c5eecb968ae770f2fa43ed1bdf469c355b2ecf51d"
+    },
+    {
+      "p": "include/hwy/timer-inl.h",
+      "h": "1fcbc017922560c04ffb26c2210a8856a2356eb9bca11076dd808b8e32ca87bf"
+    },
+    {
+      "p": "include/hwy/timer.h",
+      "h": "20a69178dac619083fbf78be089aa5c7aed1701850c09baa1caf2b501efd1dc3"
+    },
+    {
+      "p": "include/hwy/x86_cpuid.h",
+      "h": "238c85bd9d54c01ca52d0c7719efe143b63e124345a88a6dbc9c4cf901c75d19"
+    },
+    {
+      "p": "include/jconfig.h",
+      "h": "84fa4f9f583fea8015bab490024f8dd942f5ed1d58855633d362c9c601ac06f6"
+    },
+    {
+      "p": "include/jerror.h",
+      "h": "b4e8697b3d2e06071f23a3f32c50f62f782cdee03f7b82e4595eed5e33d67288"
+    },
+    {
+      "p": "include/jmorecfg.h",
+      "h": "b86b4abf452d39b737cb45503591e04e9ca38c5fd0e90d429387d0464005a28b"
+    },
+    {
+      "p": "include/jpeglib.h",
+      "h": "dc3e8220f34b7e9f9e48620f5cb8dc070834feb3214bb12bbad78478ebb29e60"
+    },
+    {
+      "p": "include/libdeflate.h",
+      "h": "f263f3c5c86d1a939757a2ca74c521b389ef9aa2860e423eefe0272df169e765"
+    },
+    {
+      "p": "include/lshpack.h",
+      "h": "0663edfa75f466c240023ac47ee9328a0481f65ccc29542fe00ba8ac7b5c003c"
+    },
+    {
+      "p": "include/lsxpack_header.h",
+      "h": "fbc0d04a208d4f4f970c351171343fb00f9e1f311d46f78a99deb761dc2e1f29"
+    },
+    {
+      "p": "include/sqlite3.h",
+      "h": "cd20a2877bc82b94e36c1093b727dd87cfa3c1d581aac6e240925535cbd90166"
+    },
+    {
+      "p": "include/sqlite3ext.h",
+      "h": "48963abfefb41ac329ef9d706acb5eadba952a99a748285c9ded6b5e0942721b"
+    },
+    {
+      "p": "include/turbojpeg.h",
+      "h": "a852cfffe09fc1e0d942dd375755ba3a65bd11d6bb7f2e7b45ab08ae80d6758a"
+    },
+    {
+      "p": "include/webp/decode.h",
+      "h": "e554551d085f234e930f36b5879a77ef58bfea34c48ebfd620426e63b224025c"
+    },
+    {
+      "p": "include/webp/demux.h",
+      "h": "9b0d10c0fa1ac2dc750c4d687b038e40a685bb9240cb045759f5b9546017361d"
+    },
+    {
+      "p": "include/webp/encode.h",
+      "h": "928e8d3ed502baa0f47ed10913ee018ed6172afcd4f308e0ea005a126b83f27e"
+    },
+    {
+      "p": "include/webp/mux.h",
+      "h": "c72cf593f8194c671efcade33f1678294380120d45a337511d612a3acb643f35"
+    },
+    {
+      "p": "include/webp/mux_types.h",
+      "h": "ca789c9fe2edc52f759cb3888e9171ee44b5c12f2db21458f96176d578bc897e"
+    },
+    {
+      "p": "include/webp/sharpyuv/sharpyuv.h",
+      "h": "4fcb150246232b0e8e605752deb66ca861872f86dd692308d9f854e10ad964ee"
+    },
+    {
+      "p": "include/webp/sharpyuv/sharpyuv_csp.h",
+      "h": "80c23c727edb1ce6a42b38f9458c3d75c572856c898f0cd913ba03468afb9d3a"
+    },
+    {
+      "p": "include/webp/types.h",
+      "h": "992d2ffe864adb6d80cc91b7a062074d167ed96772f28d104a650148eca31794"
+    },
+    {
+      "p": "include/zdict.h",
+      "h": "abacadb94e3f79e591f4b1648e839b0160fbf4291211fd01bdba1380269b245c"
+    },
+    {
+      "p": "include/zstd.h",
+      "h": "9b4bc8245565c98ccfc61c07749928b57e7c0f6fddb0530c4f6aa1971893d88b"
+    },
+    {
+      "p": "include/zstd_errors.h",
+      "h": "66a8c3f71d12ea6e797e4f622f31f3f8f81c41b36f48cad4f5de7d8bfb6aac0a"
+    },
+    {
+      "p": "lib/cmake/hdr_histogram/hdr_histogram-config-version.cmake",
+      "h": "463d4e0a5f73ac4cb56e29595a31f8f6cc004dd8399550940e2011d6ebcceef4"
+    },
+    {
+      "p": "lib/cmake/hdr_histogram/hdr_histogram-config.cmake",
+      "h": "fd0cb55bf2388554976ad50aad8ca9b0637f528317b12314e471cad714af14e5"
+    },
+    {
+      "p": "lib/cmake/hdr_histogram/hdr_histogram-targets-release.cmake",
+      "h": "cf264a3499330888d2364f953c359090a9686eedb2213abc0ef84d1285ba2a6e"
+    },
+    {
+      "p": "lib/cmake/hdr_histogram/hdr_histogram-targets.cmake",
+      "h": "50cfc404a5eebf0efedf80ab017ec228ec66ced8b3d980c83cb9c11d00afa448"
+    },
+    {
+      "p": "lib/cmake/hwy/hwy-config-release.cmake",
+      "h": "ca8694ddf1c2fb56708c441bdc617289f906382791df2fdb5871b8be594754d5"
+    },
+    {
+      "p": "lib/cmake/hwy/hwy-config-version.cmake",
+      "h": "20d649c64d5158caa99ee7d4271d06fd5da4a4484a0f171f3c92b81005e87b50"
+    },
+    {
+      "p": "lib/cmake/hwy/hwy-config.cmake",
+      "h": "f790cca55608fc8b25b5ee8452025ddcde52ebedbe6b508aa41f2d77b55dcfe9"
+    },
+    {
+      "p": "lib/cmake/libdeflate/libdeflate-config-version.cmake",
+      "h": "bb8135667a207c0ff53aa4893496857a3e78905a507383a01666e5870e8a6981"
+    },
+    {
+      "p": "lib/cmake/libdeflate/libdeflate-config.cmake",
+      "h": "89d776266a833dc238b2b5455f2d4774dff1cf792e3d479bd4c2b2122ff8797f"
+    },
+    {
+      "p": "lib/cmake/libdeflate/libdeflate-targets-release.cmake",
+      "h": "ff1236ec47137965c796c6094b155964a45258fc1ab9fa3431ed1fff7056cac6"
+    },
+    {
+      "p": "lib/cmake/libdeflate/libdeflate-targets.cmake",
+      "h": "7ddaae8471ab4036e0cd528ae625cae7592ecc61b67b1cfb84da7a81dbef2b44"
+    },
+    {
+      "p": "lib/cmake/libjpeg-turbo/libjpeg-turboConfig.cmake",
+      "h": "70baa95a13e5238689a76c0adb29d8f6564999b596a4e4512ae37a89311f81a5"
+    },
+    {
+      "p": "lib/cmake/libjpeg-turbo/libjpeg-turboConfigVersion.cmake",
+      "h": "778a6352e87d7087e70ccecf6a2ae573ca44b31d390ee9c85886103909485c18"
+    },
+    {
+      "p": "lib/cmake/libjpeg-turbo/libjpeg-turboTargets-release.cmake",
+      "h": "765453c822b23c0c0a59cff812c99d1995298c9e7019fef895b9256fa1ebbdec"
+    },
+    {
+      "p": "lib/cmake/libjpeg-turbo/libjpeg-turboTargets.cmake",
+      "h": "1ad91feeb3b9f8f50c3fd3ba88a41b8a5694fa7223d2d60c85870b0ca7fbbca2"
+    },
+    {
+      "p": "lib/cmake/zstd/zstdConfig.cmake",
+      "h": "351ab7939d946cec7d7c6742ec0ff73bcff252813c3eaef08f97fc511240ebaa"
+    },
+    {
+      "p": "lib/cmake/zstd/zstdConfigVersion.cmake",
+      "h": "f79742115e59cd99594b5007817d19056ee9dbc338ce32728a61223f489d6965"
+    },
+    {
+      "p": "lib/cmake/zstd/zstdTargets-release.cmake",
+      "h": "000c0097aa56af3b32cf5259601c833817602d0502b8682964baf59b80c77886"
+    },
+    {
+      "p": "lib/cmake/zstd/zstdTargets.cmake",
+      "h": "beea6e04af75aede419a98dfde8066fac1e01b42de6671749d515d4ed617c495"
+    },
+    {
+      "p": "lib/libatomic.so.1.2.0",
+      "h": "aca24522e594e0cb3f56dd8b2f14cae34c30cdbeacb803ccea039a807063feb1",
+      "x": true
+    },
+    {
+      "p": "lib/libbrotlicommon.so.1.2.0",
+      "h": "4cd5fb624ae3d42c5dea9af78ce2ab3e7cdac75696eec0217eec06d24da5b2ac",
+      "x": true
+    },
+    {
+      "p": "lib/libbrotlidec.so.1.2.0",
+      "h": "61bc9e046b9e194834a0a4740ce9906bdf9447fce8e708b00ac1b8363fe0044e",
+      "x": true
+    },
+    {
+      "p": "lib/libbrotlienc.so.1.2.0",
+      "h": "407d66124ee561d8fc2e1cf26f2d000ab4865227a9a4e3f0b3bfe0dfc8b63bb7",
+      "x": true
+    },
+    {
+      "p": "lib/libdeflate.so.0",
+      "h": "ffe885f7a07d89b2791c0afd920997535e21cedd6968f5dfe4a9399c5cbdeea7",
+      "x": true
+    },
+    {
+      "p": "lib/libgcc_s.so",
+      "h": "69a56a9993b7729b29b274e65016031c81f2397f176ed5ad44d59bd50425e0bd"
+    },
+    {
+      "p": "lib/libgcc_s.so.1",
+      "h": "952432f54cd02e07649676591b9814e00f16d7d944e2f9b8ed5ea240d1ad0ba9"
+    },
+    {
+      "p": "lib/libgcc_s_asneeded.so",
+      "h": "10bc094393cfacd92e7683eff066803c7c5bfd51ac8ee8eb7b57847a4c9b3ebb"
+    },
+    {
+      "p": "lib/libgomp.so.1.0.0",
+      "h": "f73d0033a22d6005347a531aabaadb38c13c45ae8b5ef1bbbaa1bd9f9665606b",
+      "x": true
+    },
+    {
+      "p": "lib/libhdr_histogram.so.6.3.3",
+      "h": "dce67841bb49431f941c56f208bdecbf8a0b62e8ad87e738953bc26fbcea4fe1",
+      "x": true
+    },
+    {
+      "p": "lib/libhwy.so.1.4.0",
+      "h": "490c1a7cd1880933cde6ac7e970ab307fb5ae0a4d64c0e83282c2c83a6dbe8e0",
+      "x": true
+    },
+    {
+      "p": "lib/libhwy_contrib.so.1.4.0",
+      "h": "37324fe2ebe715ea03c2cd2a58514709e3f20fd530c5e0b2e692df4883b743fd",
+      "x": true
+    },
+    {
+      "p": "lib/libhwy_test.so.1.4.0",
+      "h": "e321b7064774f3b1254db2477a62f689cf3c06e05b91974b591231b86c9436f2",
+      "x": true
+    },
+    {
+      "p": "lib/libitm.so.1.0.0",
+      "h": "b9e929ce8b96cb3ba177ad0c6662aedbfbe53e96790dd8d4aab1cc83b003deb2",
+      "x": true
+    },
+    {
+      "p": "lib/libjpeg.so.8.3.2",
+      "h": "0f9dd21379d309b001d35011464568ed4e596512fbf39db1720481f36be1b071",
+      "x": true
+    },
+    {
+      "p": "lib/libls-hpack.so",
+      "h": "b5fff8f81038e928d051b393a4a3b455a85aea0a1d4583b262a9a0cb7241bb7a"
+    },
+    {
+      "p": "lib/libquadmath.so.0.0.0",
+      "h": "ee77db81457a2f67b424e629ab2a85752964f01b896fe23f47c54e1b8ae47c5d",
+      "x": true
+    },
+    {
+      "p": "lib/libsharpyuv.so.0.1.2",
+      "h": "124940e7a12fdb0b43780ab045992c6ff8d40641344da834149a994066c84d4b",
+      "x": true
+    },
+    {
+      "p": "lib/libsqlite3.so.3.54.0",
+      "h": "c00f973f416ed329922efcce9543699d9e8b4e6f78d15e6e3e5e27530bfb7a18",
+      "x": true
+    },
+    {
+      "p": "lib/libstdc++.so.6.0.36",
+      "h": "d9a4e0b3f019c05551a0a88aa654894fa71123907387fc4bbb14190d1a65b818",
+      "x": true
+    },
+    {
+      "p": "lib/libturbojpeg.so.0.5.0",
+      "h": "a6881d2faef1b091037d3c840526643103cf5579ccc0a8843255f5b0967e5e87",
+      "x": true
+    },
+    {
+      "p": "lib/libwebp.so.7.2.0",
+      "h": "a4dfd36c2f4b885603027c172a85c2a919272a441bc2268bd4d2003ff713181a",
+      "x": true
+    },
+    {
+      "p": "lib/libwebpdecoder.so.3.2.0",
+      "h": "1f971badfec4fdaec872c01dc04362736805aef28c3f826ea56a309f20bf0d58",
+      "x": true
+    },
+    {
+      "p": "lib/libwebpdemux.so.2.0.17",
+      "h": "7b0d7fcac5f2e4244a4680d9e5c55bd1308baf3ef2c88c6aa8b4905486fd703b",
+      "x": true
+    },
+    {
+      "p": "lib/libwebpmux.so.3.1.2",
+      "h": "9b4423092ae6b13a41214a3674deaa08ce37888c88f66d891b2accee707a3272",
+      "x": true
+    },
+    {
+      "p": "lib/libz.so.1.3.2",
+      "h": "6260bbd413113cefd946b4505b61136cb9397da1203ca352c90a6869cf87c18d",
+      "x": true
+    },
+    {
+      "p": "lib/libzstd.so.1.5.7",
+      "h": "281795cd8f75801b357085c2e96274aa4c79e8a9b80a613b8e5b058835e555f6",
+      "x": true
+    },
+    {
+      "p": "lib/pkgconfig/hdr_histogram.pc",
+      "h": "3a2417d744a49f64dfcc35ead1ad82a7a349d23a771e14a8ccdbc2e74c2d00ef"
+    },
+    {
+      "p": "lib/pkgconfig/libbrotlicommon.pc",
+      "h": "a0b91663b478a596d2000fb49893a7f7a892b69cde5210d7fbd08cf32796b6a4"
+    },
+    {
+      "p": "lib/pkgconfig/libbrotlidec.pc",
+      "h": "8b030bf5b9e0b287c5f2e4afe48e6ec9a1d2d8f5d883163ab0bccb1e387a428a"
+    },
+    {
+      "p": "lib/pkgconfig/libbrotlienc.pc",
+      "h": "b5329d7ea7f5354032823cb28a76479d7c88230adaa05f754e941fb40601e769"
+    },
+    {
+      "p": "lib/pkgconfig/libdeflate.pc",
+      "h": "e4640eaa9b152e286b0fa4d9e661f86e7a363a48041272afc63f37128abd3559"
+    },
+    {
+      "p": "lib/pkgconfig/libhwy-contrib.pc",
+      "h": "76cc68b3a07a6fdeb7fe232bc312f4f9efd99492edfd709335d9f72d0a36eaec"
+    },
+    {
+      "p": "lib/pkgconfig/libhwy-test.pc",
+      "h": "b0c5a5f2b442fae4b8d0cc5e5973b8f77d8ad8174e8319b73365424bdadf403c"
+    },
+    {
+      "p": "lib/pkgconfig/libhwy.pc",
+      "h": "e95749234dc0ad9d10483f15648c8c52fa917033200b6ee6780749d710fec0ea"
+    },
+    {
+      "p": "lib/pkgconfig/libjpeg.pc",
+      "h": "8cd16a372c4294ef4d41ce03cfe69a6fba67291b42f8c8af82695045f3ff6c4f"
+    },
+    {
+      "p": "lib/pkgconfig/libsharpyuv.pc",
+      "h": "4b27cee78d0ae2f40ea1037f9bffbff516f264a3184fe5042f1a98ee37e7e3a8"
+    },
+    {
+      "p": "lib/pkgconfig/libturbojpeg.pc",
+      "h": "ba0569a598be0d117d23ab3432cc3dcab165db86ee309dbbd21a8ab3aaaae8e1"
+    },
+    {
+      "p": "lib/pkgconfig/libwebp.pc",
+      "h": "76df042b67d8d4027dfd41aa9795e611e7f3de66dc9a554751e2b78ef1f94298"
+    },
+    {
+      "p": "lib/pkgconfig/libwebpdecoder.pc",
+      "h": "adb2d11e496ac3b73b9f8b244982fdbb00b9284d4511783ba984e7d519d1ff16"
+    },
+    {
+      "p": "lib/pkgconfig/libwebpdemux.pc",
+      "h": "ff586370a38e1c7d22112c4687db95cadb705fa05b8634f69e916191737e2e16"
+    },
+    {
+      "p": "lib/pkgconfig/libwebpmux.pc",
+      "h": "26758dfdcc75b3b7402092b1a299ed9f5ce723fc81763153064f12a580c863a4"
+    },
+    {
+      "p": "lib/pkgconfig/libzstd.pc",
+      "h": "9fbf764fb6df4d6e3dc370a38d5da4c9cadb0b15d322cd6ea14a26112740ccf3"
+    },
+    {
+      "p": "lib/pkgconfig/sqlite3.pc",
+      "h": "bb601ffe27090e5ce940dc066191c8538d987a9984562de5b3261e74da462554"
+    },
+    {
+      "p": "share/WebP/cmake/WebPConfig.cmake",
+      "h": "7711e60712204aab07521b8f539cb783ab62b8e195840da472df5e7d55ec9d95"
+    },
+    {
+      "p": "share/WebP/cmake/WebPConfigVersion.cmake",
+      "h": "c9be14d51d2108603dd1bd53c9e27945cea0d40bd970e5f27c6318373af3ade0"
+    },
+    {
+      "p": "share/WebP/cmake/WebPTargets-release.cmake",
+      "h": "15451a83781defb6a5b77a7511b97d9cc83edaa736bfae11909ae7436cd733c5"
+    },
+    {
+      "p": "share/WebP/cmake/WebPTargets.cmake",
+      "h": "3630d62008c472ed88cb085c194ab481a14341f100fc20de16855e8bb98c78ee"
+    },
+    {
+      "p": "share/bash-completion/completions/bun",
+      "h": "ae231b3b5d95f0bb5d2211ddb5ffc556536921dd0cb2ad460b3580b969e5f9a7"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/LICENSE.md",
+      "h": "ba6bceebcba0fdd35488477c2cca8c4632ce82c74dbfbc87d886ce6fc4433579"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/README.ijg",
+      "h": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/README.md",
+      "h": "a44ba17ac66c57edaf0ea7c6e4b31358f08322c780e4e6af092082abb3e20793"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/example.c",
+      "h": "1c0aeda4768fb884fc3f052deff778e2a86d13b17803b629e374007460bec328"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/libjpeg.txt",
+      "h": "a23488dfb4ff36f2f98fa2fee7ff0b86989ed29a9a83308bc86109a3515bd3e7"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/structure.txt",
+      "h": "ef5f75523e96d352d9153a627b07bc35f24d4de951bdad694d1a527b7bb95a12"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/tjcomp.c",
+      "h": "f4d0adfda1a606d96746d2aa9c91ff84b7173cd3dc2271039d6f651c168bac29"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/tjdecomp.c",
+      "h": "371b39d6ee1bcd180ccd7579e3965f0f4721c7566c09676adddc2f9c85d3c778"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/tjtran.c",
+      "h": "b6b4c3708ec684912fc4ba70cf3a8610b2a14d9716d6f94efbcccf91aaa586c0"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/usage.txt",
+      "h": "72d53f0078dd60268311848752ef4df69952b17c9f7da65c8881d4a4ef8d37f1"
+    },
+    {
+      "p": "share/doc/libjpeg-turbo/wizard.txt",
+      "h": "3728907472df90ce30b1da41d11e9f23a66d051037c743be74cafd0e36ff176a"
+    },
+    {
+      "p": "share/fish/vendor_completions.d/bun.fish",
+      "h": "887fc476361370acf773ea5ca47effad3e647191d3648c3c52d7a0a257b42d9f"
+    },
+    {
+      "p": "share/info/libgomp.info",
+      "h": "ee25a92782cf91cbbe6ec44d94da188c29eb02fbb6c243408eb91e52d929d344"
+    },
+    {
+      "p": "share/info/libquadmath.info",
+      "h": "f956b6e3cb6a38ace2a0bfbfbf5770ce001dc013eea5c9dd05bbcf25545d5eaa"
+    },
+    {
+      "p": "share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION",
+      "h": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    },
+    {
+      "p": "share/licenses/gcc-libs/RUNTIME.LIBRARY.EXCEPTION.gomp_copy",
+      "h": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    },
+    {
+      "p": "share/licenses/libstdc++/RUNTIME.LIBRARY.EXCEPTION",
+      "h": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    },
+    {
+      "p": "share/man/man1/brotli.1",
+      "h": "5592e0207f942e1b7be075bacd948ad20b76792845626a21592f5b9742c7af93"
+    },
+    {
+      "p": "share/man/man1/cjpeg.1",
+      "h": "0796fa53a5d4f16f7a77f4f811fcbefd1b848151ced278102524c6d035244b1d"
+    },
+    {
+      "p": "share/man/man1/djpeg.1",
+      "h": "14af7298bf63bca5824d28a9cb0673f60c8c9868430294668eef44345dcee0d2"
+    },
+    {
+      "p": "share/man/man1/jpegtran.1",
+      "h": "c901aa9b21d7309c79f9bcf6ab5dcbfcfbe4a55652491d1b61c96e56f1dd03c3"
+    },
+    {
+      "p": "share/man/man1/rdjpgcom.1",
+      "h": "9f6920585ec2f7fe3f72fe2c7d9be1562806e5850b5c9af35b2abc54971c8f79"
+    },
+    {
+      "p": "share/man/man1/wrjpgcom.1",
+      "h": "d5725d2ae72e8029bccc0cb79f7b02b1d0080bf9ac96ac01bf7160d0fdba9574"
+    },
+    {
+      "p": "share/man/man3/constants.h.3",
+      "h": "2ac99f4d97a57a170877fed3ff93251612850f43598ba4eaf234e246787c978d"
+    },
+    {
+      "p": "share/man/man3/decode.h.3",
+      "h": "be0a93be98e80f00d075bf43dc6a0bb84cb4028ce0082211e958d1ef18112d8f"
+    },
+    {
+      "p": "share/man/man3/encode.h.3",
+      "h": "893ebea4d0d29ff3f2b83004c6bcb4d3610ced41f7cb04f72c1710ff339f5a90"
+    },
+    {
+      "p": "share/man/man3/types.h.3",
+      "h": "c9afc281d042e84df6ba5ef4ac4a39f7e1ad8cae4d98adc702055b99c38b2267"
+    },
+    {
+      "p": "share/zsh/site-functions/_bun",
+      "h": "daee8e41c487070ce80a8f9c1edce4e0f08c74e26f8c491ca127efcb0b097e98"
+    },
+    {
+      "p": "bin/bunx",
+      "l": "bun"
+    },
+    {
+      "p": "bin/unzstd",
+      "l": "zstd"
+    },
+    {
+      "p": "bin/zstdcat",
+      "l": "zstd"
+    },
+    {
+      "p": "bin/zstdmt",
+      "l": "zstd"
+    },
+    {
+      "p": "lib/libatomic.so",
+      "l": "libatomic.so.1.2.0"
+    },
+    {
+      "p": "lib/libatomic.so.1",
+      "l": "libatomic.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlicommon.so",
+      "l": "libbrotlicommon.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlicommon.so.1",
+      "l": "libbrotlicommon.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlidec.so",
+      "l": "libbrotlidec.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlidec.so.1",
+      "l": "libbrotlidec.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlienc.so",
+      "l": "libbrotlienc.so.1.2.0"
+    },
+    {
+      "p": "lib/libbrotlienc.so.1",
+      "l": "libbrotlienc.so.1.2.0"
+    },
+    {
+      "p": "lib/libdeflate.so",
+      "l": "libdeflate.so.0"
+    },
+    {
+      "p": "lib/libgomp.so",
+      "l": "libgomp.so.1.0.0"
+    },
+    {
+      "p": "lib/libgomp.so.1",
+      "l": "libgomp.so.1.0.0"
+    },
+    {
+      "p": "lib/libhdr_histogram.so",
+      "l": "libhdr_histogram.so.6"
+    },
+    {
+      "p": "lib/libhdr_histogram.so.6",
+      "l": "libhdr_histogram.so.6.3.3"
+    },
+    {
+      "p": "lib/libhwy.so",
+      "l": "libhwy.so.1.4.0"
+    },
+    {
+      "p": "lib/libhwy.so.1",
+      "l": "libhwy.so.1.4.0"
+    },
+    {
+      "p": "lib/libhwy_contrib.so",
+      "l": "libhwy_contrib.so.1.4.0"
+    },
+    {
+      "p": "lib/libhwy_contrib.so.1",
+      "l": "libhwy_contrib.so.1.4.0"
+    },
+    {
+      "p": "lib/libhwy_test.so",
+      "l": "libhwy_test.so.1.4.0"
+    },
+    {
+      "p": "lib/libhwy_test.so.1",
+      "l": "libhwy_test.so.1.4.0"
+    },
+    {
+      "p": "lib/libitm.so",
+      "l": "libitm.so.1.0.0"
+    },
+    {
+      "p": "lib/libitm.so.1",
+      "l": "libitm.so.1.0.0"
+    },
+    {
+      "p": "lib/libjpeg.so",
+      "l": "libjpeg.so.8.3.2"
+    },
+    {
+      "p": "lib/libjpeg.so.8",
+      "l": "libjpeg.so.8.3.2"
+    },
+    {
+      "p": "lib/libquadmath.so",
+      "l": "libquadmath.so.0.0.0"
+    },
+    {
+      "p": "lib/libquadmath.so.0",
+      "l": "libquadmath.so.0.0.0"
+    },
+    {
+      "p": "lib/libsharpyuv.so",
+      "l": "libsharpyuv.so.0.1.2"
+    },
+    {
+      "p": "lib/libsharpyuv.so.0",
+      "l": "libsharpyuv.so.0.1.2"
+    },
+    {
+      "p": "lib/libsqlite3.so",
+      "l": "libsqlite3.so.3.54.0"
+    },
+    {
+      "p": "lib/libsqlite3.so.0",
+      "l": "libsqlite3.so.3.54.0"
+    },
+    {
+      "p": "lib/libstdc++.so",
+      "l": "libstdc++.so.6.0.36"
+    },
+    {
+      "p": "lib/libstdc++.so.6",
+      "l": "libstdc++.so.6.0.36"
+    },
+    {
+      "p": "lib/libturbojpeg.so",
+      "l": "libturbojpeg.so.0.5.0"
+    },
+    {
+      "p": "lib/libturbojpeg.so.0",
+      "l": "libturbojpeg.so.0.5.0"
+    },
+    {
+      "p": "lib/libwebp.so",
+      "l": "libwebp.so.7.2.0"
+    },
+    {
+      "p": "lib/libwebp.so.7",
+      "l": "libwebp.so.7.2.0"
+    },
+    {
+      "p": "lib/libwebpdecoder.so",
+      "l": "libwebpdecoder.so.3.2.0"
+    },
+    {
+      "p": "lib/libwebpdecoder.so.3",
+      "l": "libwebpdecoder.so.3.2.0"
+    },
+    {
+      "p": "lib/libwebpdemux.so",
+      "l": "libwebpdemux.so.2.0.17"
+    },
+    {
+      "p": "lib/libwebpdemux.so.2",
+      "l": "libwebpdemux.so.2.0.17"
+    },
+    {
+      "p": "lib/libwebpmux.so",
+      "l": "libwebpmux.so.3.1.2"
+    },
+    {
+      "p": "lib/libwebpmux.so.3",
+      "l": "libwebpmux.so.3.1.2"
+    },
+    {
+      "p": "lib/libz.so.1",
+      "l": "libz.so.1.3.2"
+    },
+    {
+      "p": "lib/libzstd.so",
+      "l": "libzstd.so.1"
+    },
+    {
+      "p": "lib/libzstd.so.1",
+      "l": "libzstd.so.1.5.7"
+    }
+  ]
+}
