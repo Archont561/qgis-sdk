@@ -25,6 +25,7 @@ from qgis_sdk.server import (
     filter,
     service,
 )
+from qgis_sdk.server._hooks import declaration_of as require_declaration
 from qgis_sdk.testing import FakeServerInterface
 
 #: The attribute the decorators write their metadata under.
@@ -169,6 +170,23 @@ def test_a_service_derives_its_ogc_name_from_the_function() -> None:
     assert declaration_of(wms) == HookDeclaration(
         "service", 30, name="WMS", version="1.0.0"
     )
+
+
+def test_registering_a_hook_reads_the_declaration_it_carries() -> None:
+    @filter(priority=7)
+    def narrow(ctx: ServerContext, request: ServerRequest, response: ServerResponse):
+        return None
+
+    assert require_declaration(narrow, "filter") == HookDeclaration("filter", 7)
+
+
+def test_a_function_that_is_not_a_hook_is_refused_by_name() -> None:
+    def plain() -> None: ...
+
+    with pytest.raises(
+        QgisSdkUnsupportedCapabilityError, match=r"is not a @server.filter hook"
+    ):
+        require_declaration(plain, "filter")
 
 
 @pytest.mark.parametrize(
