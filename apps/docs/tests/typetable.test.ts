@@ -157,6 +157,7 @@ describe("renderTypeTable", () => {
 				},
 				notes: {
 					"qgis_sdk.one": {
+						description: "One module.",
 						section: { guide: "doc-12", heading: "Forms" },
 					},
 				},
