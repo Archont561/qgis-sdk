@@ -62,7 +62,15 @@ def storybook() -> int:
 
 
 def docs_build() -> int:
-    """Build the documentation site as a static export."""
+    """Build the documentation site as a static export.
+
+    The Python reference is written first (decision-86): it is a page tree the
+    site renders, and it is generated in the environment that has Fumero rather
+    than in the one that has Next.
+    """
+    status = pixi("build", "docs-reference")
+    if status:
+        return status
     return pixi("bun", "docs-build")
 
 

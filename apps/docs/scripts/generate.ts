@@ -227,9 +227,24 @@ async function main(): Promise<void> {
 	console.log(
 		`generate: ${API_INDEX_PAGE} from ${index.names} names in ${Object.keys(inventory.modules).length} modules`,
 	);
+	// The Python reference is written by `automation.docs.reference` in the
+	// environment that has Fumero (decision-86), so it is here or it is not: a
+	// build without that step renders the rest of the reference and says which
+	// section is missing rather than linking to a folder that does not exist.
+	const pythonReference = existsSync(join(CONTENT_DIR, "reference/python"));
+	if (!pythonReference) {
+		console.warn(
+			"generate: reference/python is absent; the site is missing the Python API reference (run `pixi run -e build docs-reference`)",
+		);
+	}
 	await writeJson(join(CONTENT_DIR, "reference/meta.json"), {
 		title: "Reference",
-		pages: ["api-index", "design-decisions", "faq"],
+		pages: [
+			"api-index",
+			"design-decisions",
+			"faq",
+			...(pythonReference ? ["python"] : []),
+		],
 	});
 
 	// What the layout needs to know about pages it did not author: the version
