@@ -36,8 +36,12 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from automation.lib.shell import ROOT
+
+if TYPE_CHECKING:
+    import fumero
 
 INVENTORY = ROOT / "api" / "python.json"
 """The committed inventory, which is what says which modules are public."""
@@ -113,17 +117,74 @@ def undescribed_parameters(pages: list[Path]) -> tuple[int, int]:
     return empty, total
 
 
+def _render(config: fumero.Config) -> fumero.Result:
+    """Load the published tree and write it, with one link table across the lot.
+
+    Args:
+        config: The `fumero.Config` the run was built with.
+
+    Returns:
+        Fumero's `Result`: the pages written and the links that resolved to
+        nothing.
+    """
+
+    # Imported here so the module can be imported - by a test, or by a caller
+    # that only wants `published_modules` - without Fumero installed.
+    import fumero
+
+    root = fumero.load_module("qgis_sdk", config)
+    # The star-import list, which fumero would otherwise take for the
+    # documentation boundary. See the module docstring.
+    root.exports = None
+
+    return fumero.Renderer(config).render(root, OUTPUT)
+
+
+def _write_meta() -> None:
+    """Name the section, and say what is in it.
+
+    Fumero writes a `meta.json` inside a module's own directory; this is the one
+    for the folder the module pages sit in, which it does not own.
+    """
+
+    _ = (OUTPUT / "meta.json").write_text(
+        json.dumps({"title": "Python API", "pages": ["qgis_sdk"]}, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def _report(result: fumero.Result) -> int:
+    """Print what the run wrote, and what it could not do.
+
+    Args:
+        result: Fumero's `Result`.
+
+    Returns:
+        `0` when every internal link resolved, `1` otherwise. An unresolved link
+        is a docstring naming an item that has no page, which is a typo rather
+        than a missing feature.
+    """
+
+    missing, total = undescribed_parameters(result.pages)
+    print(
+        f"reference: {len(result.pages)} pages in {len(published_modules())} modules "
+        f"({missing} of {total} parameters have no description)"
+    )
+    for link in result.unresolved:
+        print(f"reference: {link}")
+
+    return 0 if result.ok else 1
+
+
 def main() -> int:
     """Write the reference into the content collection.
 
     Returns:
         `0` when every page was written and every internal link resolved, `1`
-        otherwise. An unresolved link is a docstring naming an item that has no
-        page, which is a typo rather than a missing feature.
+        otherwise.
     """
 
-    # Imported here so the module can be imported - by a test, or by a caller
-    # that only wants `published_modules` - without Fumero installed.
     import fumero
 
     config = fumero.Config(
@@ -136,27 +197,10 @@ def main() -> int:
     )
 
     shutil.rmtree(OUTPUT, ignore_errors=True)
-    root = fumero.load_module("qgis_sdk", config)
-    # The star-import list, which fumero would otherwise take for the
-    # documentation boundary. See the module docstring.
-    root.exports = None
+    result = _render(config)
+    _write_meta()
 
-    result = fumero.Renderer(config).render(root, OUTPUT)
-    missing, total = undescribed_parameters(result.pages)
-
-    _ = (OUTPUT / "meta.json").write_text(
-        json.dumps({"title": "Python API", "pages": ["qgis_sdk"]}, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    print(
-        f"reference: {len(result.pages)} pages in {len(published_modules())} modules "
-        f"({missing} of {total} parameters have no description)"
-    )
-    for link in result.unresolved:
-        print(f"reference: {link}")
-
-    return 0 if result.ok else 1
+    return _report(result)
 
 
 if __name__ == "__main__":
