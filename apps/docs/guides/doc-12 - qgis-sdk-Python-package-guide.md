@@ -3375,14 +3375,11 @@ made function-based,
 scoped and
 [decision-65](../../../backlog/decisions/decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md)
 worker-first: a job is a decorated plain function whose first parameter is the
-`WorkerContext` the runtime injects and whose remaining keyword parameters are
-typed the way an action's are. The plugin names the jobs it exposes, submission
-is `ctx.jobs.<name>.delay(**inputs)` and nothing else, and the handle you get
-back is typed end to end. Since 0.9.0 the
-whole body runs on a worker: the driving thread submits, validates and
-delivers, and never calls your function. `qgis_sdk.jobs` is QGIS-free; it runs
-on the step scheduler and a host drives `JobService.tick()` from whatever event
-loop it already has.
+injected `WorkerContext`, its other keywords typed the way an action's are, and
+submission is `ctx.jobs.<name>.delay(**inputs)` with a handle typed end to end.
+Since 0.9.0 the driving thread submits, validates and delivers but never calls
+your function. `qgis_sdk.jobs` is QGIS-free: the host drives `tick()` from
+whatever event loop it already has.
 
 ```python
 from dataclasses import dataclass
@@ -3455,33 +3452,19 @@ form, and `@app.job` without parentheses works too. All three spellings share
 one registry, so a name declared twice - by assignment and by decorator, or by
 two decorators - is refused when the plugin is defined.
 
-The second form derives each name from the function's own name - the same
-snake_case rule a bare `@job` uses for its id, without the module suffix - so
-`ctx.jobs.count_features.delay(layer_id=...)` is what a sequence entry of
-`def count_features(...)` buys you. A ``@job(id=...)`` does not change the
-derived name: the name is how you reach the job, the id is how it is described.
+A sequence derives each name from the function's own name - the same snake_case
+rule a bare `@job` uses for its id - so `ctx.jobs.count_features.delay(...)` is
+what an entry of `def count_features(...)` buys you; `@job(id=...)` does not
+change it. Use the mapping form when two jobs share a Python name or the public
+name should differ from the function.
 
-Use the mapping form when two jobs share a Python name (two modules, one
-`count_features`) or when you want the public name to differ from the
-function; a sequence that derives the same name twice is refused at startup
-with that instruction. So is an entry that is not a `@job` function, a key that
-is not a plain identifier, a key that shadows what `ctx.jobs` itself reads
-(`active`, `after`, `delay`, `bind`, `describe`, `faults`, `names`, `plugin`,
-`registry`, `scope`, `watch`, ...), and two names for one job id.
-
-Everything is checked when the plugin starts, not when a job is submitted: the
-runtime builds the registry once, and `ctx.jobs.<name>` is a dictionary read
-that neither imports nor inspects anything. An unknown name raises
-`AttributeError` naming what the plugin does declare, so a typo never looks
-like a job that failed to start.
-
-`bind` is deliberately not part of this: it stays on `qgis_sdk.jobs.JobService`
-for hosts and tests, and author code reaches a job by the name the plugin
-declared. Two limitations come with that, both by design: `ctx.jobs.<name>` is
-a runtime lookup, so an editor cannot autocomplete or type-check it (generated
-per-plugin typing is TASK-124), and the web bridge keeps carrying a handle as
-`{id, status}` rather than a live subscription - a page is told the id and the
-state, not the progress stream.
+Everything is checked at startup: a name declared twice, a key that shadows
+what `ctx.jobs` reads (`active`, `delay`, `bind`, `plugin`, ...), and two names
+for one id are refused, and an unknown name raises `AttributeError` naming what
+the plugin does declare. `bind` stays on `qgis_sdk.jobs.JobService` for hosts
+and tests. Two limits follow: `ctx.jobs.<name>` is a runtime lookup, so no
+editor completion (TASK-124), and the bridge carries `{id, status}`, not a live
+subscription.
 
 ### What is checked before a job runs?
 
@@ -3515,25 +3498,14 @@ instead of raising. Prepare GUI state before submitting, pass plain values
 (ids, paths, numbers) in, and apply GUI changes in the success callback, which
 is delivered on the driving thread.
 
-Two guards stand behind that, and neither is a proof of thread safety:
-
-- `qgis-sdk check` reads the source: `JOB001` for GUI state reached from a job
-  body (`iface`, a Qt or QGIS GUI class, `QgsProject.instance()`, a module-level
-  name holding one of those), `JOB002` for a context attribute a
-  `WorkerContext` refuses, and `JOB003` as a warning for a by-name import it
-  cannot follow. A name the body rebinds locally - a parameter called `iface`,
-  an assignment - is not reported. The three rows are in the rule table, which
-  the Project checks section of this guide carries.
-- the runtime remembers which thread assembled a context. Reading a GUI-bound
-  capability (`desktop`, `ui`, `layers`, `project`, `files`, `streams`,
-  `actions`) from another thread warns once per capability and thread, and
-  raises in a development session (`qgis-sdk dev`), which is what catches the
-  captured reference - `service = ctx.desktop` taken on the driving thread and
-  used inside a job - that a source check cannot see (decision-69).
-
-What is left to you: a helper the body calls, a live object passed in as an
-argument, and anything a by-name import reaches. Neither guard turns a data
-race into a reported error, and neither is a sandbox.
+Two guards stand behind that, and neither is a sandbox. `qgis-sdk check` reads
+the source: `JOB001` for GUI state reached from a body, `JOB002` for a refused
+context attribute, `JOB003` (warning) for a by-name import it cannot follow -
+the Project checks section carries the three rows. At runtime the context
+remembers which thread assembled it, so a GUI-bound capability read off another
+thread warns once and raises under `qgis-sdk dev`, which catches a captured
+`service = ctx.desktop` that no source check can see (decision-69). A helper, a
+live object passed in, or a by-name import is still yours to get right.
 
 ### Migrating from the 0.5 class form
 
@@ -3664,29 +3636,16 @@ body on the driving thread (decision-65). A job is driven in three moves:
 `tick()` submits, the worker runs the body, `tick()` delivers.
 
 `QgsTaskWorkers` is the native backend, and `native_plugin_context` already
-gives you one as `ctx.workers`. It runs each job body as **one `QgsTask` under
-`QgsApplication.taskManager()`**, so the job is a single entry in the QGIS task
-bar: the title is the job's `title`, its bar follows `ctx.progress` (the worker
-reports, the task bar draws), and pressing cancel files the same cooperative
-request `handle.cancel()` does - the body stops when it next polls
-`ctx.cancellation`, and nothing is interrupted. There are no sub-tasks and no
-parent task; a Processing algorithm keeps being the `QgsTask` Processing
-already started. `ThreadPoolWorkers` stays available for a host without a task
-manager (and is what `tests/test_jobs_native.py` drives); both report through
-the scheduler's `Handoff`, so nothing about delivery changes between them.
+gives you one as `ctx.workers`: each body is one `QgsTask` under
+`QgsApplication.taskManager()`, titled by the job and driven by `ctx.progress`,
+and cancel files the same cooperative request `handle.cancel()` does.
+`ThreadPoolWorkers` serves a host without a task manager; both report through
+the scheduler's `Handoff`, so delivery is identical.
 
-In tests, `qgis_sdk.testing.FakeWorkers` holds the bodies until the test says
-`run_one()` / `run_all()` - which is how the suite stages races between
-workers, ticks and disposal, and a test passes `run_all` to a thread of its own
-when it wants the body to run off the driving thread - and
-`qgis_sdk.testing.ThreadWorkers` is a real `ThreadPoolExecutor` for the cases
-that want one. `tests/features/scoped_jobs.feature` states the rules as
-scenarios (bound by `tests/test_jobs_bdd.py`), `tests/test_jobs.py` holds the
-examples, `tests/test_jobs_properties.py` a Hypothesis state machine over
-submit / tick / cancel / worker reports / close view / close listener / close
-plugin, `tests/test_jobs_native.py` the thread evidence over a real pool and a
-real Qt event loop, and `tests/test_jobs_tasks_native.py` the task-manager
-evidence (one task per job, its title, mirrored progress, the cancel button).
+In tests, `qgis_sdk.testing.FakeWorkers` holds bodies until `run_one()` /
+`run_all()` - which is how races between workers, ticks and disposal are
+staged - and `ThreadWorkers` is a real `ThreadPoolExecutor`. The evidence is
+`tests/test_jobs*.py` and `tests/features/scoped_jobs.feature`.
 
 ### How do I order one job after another?
 
@@ -3734,52 +3693,20 @@ def count(ctx: WorkerContext, layer_id: str) -> CountResult:
     return CountResult(total=len(feature_ids(layer_id)))
 ```
 
-What to move:
+The context becomes a `WorkerContext`, which carries `progress` and
+`cancellation` only; `project`, `layers`, `ui`, `network`, `files`, `scope` and
+`workers` are refused by name. Prepare GUI state and collect plain values
+before `delay`, apply GUI changes in `on_success`/`on_failure`/`on_cancelled`,
+and poll `ctx.cancellation.is_cancelled()` in a loop rather than expecting an
+interrupt. Naming is the other half: the plugin declares what it exposes
+(`app.jobs = {"add": add}`) and an action submits with
+`ctx.jobs.add.delay(left=1, right=2)`, and `ctx.jobs.parent` is now
+`ctx.jobs.plugin`. `qgis-sdk check` reports `JOB001`/`JOB002`, with `JOB003` as
+a warning; fix the body, not the guard.
 
-- **The context.** `ctx: JobContext` becomes `ctx: WorkerContext`, which
-  carries `progress` and `cancellation` only. `project`, `algorithms`, `layers`,
-  `iface`, `network`, `notifications`, `ui`, `view`, `files`, `scope` and
-  `workers` are gone, and reading one raises
-  `QgisSdkUnsupportedCapabilityError` naming the capability and why a worker
-  cannot have it.
-- **GUI preparation, before submission.** Read the project, resolve a path,
-  collect plain values and let the user confirm - all on the driving thread,
-  before `delay`. Pass plain values (ids, numbers, dataclasses) into the body,
-  not live layers or widgets.
-- **GUI updates, after delivery.** Anything that touches a widget or the
-  message bar belongs in `on_success` / `on_failure` / `on_cancelled`, which
-  run on the driving thread.
-- **Long work, in the body.** A blocking call that used to need an offload is
-  now simply called; the whole body is already off the GUI thread. There is no
-  reason to create a second pool, and `ctx.workers` is absent.
-- **What the check now says.** `qgis-sdk check` reports `JOB001` and `JOB002`
-  for a body that reaches GUI state or a refused attribute, with `JOB003` as a
-  warning for a by-name import; the runtime warns once when a GUI-bound
-  capability is read off the thread that assembled the context, and raises in
-  a development session. Fix the body, not the guard.
-- **Cancellation, cooperatively.** Poll `ctx.cancellation.is_cancelled()` in a
-  loop and stop; the request is a signal, never a killed thread.
-- **A host without a worker backend** (a script that only wants to call the
-  function, a test double) should call the function directly or run the code
-  without `JobService`; submitting is refused rather than silently degrading.
-- **Naming, instead of passing functions.** 0.8 submitted the function itself:
-  `ctx.jobs.bind(add).delay(left=1, right=2)`, or `ctx.jobs.delay(add, ...)` as
-  the one-call spelling. 0.9 has the plugin declare what it exposes
-  (`app.jobs = {"add": add}`) and the action name it:
-  `ctx.jobs.add.delay(left=1, right=2)`. `bind` still exists on
-  `qgis_sdk.jobs.JobService`, but it is the host's and the test's route, not
-  the author's.
-- **The plugin owner, spelled out.** `ctx.jobs.parent` is now
-  `ctx.jobs.plugin`: view code that must outlive the window submits through
-  `ctx.jobs.plugin.<name>.delay(...)` and the job is the plugin's, not the
-  view's. Everything else a view submits closes with the window.
-- **Ordering, if you needed it.** `ctx.jobs.after(handle)` replaces any
-  hand-rolled "start the second job from the first one's success callback": the
-  dependency is declared where the job is submitted, and a failed prerequisite
-  fails the dependent job instead of silently skipping it.
-- **The task bar.** On Desktop each job is now one task there. A job whose
-  title reads well in a user interface is worth naming in `@job(title=...)`,
-  and a long job should report `ctx.progress` so its bar moves.
+The step-by-step list - including the plugin owner, ordering, and what a host
+without a worker backend should do - is the
+[0.9.0 migration notes](doc-12.md#090-migration-notes).
 
 ## Project scaffold
 
