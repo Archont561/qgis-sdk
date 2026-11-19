@@ -78,6 +78,10 @@ class _PluginHandleMixin1:
         the plugin's line rather than at this module. Nothing is threaded: the
         handler runs here, so a call blocks the GUI exactly as pressing the
         plugin's button would.
+
+        Args:
+            action_id: The id the plugin declares for the action.
+            inputs: The action's fields, validated as the bridge validates them.
         """
         action = self._action(action_id)
         payload = _validated_payload(action, inputs)
@@ -99,6 +103,9 @@ class _PluginHandleMixin1:
         context, scope and lifetime (decision-55's trigger rule); an unknown
         name refuses listing the ids the plugin declares. Like every window in
         QGIS this belongs on the GUI thread, which is the console's thread.
+
+        Args:
+            target: The surface id, its class name, or the action id it follows.
         """
         entry = self._resolve_surface(target)
         host = getattr(self._adapter, "surfaces", None)
@@ -239,6 +246,11 @@ class PluginHandle(_PluginHandleMixin1, _PluginHandleMixin2):
     ``classFactory`` returned - so a plugin built by another SDK version is
     usable while it offers the attributes read here, and refuses by name for
     the rest. Nothing is imported from the plugin's own vendored copy.
+
+    Args:
+        name: The name QGIS holds the plugin under.
+        adapter: The object ``classFactory`` returned, read by attribute only.
+        session: The session the handle reports and reloads through.
     """
 
     __slots__ = ("_adapter", "_name", "_session")

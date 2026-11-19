@@ -127,7 +127,14 @@ _running = _RunningSession()
 
 
 def run(app: _QgisSdkPlugin, **options: _Unpack[_RunOptions1]) -> int:
-    "Run ``app`` as a standalone PyQGIS application; return the exit code.\n\n    ``argv`` is what the toolkit sees (``sys.argv[1:]`` from a launcher);\n    ``gui`` opens the window and with it ``ctx.ui`` and the Desktop-style\n    bindings; ``grace`` bounds the wait for running jobs at shutdown;\n    ``once`` starts the app, delivers what is already queued and stops instead\n    of running the event loop (``qgis-sdk run --once``). ``backend`` is the\n    toolkit seam: left out, the Qt one in :mod:`qgis_sdk.adapters.app` is built,\n    which is the only import here that needs QGIS.\n"
+    """Run ``app`` as a standalone PyQGIS application; return the exit code.
+
+    Args:
+        app: The plugin to run.
+        options: The keywords :class:`AppOptions` stands for, plus ``backend`` -
+            the toolkit seam, which builds the Qt one when left out; that
+            import is the only one here that needs QGIS.
+    """
     values = _RunValues1(**options)
     if _running.session is not None:
         raise QgisSdkAppError(
@@ -164,6 +171,11 @@ def main(
     window with settings nobody asked for - a double-clicked console script has
     no traceback to show. Everything the SDK does not recognise goes to the
     toolkit, so ``-platform offscreen`` works from a launcher too.
+
+    Args:
+        app: The plugin to run.
+        argv: The arguments to read, or ``None`` for ``sys.argv[1:]``.
+        backend: The toolkit seam, or ``None`` for the Qt one.
     """
     _s = _CcState(**locals())
     for _p in (_cc_main_p1, _cc_main_p2):

@@ -135,7 +135,14 @@ T = TypeVar("T", bound=Callable[..., Any])
 
 @dataclass(frozen=True)
 class ProviderDescription:
-    """A provider and its algorithms, with the ids a host will register."""
+    """A provider and its algorithms, with the ids a host will register.
+
+    Attributes:
+        id: The provider's identifier, which its algorithm ids are prefixed with.
+        title: The label a toolbox groups them under.
+        algorithms: Every declared algorithm, in declaration order.
+        schema_version: The description schema the object speaks.
+    """
 
     id: str
     title: str
@@ -157,7 +164,12 @@ class ProviderDescription:
 
 
 class Provider:
-    """A named collection of algorithm functions, registered at definition time."""
+    """A named collection of algorithm functions, registered at definition time.
+
+    Args:
+        id: The provider's identifier, which every algorithm id is prefixed with.
+        title: The label a toolbox shows for the group.
+    """
 
     def __init__(self, *, id: str, title: str) -> None:
         declared = metadata(id, title)
@@ -188,7 +200,21 @@ class Provider:
         title: str | None = None,
         group: str | None = None,
     ) -> Any:
-        "Declare ``function`` as one of this provider's algorithms.\n\n        The function is described immediately, so a missing context\n        parameter, an input no host could render or a result that is not a\n        declared output kind all fail here rather than during the first\n        execution. Nothing is\n        wrapped: it gains ``describe()`` and a test calls the original function\n        with a fake context.\n\n        ``@provider.algorithm`` alone derives the id and title from the\n        function name. The derived id is the plain snake_case name - the\n        provider is its namespace and refuses a duplicate - so the toolbox\n        shows ``field_tools:buffer`` rather than a hashed suffix.\n"
+        """Declare ``function`` as one of this provider's algorithms.
+
+        The function is described at once: a missing context parameter, an
+        input no host can render or an undeclared result kind fails here rather
+        than at the first execution. Nothing is wrapped; it gains
+        ``describe()``.
+
+        Args:
+            function: The function, when used bare; ``None`` when called.
+            id: The id, or ``None`` to derive it from the name. A derived one
+                is the plain snake_case name, so a toolbox shows
+                ``field_tools:buffer`` rather than a hashed suffix.
+            title: The label, or ``None`` to derive it.
+            group: The toolbox group, or ``None`` for the provider's root.
+        """
         _s = _CcState(self=self, function=function, id=id, title=title, group=group)
         for _p in (_cc_algorithm_p1, _cc_algorithm_p2, _cc_algorithm_p3):
             _r = _p(_s)
@@ -227,7 +253,14 @@ class Provider:
         return tuple(self._functions.values())
 
     def function_for(self, algorithm_id: str) -> Callable[..., Any]:
-        """Return the function declared under ``algorithm_id``."""
+        """Return the function declared under ``algorithm_id``.
+
+        Args:
+            algorithm_id: The id as it was declared, without the provider prefix.
+
+        Raises:
+            QgisSdkDeclarationError: No algorithm of this provider has that id.
+        """
         try:
             return self._functions[algorithm_id]
         except KeyError:

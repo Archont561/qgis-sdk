@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from qgis_sdk._published import REQUIRED, published
@@ -25,14 +26,64 @@ from qgis_sdk.models import (
 from qgis_sdk.services import Cancellation, Progress
 
 from ._declaration import (
-    CONTEXTS,
     AlgorithmDescription,
-    InvokeRequest,
-    Run,
     check_inputs,
     describe_algorithm,
-    invoke_controls,
 )
+
+CONTEXTS = (PluginContext, JobContext, AlgorithmContext)
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeRequest:
+    """The public ``invoke`` call as one record (decision-81)."""
+
+    function: Callable[..., Any]
+    ctx: PluginContext | JobContext | AlgorithmContext
+    inputs: dict[str, Any]
+    progress: Progress | None
+    cancellation: Cancellation | None
+    add_to_project: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Run:
+    """One invocation's body, checks, child scope and commit target."""
+
+    request: InvokeRequest
+    description: AlgorithmDescription
+    context: AlgorithmContext
+    scope: ResourceScope
+    project: Any
+    cancellation: Cancellation
+
+
+class _SilentProgress:
+    """Report nothing; a caller that does not care about progress still runs."""
+
+    def report(self, fraction: float) -> None:
+        """Discard the fraction."""
+
+
+class _NotCancelled:
+    """Never cancelled; the default for a caller without a cancellation signal."""
+
+    def is_cancelled(self) -> bool:
+        """Return that this execution has not been cancelled."""
+        return False
+
+
+def invoke_controls(
+    ctx: PluginContext | JobContext | AlgorithmContext,
+    progress: Progress | None,
+    cancellation: Cancellation | None,
+) -> tuple[Progress, Cancellation]:
+    """Inherit progress/cancellation from a job or algorithm context."""
+    if progress is None:
+        progress = getattr(ctx, "progress", None) or _SilentProgress()
+    if cancellation is None:
+        cancellation = getattr(ctx, "cancellation", None) or _NotCancelled()
+    return progress, cancellation
 
 
 def _run_context(
@@ -123,12 +174,20 @@ _CC_SPECS_invoke_1 = (
 def invoke(_published_values):
     """Run one declared algorithm once from the context the caller already holds.
 
-    ``ctx`` is a PluginContext, JobContext or AlgorithmContext; ``invoke``
-    builds a new AlgorithmContext over a child scope and closes it afterwards,
-    so nothing an invocation registers outlives it (decision-11, decision-42).
-    ``progress``/``cancellation`` omitted are inherited from a job or algorithm
-    context. ``add_to_project=False`` leaves the produced layers with the
-    caller; the default adds them to ``ctx.project`` on success.
+    The call runs over a child scope that closes afterwards, so nothing an
+    invocation registers outlives it (decision-11, decision-42).
+
+    Args:
+        function: The function ``@provider.algorithm`` declared.
+        ctx: A plugin, job or algorithm context to run under.
+        inputs: The declared inputs, as keyword arguments.
+        progress: The sink, or ``None`` to inherit the context's.
+        cancellation: The signal, or ``None`` to inherit the context's.
+        add_to_project: Whether the produced layers join ``ctx.project``.
+
+    Raises:
+        QgisSdkAlgorithmRejectedError: An input is unknown, missing or of the
+            wrong kind; every reason is listed at once.
     """
     return _execute(
         InvokeRequest(

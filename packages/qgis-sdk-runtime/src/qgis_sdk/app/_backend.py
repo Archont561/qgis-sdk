@@ -39,6 +39,12 @@ class AppSurface(Protocol):
         Called once, after the runtime started, on the thread that owns the
         event loop: this is where toolbar buttons, menu entries, surfaces and
         the job pump are created. A headless surface returns no loops.
+
+        Args:
+            runtime: The started runtime whose UI is placed and whose loops run.
+
+        Returns:
+            The loops that will keep the app alive, or none for headless.
         """
 
     def close(self) -> None:
@@ -56,10 +62,23 @@ class AppBackend(Protocol):
         system is used (``QgsApplication(argv, GUIenabled)``), and a window
         created under a non-GUI application is undefined behaviour rather than
         an error.
+
+        Args:
+            argv: The arguments to construct the application with.
+            gui: Whether a window system is used.
         """
 
     def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> AppSurface:
-        """Build the surface for this run: a window when ``gui``, else headless."""
+        """Build the surface for this run: a window when ``gui``, else headless.
+
+        Args:
+            app: The plugin being run, whose runtime and description it needs.
+            gui: Whether to open a window and with it ``ctx.ui``.
+            title: The window title.
+
+        Returns:
+            The surface, which ``bind`` fills in once the runtime started.
+        """
 
     def exec(self) -> int:
         """Run the event loop until the app quits; return the process exit code."""
