@@ -548,48 +548,42 @@ from qgis_sdk.adapters.desktop import host
 classFactory = host("field_tools.plugin:app", placement="dock")
 ```
 
-It resolves the application (a typo fails by name, with `QgisSdkHostError`),
-validates its declarations, and returns a factory. The
-`DesktopHost` it makes starts the runtime from `initGui()`, registers the
-application's providers with Processing, and unloads everything from `unload()`
-(safe to repeat). The context comes from one of two places: a
-`context_factory(iface)` attribute on the application when the author
-wants to assemble services; otherwise `default_context`, which is
-`native_plugin_context(iface, ...)` whenever a `QgsApplication` is running
-and a bare `PluginContext` (messages dropped, settings scoped by plugin id)
-when none is - so the same factory runs the starter tests without QGIS, and
-`ctx.desktop` is refused by name there instead of inventing a host.
+`host()` resolves the application (a typo is a `QgisSdkHostError` naming it),
+validates the declarations and returns the factory. The `DesktopHost` starts the
+runtime from `initGui()`, registers the application's providers with Processing
+and unloads from `unload()`, safely repeatable. The context comes from a
+`context_factory(iface)` attribute on the application when the author assembles
+services, otherwise from `default_context` (`native_plugin_context(iface, ...)`
+under a `QgsApplication`, a bare `PluginContext` without one) - so the same
+factory runs the starter tests, where `ctx.desktop` refuses by name.
 
-With a `placement`, `initGui()` adds one toolbar button and `show_view()`
-opens the built page from `<package>/web/index.html` in a `QWebEngineView`
-as a `QDockWidget` or `QDialog` (view id `<plugin id>.main`), with a
-`Dispatcher` over the running runtime and the curated host operations the
-`grants` select - a grant such as `layers.read` selects every operation that
-needs it, an operation id selects one (`granted_operations`, then
-`register_host_operations(only=...)`): no grants, no host operation on the
-channel at all. `qgis-sdk dev` serves the same page from
-Vite when it has started one (`QGIS_SDK_DEV_SERVER`). `host.view` is the
-widget while it is open, `None` after `unload()`.
+With a `placement`, `initGui()` adds a toolbar button and `show_view()` opens
+`<package>/web/index.html` in a `QWebEngineView` as a `QDockWidget` or `QDialog`
+(view id `<plugin id>.main`), wired to a `Dispatcher` over the runtime and the
+operations the `grants` select: a grant like `layers.read` takes every operation
+that needs it, an operation id takes one (`granted_operations`, then
+`register_host_operations(only=...)`), and no grants leaves the channel with
+none. `qgis-sdk dev` serves the page from Vite when it started one
+(`QGIS_SDK_DEV_SERVER`), and `host.view` is the widget while open, `None` after
+`unload()`.
 
-`create_class_factory(app, context_factory=...)` and
-`DesktopLifecycleAdapter` remain for a plugin that supplies its own entry
-point; `host()` is built on them. Neither imports Qt at module level; the
-adapter never serialises `iface`.
+`create_class_factory(app, context_factory=...)` and `DesktopLifecycleAdapter`
+remain for a plugin that supplies its own entry point; `host()` is built on
+them. Neither imports Qt at module level, and the adapter never serialises
+`iface`.
 
 The headless harnesses and the real-Desktop evidence for this adapter are in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
 
 ### Which hosts does a plugin declare?
 
-`[tool.qgis-sdk] hosts` says which hosts one plugin class runs on
+`[tool.qgis-sdk] hosts` lists the hosts one plugin class runs on
 ([decision-52](../../../backlog/decisions/decision-52%20-%20Run-one-plugin-class-on-three-hosts-QGIS-Desktop-QGIS-Server-and-standalone-PyQGIS-apps.md)):
-`desktop` (a QGIS Desktop plugin loaded through `classFactory`, the default),
-`server` (a QGIS Server plugin loaded through `serverClassFactory`) and `app`
-(a standalone PyQGIS application started by `qgis_sdk.app.run`). The set changes
-nothing about how the class is written - it is what `check` reads when it
-reports `HOST001` (a Desktop-only declaration in a plugin that does not declare
-Desktop), `HOST002` (a server hook in a plugin that does not declare the server)
-and `HOST003` (the server host declared against a QGIS built without QGIS
-Server, which is a statement about the environment, not the project).
+`desktop` (loaded through `classFactory`, the default), `server`
+(`serverClassFactory`) and `app` (a standalone PyQGIS application started by
+`qgis_sdk.app.run`). It changes nothing about how the class is written; `check`
+reads it for `HOST001` (a Desktop-only declaration without Desktop), `HOST002`
+(a server hook without the server) and `HOST003` (the server host on a QGIS
+built without Server - a statement about the environment, not the project).
 
 ```toml
 [tool.qgis-sdk]
@@ -598,24 +592,19 @@ qgis-minimum-version = "4.0"
 hosts = ["desktop"]                 # desktop | server | app; default ["desktop"]
 ```
 
-Host detection is explicit, never inferred from an `iface`, a
-`QgsApplication` or an environment variable: the host that builds a context
-says which one it is, and `ctx.host` reports it - `Host.DESKTOP`,
-`Host.SERVER` or `Host.APP` from `qgis_sdk.core`, compared as strings because it
-is a `StrEnum`. `ctx.host.gui` is `False` on a server, which is the honest
-answer to "may I open a window here?". A view inherits the host of the plugin
-context that opened it. All three hosts are implemented - Desktop below, the
-server's hook layer in the next section, and the standalone app after it - and a
-capability any of them lacks still refuses by name (decision-39). The reference
-example demonstrates both of the hosts 0.9.0 adds: `examples/simple` carries an
-app entry beside its Desktop declaration, and `examples/server` is its server
-variant - the same point fixture, answered by one OGC service.
+Host detection is explicit, never inferred from an `iface`, a `QgsApplication` or
+an environment variable: the host that builds a context says which one it is, and
+`ctx.host` reports `Host.DESKTOP`, `Host.SERVER` or `Host.APP` from
+`qgis_sdk.core`, a `StrEnum` compared as strings. `ctx.host.gui` is `False` on a
+server, and a view inherits the host of the context that opened it. A capability
+a host lacks refuses by name (decision-39). `examples/simple` carries an app entry
+beside its Desktop declaration and `examples/server` is its server variant.
 
 ### The server host: the hooks QGIS Server calls
 
-A server plugin declares hooks instead of surfaces. `qgis_sdk.server` gives it
-three decorators, each of which takes `ctx: ServerContext` first, because that is
-how the host knows what it is calling:
+A server plugin declares hooks instead of surfaces: `qgis_sdk.server` gives it
+three decorators, each taking `ctx: ServerContext` first, because that is how the
+host knows what it is calling.
 
 ```python
 from qgis_sdk.server import ServerContext, ServerRequest, ServerResponse, access_control, filter, service
@@ -639,11 +628,10 @@ def only_public(ctx: ServerContext, request: ServerRequest, layer: str) -> bool:
     return layer != "secret"
 ```
 
-`ServerHooks` collects the declarations, fixes their order once - priority
-ascending, then the plugin class's declaration order, then include order - and
-refuses at startup what QGIS would refuse at the first request: an `async def`, a
-hook that does not annotate `ctx` as `ServerContext`, two services claiming one
-name, a non-int priority.
+`ServerHooks` collects the declarations, fixes their order once (priority
+ascending, then declaration order, then include order) and refuses at startup
+what QGIS would refuse at the first request: an `async def`, a `ctx` not
+annotated `ServerContext`, two services on one name, a non-int priority.
 
 Registering them with a real server is one call:
 
@@ -661,8 +649,8 @@ def serverClassFactory(serverIface):
     return QgsServerHost(HOOKS, serverIface).register()
 ```
 
-`qgis-sdk new --host server` writes exactly that file (below), so a project that
-starts as a server plugin keeps the entry QGIS Server imports.
+`qgis-sdk new --host server` writes exactly that file (below), so a server
+project keeps the entry QGIS Server imports.
 
 | SDK declaration | the object QGIS calls | when |
 | --- | --- | --- |
@@ -670,36 +658,28 @@ starts as a server plugin keeps the entry QGIS Server imports.
 | each `@service` | one `QgsService` | `executeRequest`, when the request names that `SERVICE` and version |
 | every `@access_control` | one `QgsAccessControlFilter` | `layerPermissions`, per layer, while a service renders |
 
-Three things that mapping decides for you, and says so:
-
-- **A filter can rewrite, and can answer.** A rewrite is written into the request
-  handler, so QGIS's own services see the new value. An answer is written over
-  the OGC error `setServiceException` leaves behind - that flag is the only
-  switch that makes the C++ dispatcher skip its own services for a request a
-  plugin has already answered.
-- **`request.method` is empty on the filter path.** `QgsServerFilter` receives no
-  request object, and `QgsRequestHandler` exposes the URL, the headers and the
-  merged OGC parameters but not the verb. A hook that must tell a `GET` from a
-  `POST` belongs in a `@server.service`, where QGIS does hand over the
-  `QgsServerRequest`.
+- **A filter can rewrite, and can answer.** A rewrite is written into the
+  request handler, so QGIS's own services see it; an answer is written over the
+  OGC error `setServiceException` leaves behind, the only flag that makes the
+  C++ dispatcher skip its own services for a request a plugin already answered.
+- **`request.method` is empty on the filter path.** `QgsServerFilter` receives
+  no request object, and `QgsRequestHandler` exposes the URL, headers and merged
+  OGC parameters but not the verb; a hook that must tell `GET` from `POST`
+  belongs in a `@server.service`, which gets the `QgsServerRequest`.
 - **A refused layer is a refusal, not a filtered map.** The access hook answers
-  `False` and the adapter clears all four permissions; it never silently narrows
-  what the client asked for. That decision costs the capabilities cache while the
-  plugin is loaded: the adapter answers `cacheKey()` with a non-empty string,
-  which `QgsAccessControl::fillCacheKey` reads as "do not reuse a document", so a
-  capabilities document shaped by one request is never handed to another.
-- **The server adapter imports without Qt.** `qgis_sdk.adapters.qgis` resolves a
-  name the first time it is asked for, so `...adapters.qgis.server` imports on a
-  machine where QGIS is not installed at all. Two things follow: the generated
-  entry can be driven against the `qgis.server` stand-ins in a pure test, and a
-  server-only deployment never drags Qt Widgets or Processing into the process
-  that answers requests.
+  `False` and the adapter clears all four permissions, never silently narrowing
+  what the client asked for. That costs the capabilities cache while the plugin
+  is loaded: `cacheKey()` returns a non-empty string, which
+  `QgsAccessControl::fillCacheKey` reads as "do not reuse a document".
+- **The server adapter imports without Qt**, because `qgis_sdk.adapters.qgis`
+  resolves names lazily: a pure test can drive the generated entry against the
+  `qgis.server` stand-ins, and a server deployment never drags Qt Widgets or
+  Processing into the process that answers requests.
 
 #### Jobs on this host: the request is the clock
 
 A server has no GUI thread and no job pump, so `ctx.jobs` on a `ServerContext`
-is not the plugin's service: it is one derived over *the request's* scope, and
-the request is what drives it.
+is derived over *the request's* scope, and the request drives it.
 
 ```python
 @filter()
@@ -709,37 +689,27 @@ def schedule(ctx: ServerContext, request: ServerRequest, response: ServerRespons
     ctx.jobs.plugin.rebuild_index.delay()                # outlives the request
 ```
 
-- **Ticked at request start.** A server has no event loop, so the host ticks the
-  plugin's job service when a request begins: a job that request submits starts
-  on the next request, never in the background.
-- **Abandoned when the response is sent.** The request scope closes at that
-  moment and its jobs are abandoned: each handle reads `JobStatus.CANCELLED`
-  immediately, `owner_closed` is `True`, a worker still running is asked to stop,
-  no callback runs, and the plugin's scheduler stops holding the job. That is a
-  zero-deadline quiesce - nothing in a request may wait for a worker - which is
-  why the outcome is the host's word rather than a worker report that will never
-  arrive (decision-52).
-- **Plugin-owned work says so.** `ctx.jobs.plugin` submits with the plugin's
-  lifetime and survives the response, exactly as it does inside a view. It still
-  needs something the operator started to drive it: the SDK does not invent a
-  background thread for a server.
-- **A host with no job service refuses by name.** `ctx.jobs` is a capability, so
-  a deployment given no job service answers `QgisSdkUnsupportedCapabilityError`
-  naming `jobs` instead of handing out a service that could submit nothing.
+| Moment | What happens |
+| :-- | :-- |
+| a request begins | the host ticks the plugin's job service, so a job that request submits starts on the next request, never in the background |
+| the response is sent | the request scope closes and its jobs are abandoned: every handle reads `JobStatus.CANCELLED`, `owner_closed` is `True`, a running worker is asked to stop, no callback runs, and the scheduler stops holding the job. Nothing in a request may wait for a worker, so the outcome is the host's word rather than a report that never arrives (decision-52) |
+| `ctx.jobs.plugin` | submits with the plugin's lifetime and survives the response, exactly as inside a view - it still needs something the operator started to drive it, because the SDK invents no background thread for a server |
+| no job service at all | `ctx.jobs` is a capability, so the deployment answers `QgisSdkUnsupportedCapabilityError` naming `jobs`, rather than handing out a service that could submit nothing |
 
 The whole dispatcher is testable without QGIS: `qgis_sdk.testing.FakeServerInterface`
 records registrations and serves a request through the same `ServerHost`, so a
 project's own `qgis-sdk test` (the `pure` target) proves the hooks on a machine
-whose QGIS has no server bindings at all. Where the build *does* have them, the same plugin runs in-process
-under a headless `QgsApplication` through `QgsServer.handleRequest` - the
-`QGIS 3.44 LTS` row runs exactly that, and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
+whose QGIS has no server bindings. Where the build has them, the same plugin
+runs in-process under a headless `QgsApplication` through
+`QgsServer.handleRequest` - the `QGIS 3.44 LTS` row runs exactly that, and
+[doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
 carries the evidence.
 
 ### The app host: the same plugin as a standalone PyQGIS application
 
 `qgis_sdk.app.run` owns the `QgsApplication` instead of being called by one. The
-class does not change: the same `QgisSdkPlugin`, the same actions, the same jobs,
-the same bridge. What changes is who starts it and what it may attach to.
+class does not change - the same actions, jobs and bridge - only who starts it
+and what it may attach to.
 
 ```python
 # simple/__main__.py — the entry `python -m simple`, `qgis-sdk run` and a built
@@ -773,10 +743,10 @@ argv itself.
 #### What the host offers, and what it refuses
 
 `ctx.host` is `Host.APP` in both modes. Everything a plugin needs *without* a
-window is there: `ctx.project`, `ctx.layers`, `ctx.algorithms`, `ctx.styles`,
-`ctx.files`, `ctx.settings`, `ctx.network`, `ctx.notifications` (the QGIS message
-log and the window's status bar), and `ctx.jobs` driven by the app's own job
-pump. A capability the run does not have refuses by name, as everywhere else:
+window is there - `ctx.project`, `ctx.layers`, `ctx.algorithms`, `ctx.styles`,
+`ctx.files`, `ctx.settings`, `ctx.network`, `ctx.notifications` (the message log
+and the status bar) and a `ctx.jobs` driven by the app's own pump - and a
+capability the run lacks refuses by name:
 
 ```python
 run(app)                  # ctx.ui exists; ctx.desktop refuses - there is no iface
@@ -784,26 +754,21 @@ run(app, gui=True)        # a window: @toolbar/@menu bindings become actions on 
                           # Dialog and Dock surfaces open inside it
 ```
 
-`ctx.desktop` refuses in an app because there is no `QgisInterface` to wrap -
-`qgis_sdk.app` does not fake one. A plugin that needs
-`ctx.desktop.iface` (the QGIS message bar, an existing dialog, the layer tree) is
-a Desktop plugin; one that only needs the services, the job registry and the
-canvas is one class for both hosts.
+`ctx.desktop` refuses because there is no `QgisInterface` to wrap and
+`qgis_sdk.app` does not fake one: a plugin that needs `iface` (the message bar, an
+existing dialog, the layer tree) is a Desktop plugin, and one that only needs the
+services, jobs and canvas is one class for both hosts.
 
-The window is deliberately small: a `QMainWindow`, one `QgsMapCanvas` with an
-empty project, a toolbar, a status bar, and the same
-`qgis_sdk.adapters.surfaces.SurfaceHost` the Desktop adapter places dialogs
-with. There is no layer tree, no menu from QGIS and no plugin manager - those are
-QGIS Desktop's, not the SDK's. A `@menu("Plugins/Field tools")` binding lands in
-a submenu of that name, exactly as it does in QGIS: `AppWindowInterface` answers
-`addPluginToMenu(name, action)` the way `iface` does, opening the `Plugins`,
-`Vector`, `Raster`, `Database`, `Web` and `Mesh` menus on first use and taking an
-entry back out - submenu first, then the family menu once it is empty - when the
-plugin stops. `gui` is settled first because Qt fixes it at construction: a
-window may only exist under a `QgsApplication` created with `GUIenabled`, so
-`run(app)` creates the application without it and `run(app, gui=True)` with it.
-The later canvas service (TASK-85: extent, zoom, map themes, capture) attaches
-to this canvas and to the Desktop one through the same interface.
+The window is deliberately small - a `QMainWindow`, one `QgsMapCanvas` over an
+empty project, a toolbar, a status bar and the same `SurfaceHost` the Desktop
+adapter places dialogs with; no layer tree, no QGIS menu, no plugin manager. A
+`@menu("Plugins/Field tools")` binding lands in a submenu of that name, as it does
+in QGIS: `AppWindowInterface` answers `addPluginToMenu(name, action)`, opens the
+`Plugins`, `Vector`, `Raster`, `Database`, `Web` and `Mesh` menus on first use and
+takes the entry back out when the plugin stops. `gui` is settled first because Qt
+fixes it at construction: `run(app)` creates the application without
+`GUIenabled`, `run(app, gui=True)` with it, and the canvas service (TASK-85)
+attaches to this canvas and the Desktop one through the same interface.
 
 #### Lifecycle, and the difference from a Desktop plugin
 
@@ -818,15 +783,12 @@ to this canvas and to the Desktop one through the same interface.
 | Shutdown | the plugin manager unloads it inside a running QGIS | `run` stops the loops, drains jobs, closes the window and exits QGIS once |
 | Reload / enable / disable | QGIS's lifecycle | none: restart the process |
 
-The bounds of that last row are decision-69 points 2 and 4:
-
-1. every background loop the host started is stopped **by name** - the job pump
-   first, then the surface's own timers - and the shutdown report lists them;
-2. running jobs get `grace` seconds (15 by default) to settle; whatever is left
-   is named, asked to stop and reported as cancelled, and none of its callbacks
-   run afterwards;
-3. the UI closes, the runtime unloads, and `exitQgis()` is called exactly once -
-   including when the start failed halfway, and never when `initQgis()` never ran.
+The bounds of that last row are decision-69 points 2 and 4: every loop the host
+started is stopped **by name** (the job pump, then the surface's own timers) and
+the shutdown report lists them; running jobs get `grace` seconds (15 by default)
+before being named, asked to stop and reported cancelled, with no callback
+running afterwards; and `exitQgis()` is called exactly once - even when the start
+failed halfway, and never when `initQgis()` never ran.
 
 ```python
 from qgis_sdk.app import AppSession
@@ -841,9 +803,8 @@ print(report.to_json())   # the same facts, for a log or a test
 ```
 
 `qgis_sdk.app.quit()` leaves the event loop from inside a job or an action - the
-one hook a headless app needs when its work is done. Called with no app running
-it refuses by name instead of touching a `QgsApplication` that belongs to QGIS
-Desktop.
+one hook a headless app needs when its work is done - and with no app running it
+refuses by name instead of touching QGIS Desktop's `QgsApplication`.
 
 #### Running one from a project
 
@@ -866,13 +827,12 @@ pip install dist/simple-0.1.0-app
 simple                          # the same entry, the same flags
 ```
 
-`qgis-sdk run` never installs anything and never writes into the project: it
-puts the found install's PyQGIS and the SDK's own packages on that interpreter's
-`PYTHONPATH`, runs the project's `<plugin>/__main__.py` in the project root, and
-passes `--headless`, `--once`, `--grace` and `--title` through. A project
-without an entry (a Desktop plugin) is started through a generated probe in a
-temporary directory that imports `[tool.qgis-sdk] plugin` and calls the same
-`qgis_sdk.app.main`, so trying a plugin as an app costs nothing.
+`qgis-sdk run` installs nothing and writes nothing: it puts the found PyQGIS and
+the SDK's packages on that interpreter's `PYTHONPATH`, runs
+`<plugin>/__main__.py` in the project root and passes the flags through. A
+Desktop plugin, with no entry, starts through a generated probe that imports
+`[tool.qgis-sdk] plugin` and calls the same `qgis_sdk.app.main`, so trying a
+plugin as an app costs nothing.
 
 #### `build --target app`: what pip installs
 
@@ -892,24 +852,21 @@ dist/simple-0.1.0-app/
       NOTICE              # which runtime, and every vendored distribution
 ```
 
-- the runtime is **vendored** (`<plugin>._vendor.qgis_sdk`, imports rewritten by
-  the same AST pass the ZIP build uses), so the distribution declares no runtime
-  dependency and works wherever PyQGIS already is;
+- the runtime is **vendored** as `<plugin>._vendor.qgis_sdk` by the same AST pass
+  the ZIP build uses, so the distribution declares no runtime dependency and
+  works wherever PyQGIS already is;
 - declared externals (`[tool.qgis-sdk.build] external`) are **probed before the
   application is imported**: a missing one is one line naming the package and
-  `pip install <requirement>`, exit code 3, instead of a traceback from inside a
+  `pip install <requirement>`, exit 3, instead of a traceback from inside a
   plugin (decision-50 point 1);
-- pure-Python distributions listed in `[tool.qgis-sdk.build] vendor` are copied
-  beside the runtime under the same rules;
-- the runtime's data files (the Processing catalogue, the reference styles) are
-  listed in `[tool.setuptools.package-data]`, file by file, so a wheel built
-  anywhere carries them.
+- pure-Python distributions in `[tool.qgis-sdk.build] vendor` are copied beside
+  the runtime under the same rules;
+- the runtime's data files are listed in `[tool.setuptools.package-data]` file by
+  file, so a wheel built anywhere carries them.
 
-Nothing is installed by `build`, and nothing in the source tree is edited: the
-directory *is* the input to `pip install`. Install it into the QGIS
-interpretation that already has PyQGIS - a distribution installed into a Python
-with no `qgis.core` refuses by name (`this interpreter cannot import PyQGIS`)
-rather than crashing, because that is the common mistake.
+`build` installs nothing and edits nothing: the directory *is* the input to
+`pip install`, and an interpreter without `qgis.core` refuses by name (`this
+interpreter cannot import PyQGIS`) rather than crashing.
 
 #### Scaffolding one
 
@@ -920,30 +877,27 @@ qgis-sdk new field_tools --host app --algorithm      # a Processing provider
 ```
 
 The generated project declares `hosts = ["app"]`, keeps `<plugin>/__init__.py`
-import-only (there is no QGIS to call a factory), and writes
-`<plugin>/__main__.py` as the entry. A web page still needs `--host desktop`:
-the page is placed through the Desktop adapter's `iface`, which the app host does
-not provide - declare both hosts and keep the page for the Desktop one
-(decision-52 point 3 keeps the bridge, not the placement).
+import-only and writes `<plugin>/__main__.py` as the entry. A web page still
+needs `--host desktop`, since the page is placed through the Desktop adapter's
+`iface`: declare both hosts and keep the page for the Desktop one (decision-52
+point 3 keeps the bridge, not the placement).
 
 #### The bridge is unchanged
 
-`gui=True` gives the app a window; the bridge does not depend on that window. A
-page reaches `runtime.actions` through the same host services, the same grants
-and the same WebChannel transport as in QGIS Desktop, because the app host wraps
-the same `PluginRuntime` in the same `SurfaceHost` - what an app lacks is the
-`iface`, not the contract. The reference example (`examples/simple`) is one class
-on both hosts and one set of actions behind its dock page and its native dialogs;
-its `simple/__main__.py` is the entry above, and the pure test
+`gui=True` gives the app a window; the bridge does not depend on it. A page
+reaches `runtime.actions` through the same host services, grants and WebChannel
+transport as in QGIS Desktop, because the app host wraps the same
+`PluginRuntime` in the same `SurfaceHost` - what an app lacks is the `iface`, not
+the contract. `examples/simple` is one class on both hosts, and
 `test_reference_example.py::test_the_example_runs_headless_as_an_app_on_the_same_actions`
 runs it headless through `FakeAppBackend` and reads back the same action ids.
 
 #### Proving one without QGIS
 
-`qgis_sdk.testing.FakeAppBackend` drives the real `AppSession` with no Qt at all:
-it records `init`/`build`/`exec`/`process_events`/`quit`/`exit`, builds a
+`qgis_sdk.testing.FakeAppBackend` drives the real `AppSession` with no Qt: it
+records `init`/`build`/`exec`/`process_events`/`quit`/`exit`, builds a
 `PluginContext` whose `ctx.host` is `app`, hands the session a `FakeWorkers` pool
-and a fake UI, and lets a test watch the shutdown report.
+and a fake UI, and lets a test read the shutdown report.
 
 ```python
 from qgis_sdk.app import run
@@ -957,8 +911,8 @@ assert backend.surface.context.host.value == "app"
 
 The window, the canvas and the real bindings need a toolkit: the `qgis` layer's
 `test_app_native.py` starts the host in a child interpreter with
-`QT_QPA_PLATFORM=offscreen` and asserts the `QMainWindow`, its canvas, the
-toolbar action and the dialog the plugin opened.
+`QT_QPA_PLATFORM=offscreen` and asserts the window, its canvas, the toolbar
+action and the dialog it opened.
 
 ## Forms: an action's inputs as a window
 
@@ -3232,8 +3186,6 @@ Three rules keep the sequence honest:
 `MAX_IN_FLIGHT_FRAMES`, `MAX_QUEUED_EVENTS`) and `tests/test_bridge_streams.py`
 plus the Hypothesis model in `tests/test_bridge_streams_properties.py` check the
 ordering, the overflow and the disposal races.
-
-
 
 ## Networking
 
@@ -5892,7 +5844,6 @@ consumed with it - `qgis-sdk bridge generate` renders the same catalogue a
    existing one; `build` writes `server=True` and `--target app` writes the
    launcher, so no hand-written `metadata.txt` or `classFactory` appears in
    either case.
-
 
 ## 0.8.0 migration notes
 
