@@ -213,7 +213,15 @@ EXPORT_DRIVERS = MappingProxyType({".geojson": "GeoJSON", ".gpkg": "GPKG"})
 
 @dataclass(frozen=True, slots=True)
 class ExportPlan:
-    """A destination that passed every precondition, and the driver for it."""
+    """A destination that passed every precondition, and the driver for it.
+
+    Attributes:
+        destination: The path the export will appear at.
+        driver: The OGR or GDAL driver its suffix named.
+        source: The opened file it must not overwrite, or ``None`` when the
+            export reads nothing that already exists.
+        overwrite: Whether an existing destination may be replaced.
+    """
 
     destination: Path
     driver: str
@@ -230,10 +238,16 @@ def plan_export(
     """Validate ``destination`` and return the plan, or refuse with every reason.
 
     ``drivers`` is the suffix-to-driver table the destination is checked
-    against: OGR's for a vector export, GDAL's for a raster one. Everything
-    else - existence, the parent directory, ``overwrite``, staging, the
-    source-safety recheck - is the same policy for both, which is why the table
-    is a parameter rather than a second function.
+    against: OGR's for a vector export, GDAL's for a raster one. The rest of
+    the policy is the same for both.
+
+    Args:
+        destination: Where the export should appear.
+        overwrite: Whether an existing file there may be replaced.
+        drivers: The suffix-to-driver table.
+
+    Raises:
+        QgisSdkExportRefusedError: Every problem found, named at once.
     """
     destination = Path(destination)
     reasons: list[str] = []
@@ -308,6 +322,10 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
     The staging directory is removed on every exit path. A writer raising an SDK
     error passes through; other writer and commit errors become
     :class:`QgisSdkExportFailedError`.
+
+    Args:
+        plan: A destination that passed :func:`plan_export`.
+        write: What produces the file, given the staged path to write.
     """
     _s1 = _CcState1(plan=plan, write=write)
     for _p1 in (_cc_run_export_p4, _cc_run_export_p5):

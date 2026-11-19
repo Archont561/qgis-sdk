@@ -34,14 +34,24 @@ _WARNED: set[str] = set()
 
 @dataclass(frozen=True, slots=True)
 class Deprecation:
-    """One symbol's removal notice: since when, until when, and instead of."""
+    """One symbol's removal notice: since when, until when, and instead of.
+
+    Attributes:
+        since: The version the mark appeared in, so a reader knows how long ago.
+        removal: The version the symbol may go in.
+        use: What to use instead, or an empty string when nothing replaces it.
+    """
 
     since: str
     removal: str
     use: str = ""
 
     def message(self, label: str) -> str:
-        """The sentence a caller sees, naming the replacement and the version."""
+        """The sentence a caller sees, naming the replacement and the version.
+
+        Args:
+            label: The symbol's name, as the warning should spell it.
+        """
         remedy = f"; use {self.use} instead" if self.use else ""
         return (
             f"{label} is deprecated since {self.since} and will be removed in "
@@ -54,7 +64,11 @@ class Deprecation:
 
 
 def deprecation_of(value: Any) -> Deprecation | None:
-    """The mark on one symbol, or ``None`` when it carries none."""
+    """The mark on one symbol, or ``None`` when it carries none.
+
+    Args:
+        value: The function, class or constant to read the mark off.
+    """
     mark = getattr(value, MARK, None)
     return mark if isinstance(mark, Deprecation) else None
 
@@ -100,6 +114,11 @@ def deprecated(*, since: str, removal: str, use: str = ""):
     on first construction, a function on first call, a constant is only marked -
     the inventory still records it and `check` still reports its uses. The mark
     is what the tooling reads, so a symbol that cannot wrap a call still counts.
+
+    Args:
+        since: The version the mark appears in.
+        removal: The version the symbol may be removed in.
+        use: What replaces it, named as a reader would type it.
     """
     mark = Deprecation(since=since, removal=removal, use=use)
 

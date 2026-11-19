@@ -128,6 +128,12 @@ class PluginHttpServer:
     callable on that thread, not execute it on the caller. No operations are
     exposed unless named in ``actions``. Call :meth:`close` before unloading
     the runtime; off-owner cleanup is posted and may finish after close returns.
+
+    Args:
+        runtime: The started runtime to serve; closing its scope closes this.
+        options: The listener's keyword options. ``post`` and ``token_file``
+            are required, ``actions`` names what may be invoked, and the rest
+            default to one loopback listener with bounded timeouts.
     """
 
     def __init__(self, runtime: Any, **options: Unpack[_InitOptions1]) -> None:
@@ -213,6 +219,9 @@ class PluginHttpServer:
 
         Completion does not imply success: failed cleanup is reported through
         ``on_cleanup_error`` and keeps the runtime quarantined.
+
+        Args:
+            timeout: Seconds to wait, or ``None`` to wait as long as it takes.
         """
         if self._owner.here and not self._owner.done.is_set():
             raise QgisSdkHttpError("the owner thread must not wait for queued cleanup")

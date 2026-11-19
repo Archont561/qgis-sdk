@@ -167,7 +167,15 @@ SEPARATOR = "--"
 
 @dataclass(frozen=True, slots=True)
 class AppOptions:
-    """What a launcher asked for, in the terms :func:`qgis_sdk.app.run` takes."""
+    """What a launcher asked for, in the terms :func:`qgis_sdk.app.run` takes.
+
+    Attributes:
+        gui: Whether to open a window and with it ``ctx.ui``.
+        once: Whether to deliver what is queued and stop.
+        grace: How long shutdown may wait for running jobs.
+        title: The window title, or ``None`` for the plugin's own.
+        argv: The arguments the toolkit sees.
+    """
 
     gui: bool = True
     once: bool = False
@@ -191,6 +199,12 @@ def parse_argv(argv: Sequence[str] | None = None) -> AppOptions:
     A value that cannot be read refuses by name instead of starting an app with a
     grace period the user did not ask for: a launcher's exit code is all a
     double-click gives back.
+
+    Args:
+        argv: The arguments to read, or ``None`` for ``sys.argv[1:]``.
+
+    Raises:
+        QgisSdkAppError: A flag is unknown or its value unreadable.
     """
     _s = _CcState(**locals())
     for _p in (_cc_parse_argv_p10, _cc_parse_argv_p11, _cc_parse_argv_p12):

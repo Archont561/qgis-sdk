@@ -124,11 +124,17 @@ DRAIN_INTERVAL = 0.02
 class ShutdownReport:
     """What shutting one app down stopped, drained and abandoned.
 
-    ``stopped`` names every background loop that was still running when the
-    shutdown began, ``loops`` is the state each one reached, ``drained`` the
-    jobs that finished inside the grace window and ``abandoned`` the ones that
-    did not - each of those was asked to stop, is reported as cancelled, and no
+    An abandoned job was asked to stop, is reported as cancelled, and no
     callback for it runs afterwards (decision-69 points 2 and 4).
+
+    Attributes:
+        stopped: The background loops that were still running.
+        loops: The state each of those loops reached.
+        drained: The jobs that finished inside the grace window.
+        abandoned: The jobs that did not, and were cancelled instead.
+        grace_seconds: How long shutdown was allowed to wait.
+        elapsed: How long it actually took.
+        exited: Whether the backend tore the application down.
     """
 
     stopped: tuple[str, ...]
@@ -229,9 +235,9 @@ class _AppSessionMixin1:
     def run(self, *, once: bool = False) -> int:
         """Start, spin the event loop, stop; return the process exit code.
 
-        ``once`` delivers what is already queued and returns instead of waiting
-        for someone to close the window - what ``qgis-sdk run --once`` does, and
-        the way a script proves an app host starts and stops cleanly.
+        Args:
+            once: Deliver what is already queued and return instead of waiting
+                for someone to close the window, as ``qgis-sdk run --once`` does.
         """
         code = 0
         try:
@@ -330,6 +336,12 @@ class AppSession(_AppSessionMixin1, _AppSessionMixin2):
     ``exec()``, and the native tests drive them directly - the same shape
     ``ServerHost`` has for the server. ``gui`` decides only what the backend
     builds; ``ctx.host`` is ``app`` either way.
+
+    Args:
+        app: The plugin to run.
+        options: The run's options as :class:`~qgis_sdk.app.AppOptions`, or the
+            keywords they stand for: ``gui``, ``once``, ``grace``, ``title``,
+            ``argv``, plus ``backend``, ``say``, ``clock`` and ``pause``.
     """
 
     def __init__(self, app: QgisSdkPlugin, **options: Unpack[_InitOptions1]) -> None:

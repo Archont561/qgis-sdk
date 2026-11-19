@@ -1,8 +1,7 @@
 """Bind actions and surfaces to the Desktop: ``@toolbar``, ``@menu``, ``@shortcut``.
 
 decision-45 and decision-55: a binding says *where QGIS shows a way to
-trigger something*, and nothing else. The decorators stack in any order on an
-application action function or on a ``Dialog``/``Dock`` subclass::
+trigger something*, and nothing else. The decorators stack in any order::
 
     @toolbar(icon="buffer.svg")
     @menu("Vector/Field tools")
@@ -11,21 +10,18 @@ application action function or on a ``Dialog``/``Dock`` subclass::
     def buffer_selection(ctx: PluginContext) -> None: ...
 
     @menu("Plugins/Field tools")
-    class BufferDialog(Dialog): ...
+    class BufferDialog(Dialog): ...  # a surface, placed the same way
 
-They mark and add a ``describe()`` convenience without wrapping: the action
-stays the plain function it was. Bindings are host metadata and are omitted
-from the serialized bridge schema and host fingerprint, so adding a toolbar
-button does not move the wire. The unified :func:`qgis_sdk.describe` exposes
-them; :func:`describe_bindings` remains available for existing callers.
+They mark and add a ``describe()`` convenience without wrapping, on an action
+function or a ``Dialog``/``Dock`` subclass. Bindings are host metadata, omitted
+from the serialized bridge schema and the host fingerprint: a toolbar button
+does not move the wire.
 
 Bindings refuse jobs, streams and tools; bind an application action that
 submits the job, opens a surface for the stream or calls ``start`` on the tool.
-A plain unregistered function cannot be placed by the host. The trigger rule the Desktop host
-applies is decision-55's: an action without inputs runs on the GUI thread; one
-that returns a job handle reports through the message bar; a *typed* action
-bound without a surface of its own is a ``UI003`` finding, and the host
-refuses it by name rather than inventing a dialog for it.
+A plain unregistered function cannot be placed. Per decision-55, an action with
+no inputs runs on the GUI thread, one returning a job handle reports through the
+message bar, and a *typed* action bound without a surface is a ``UI003`` finding.
 """
 
 from __future__ import annotations
@@ -115,7 +111,12 @@ _sequence = itertools.count(1)
 
 @dataclass(frozen=True, slots=True)
 class ToolbarBinding:
-    """One toolbar button; ``text`` replaces the target's title when given."""
+    """One toolbar button; ``text`` replaces the target's title when given.
+
+    Attributes:
+        icon: The file name under the package's ``icons/`` directory.
+        text: The label, or ``None`` for the target's own title.
+    """
 
     icon: str | None = None
     text: str | None = None
@@ -124,7 +125,11 @@ class ToolbarBinding:
 
 @dataclass(frozen=True, slots=True)
 class MenuBinding:
-    """One entry under ``path`` (``"Vector/Field tools"``), slash-separated."""
+    """One entry under ``path`` (``"Vector/Field tools"``), slash-separated.
+
+    Attributes:
+        path: The menu path: a top-level menu, then the submenu.
+    """
 
     path: str
     kind: Literal["menu"] = field(default="menu", init=False)
@@ -132,7 +137,11 @@ class MenuBinding:
 
 @dataclass(frozen=True, slots=True)
 class ShortcutBinding:
-    """One key sequence in Qt's portable spelling (``"Ctrl+Alt+B"``)."""
+    """One key sequence in Qt's portable spelling (``"Ctrl+Alt+B"``).
+
+    Attributes:
+        keys: The sequence, as Qt spells it.
+    """
 
     keys: str
     kind: Literal["shortcut"] = field(default="shortcut", init=False)
@@ -143,7 +152,15 @@ Binding = ToolbarBinding | MenuBinding | ShortcutBinding
 
 @dataclass(frozen=True, slots=True)
 class BoundAction:
-    """An ``@action`` with at least one binding, as the host sees it."""
+    """An ``@action`` with at least one binding, as the host sees it.
+
+    Attributes:
+        action: The action's own description.
+        bindings: Every place the host shows a way to trigger it.
+        takes_inputs: Whether the handler takes inputs, which is what makes a
+            bound action without a surface a ``UI003`` finding.
+        order: Where it falls in the plugin's declaration order.
+    """
 
     action: ActionDescription
     bindings: tuple[Binding, ...]
@@ -162,7 +179,14 @@ class BoundAction:
 
 @dataclass(frozen=True, slots=True)
 class BoundSurface:
-    """A surface listed in ``surfaces = [...]``; ``bindings`` may be empty."""
+    """A surface listed in ``surfaces = [...]``; ``bindings`` may be empty.
+
+    Attributes:
+        surface: The surface's own description.
+        cls: The class it describes, which is how the host finds it.
+        bindings: Where it is placed; empty when it is only opened by code.
+        order: Where it falls in the plugin's declaration order.
+    """
 
     surface: SurfaceDescription
     cls: type = field(compare=False, repr=False)
@@ -180,7 +204,13 @@ class BoundSurface:
 
 @dataclass(frozen=True, slots=True)
 class BindingsDescription:
-    """Everything the Desktop host places for one plugin class."""
+    """Everything the Desktop host places for one plugin class.
+
+    Attributes:
+        plugin_id: The plugin the entries belong to.
+        actions: The bound actions, in declaration order.
+        surfaces: Every registered surface, bound or not.
+    """
 
     plugin_id: str
     actions: tuple[BoundAction, ...]
@@ -218,6 +248,11 @@ def toolbar(
 
     ``icon`` names a file under the package's ``icons/`` directory, resolved
     through :mod:`qgis_sdk.resources`; a missing file is a ``check`` finding.
+
+    Args:
+        target: The action when used bare, and ``None`` when called.
+        icon: The icon's file name, or ``None`` for a button with no icon.
+        text: The label, or ``None`` to use the action's own title.
     """
     if icon is not None and (not isinstance(icon, str) or not icon.strip()):
         raise QgisSdkDeclarationError("@toolbar: icon must be a file name")
@@ -235,9 +270,11 @@ def toolbar(
 def menu(path: str) -> Callable[[T], T]:
     """Add an entry under a QGIS menu path such as ``"Vector/Field tools"``.
 
-    The first segment names the QGIS top-level menu (``Plugins``, ``Vector``,
-    ``Raster``, ``Database``, ``Web``); the rest is the submenu. Repeat the
-    decorator for a second place.
+    The first segment names the top-level menu (``Vector``, ``Plugins``); the
+    rest is the submenu. Repeat the decorator for a second place.
+
+    Args:
+        path: The menu path.
     """
     if not isinstance(path, str) or not path.strip().strip("/").strip():
         raise QgisSdkDeclarationError("@menu: path must be a nonempty menu path")
@@ -249,7 +286,11 @@ def menu(path: str) -> Callable[[T], T]:
 
 
 def shortcut(keys: str) -> Callable[[T], T]:
-    """Register a key sequence (``"Ctrl+Alt+B"``) that triggers the target."""
+    """Register a key sequence (``"Ctrl+Alt+B"``) that triggers the target.
+
+    Args:
+        keys: The sequence, in Qt's spelling.
+    """
     if not isinstance(keys, str) or not keys.strip():
         raise QgisSdkDeclarationError("@shortcut: keys must be a nonempty key sequence")
 
@@ -296,8 +337,11 @@ def _order_of(target: object) -> int:
 def describe_bindings(app: QgisSdkPlugin) -> BindingsDescription:
     """Read the bound actions and registered surfaces of an application.
 
-    Bindings never reach the wire. Only bound actions are reported, but all
-    registered surfaces are included because ``ctx.ui.open`` can reach them.
+    Bindings never reach the wire. Only bound actions are reported, but every
+    registered surface is included: ``ctx.ui.open`` can reach them all.
+
+    Args:
+        app: The started application, whose class carries the bindings.
     """
     from qgis_sdk.core._application import QgisSdkPlugin
 

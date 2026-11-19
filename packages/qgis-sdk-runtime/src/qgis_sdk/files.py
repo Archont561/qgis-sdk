@@ -35,6 +35,13 @@ class FilesService:
     ``owner`` names who the refs belong to (``plugin:<id>`` for the plugin's
     own context, a view id for a surface); closing ``scope`` revokes every ref
     the service minted, the way a view's refs go with the view.
+
+    Args:
+        authority: What mints and resolves the refs, shared with the host.
+        scope: The scope the refs live in; closing it revokes them.
+        owner: Who they belong to, which is the binding's view id.
+        generation: The surface generation, which a reload advances so a stale
+            ref from the page before it is refused.
     """
 
     def __init__(
@@ -64,6 +71,21 @@ class FilesService:
         operations: Iterable[str] = ("read",),
         overwrite: bool = False,
     ) -> FileRef:
+        """Mint a ref for one file, for the operations it names.
+
+        Args:
+            path: The file to grant, as a path the host can reach.
+            operations: What the holder may do with it: ``read`` and/or
+                ``write``.
+            overwrite: Whether a ``write`` may replace the file.
+
+        Returns:
+            The ref, which a page or a wire sends instead of the path.
+
+        Raises:
+            QgisSdkResourceError: The scope is closed, or the authority refuses
+                the path.
+        """
         self._scope.ensure_open()
         return self._authority.grant_file(
             self.binding,
@@ -72,10 +94,31 @@ class FilesService:
         )
 
     def grant_directory(self, path: str | PathLike[str]) -> FileRef:
+        """Mint a ref for a directory and everything under it.
+
+        Args:
+            path: The directory to grant.
+
+        Returns:
+            The ref, which a caller hands back wherever a directory is asked for.
+        """
         self._scope.ensure_open()
         return self._authority.grant_directory(self.binding, path, source="plugin")
 
     def resolve(self, ref: FileRef | Any, *, operation: str = "read") -> Path:
+        """The path a ref stands for, checked against what it was granted.
+
+        Args:
+            ref: The ref to resolve, or its wire form as a page sent it.
+            operation: What the caller is about to do with the path.
+
+        Returns:
+            The absolute path.
+
+        Raises:
+            QgisSdkResourceError: The ref was not minted for this owner, has
+                expired, or does not allow ``operation``.
+        """
         self._scope.ensure_open()
         raw = ref.to_wire() if isinstance(ref, FileRef) else ref
         return self._authority.resolve_file(self.binding, raw, FileOperation(operation))

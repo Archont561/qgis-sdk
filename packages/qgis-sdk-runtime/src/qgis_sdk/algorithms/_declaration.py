@@ -33,12 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, get_args, get_origin
 
-from qgis_sdk.core import (
-    AlgorithmContext,
-    JobContext,
-    PluginContext,
-    ResourceScope,
-)
+from qgis_sdk.core import AlgorithmContext
 from qgis_sdk.declarations import (
     Metadata,
     QgisSdkDeclarationError,
@@ -59,7 +54,6 @@ from qgis_sdk.models import (
     output_kind_for,
     parameter_kinds,
 )
-from qgis_sdk.services import Cancellation, Progress
 
 ALGORITHM_ATTRIBUTE = "__qgis_sdk_algorithm__"
 """The marker ``@provider.algorithm`` sets on the function it declares."""
@@ -73,7 +67,14 @@ METRES_PARAMETER = "metres"
 
 @dataclass(frozen=True)
 class AlgorithmDeclaration(Metadata):
-    """What ``@provider.algorithm`` records: id, title, group and the provider."""
+    """What ``@provider.algorithm`` records: id, title, group and the provider.
+
+    Attributes:
+        id: The algorithm's own id, unique within its provider.
+        title: The label a toolbox shows for it.
+        provider_id: The provider that declared it.
+        group: The toolbox group, or ``None`` for the provider's root.
+    """
 
     provider_id: str
     group: str | None
@@ -89,6 +90,10 @@ def parameter_kind(path: str, annotation: Any) -> str:
 
     The rule is :func:`qgis_sdk.declarations.resolve_kind`; this returns the
     name a Processing adapter and a form switch on.
+
+    Args:
+        path: Where the input sits, so the refusal can name it.
+        annotation: The marked type the input was declared with.
     """
     kind, _marker = resolve_kind(path, annotation)
     return kind.name
@@ -98,11 +103,23 @@ def parameter_kind(path: str, annotation: Any) -> str:
 class AlgorithmDescription:
     """Inspectable algorithm structure: inputs, their kinds, and the result.
 
-    ``annotations`` and ``result_type`` are the live annotations, because an
-    invocation checks values against them; ``to_dict`` is the transport-safe
-    view a generator or a host registry consumes, and it names types instead.
-    ``kinds`` maps each input, in declaration order, onto the host parameter
-    kind it renders as.
+    ``annotations`` and ``result_type`` stay live because an invocation checks
+    values against them; ``to_dict`` is the transport view and names types.
+
+    Attributes:
+        id: The algorithm's own id, unique within its provider.
+        title: The label a toolbox shows for it.
+        provider_id: The provider that declared it.
+        group: The toolbox group, or ``None`` for the provider's root.
+        parameters: The input names, in declaration order.
+        required: The subset a caller has to pass.
+        kinds: Each input's host parameter kind, for a form to render.
+        annotations: Each input's live annotation, checked on invocation.
+        result_type: The live annotation of what the function returns.
+        result_kind: The output kind name a host switches on.
+        inputs_schema: The JSON schema the inputs are validated against.
+        result_schema: The JSON schema a host checks the result with.
+        schema_version: The description schema this object speaks.
     """
 
     id: str
@@ -156,6 +173,15 @@ def describe_algorithm(function: Callable[..., Any]) -> AlgorithmDescription:
     parameter kind. Both are checked when ``@provider.algorithm`` runs; this
     function re-reads the same declaration for a caller that holds only the
     function.
+
+    Args:
+        function: The function ``@provider.algorithm`` decorated.
+
+    Returns:
+        The description the provider recorded, inputs and result included.
+
+    Raises:
+        QgisSdkDeclarationError: The function carries no algorithm declaration.
     """
     declared = declared_function_metadata(
         function, ALGORITHM_ATTRIBUTE, "describe_algorithm", "@provider.algorithm"
@@ -228,19 +254,31 @@ def _algorithm_result(hints: dict[str, Any], path: str) -> tuple[Any, Any]:
     return result_type, result_kind
 
 
+def _input_kinds(
+    path: str, inputs: tuple[inspect.Parameter, ...], hints: dict[str, Any]
+) -> dict[str, str]:
+    """Map each input of ``path`` onto the host parameter kind it renders as."""
+    return {item.name: _kind_of(path, item, hints) for item in inputs}
+
+
+def _kind_of(path: str, parameter: inspect.Parameter, hints: dict[str, Any]) -> str:
+    """The kind name one input renders as, for the refusal to name it."""
+    return parameter_kind(f"{path}.{parameter.name}", hints[parameter.name])
+
+
 def describe_declared_algorithm(
     function: Callable[..., Any], declared: AlgorithmDeclaration
 ) -> AlgorithmDescription:
-    """Describe ``function`` under ``declared`` before the provider commits."""
+    """Describe ``function`` under ``declared`` before the provider commits.
+
+    Args:
+        function: The decorated function whose inputs are read.
+        declared: The declaration the provider is about to record.
+    """
     path = f"algorithm {declared.qualified_id}"
     inputs, hints = _algorithm_signature(function, path)
     properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
-    kinds = {
-        parameter.name: parameter_kind(
-            f"{path}.{parameter.name}", hints[parameter.name]
-        )
-        for parameter in inputs
-    }
+    kinds = _input_kinds(path, inputs, hints)
     result_type, result_kind = _algorithm_result(hints, path)
     return AlgorithmDescription(
         id=declared.id,
@@ -259,21 +297,6 @@ def describe_declared_algorithm(
 
 
 register_describer(ALGORITHM_ATTRIBUTE, describe_algorithm)
-
-
-class _SilentProgress:
-    """Report nothing; a caller that does not care about progress still runs."""
-
-    def report(self, fraction: float) -> None:
-        """Discard the fraction."""
-
-
-class _NotCancelled:
-    """Never cancelled; the default for a caller without a cancellation signal."""
-
-    def is_cancelled(self) -> bool:
-        """Return that this execution has not been cancelled."""
-        return False
 
 
 def check_inputs(description: AlgorithmDescription, inputs: dict[str, Any]) -> None:
@@ -304,6 +327,15 @@ def input_refusal(name: str, kind: Any, annotation: Any, value: Any) -> str | No
 
     Shared by :func:`invoke` and the form coercion, so a toolbox run, a page
     call and a native form refuse the same values with the same words.
+
+    Args:
+        name: The input's name, as the message names it.
+        kind: The parameter kind the value has to satisfy.
+        annotation: The annotation, for the refusals a kind alone cannot make.
+        value: What the caller passed.
+
+    Returns:
+        The reason, or ``None`` when the value is what the handler expects.
     """
     # bool is an int to Python but not to a spin box.
     if not isinstance(value, kind.accepted) or (
@@ -336,43 +368,3 @@ def _range_of(annotation: Any) -> RangeParameter | None:
     return next(
         (m for m in get_args(annotation)[1:] if isinstance(m, RangeParameter)), None
     )
-
-
-CONTEXTS = (PluginContext, JobContext, AlgorithmContext)
-
-
-@dataclass(frozen=True, slots=True)
-class InvokeRequest:
-    """The public ``invoke`` call as one record (decision-81)."""
-
-    function: Callable[..., Any]
-    ctx: PluginContext | JobContext | AlgorithmContext
-    inputs: dict[str, Any]
-    progress: Progress | None
-    cancellation: Cancellation | None
-    add_to_project: bool
-
-
-@dataclass(frozen=True, slots=True)
-class Run:
-    """One invocation's body, checks, child scope and commit target."""
-
-    request: InvokeRequest
-    description: AlgorithmDescription
-    context: AlgorithmContext
-    scope: ResourceScope
-    project: Any
-    cancellation: Cancellation
-
-
-def invoke_controls(
-    ctx: PluginContext | JobContext | AlgorithmContext,
-    progress: Progress | None,
-    cancellation: Cancellation | None,
-) -> tuple[Progress, Cancellation]:
-    """Inherit progress/cancellation from a job or algorithm context."""
-    if progress is None:
-        progress = getattr(ctx, "progress", None) or _SilentProgress()
-    if cancellation is None:
-        cancellation = getattr(ctx, "cancellation", None) or _NotCancelled()
-    return progress, cancellation

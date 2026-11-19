@@ -76,11 +76,15 @@ def connect(
     """Open a session over the running application's curated services.
 
     ``iface`` defaults to ``qgis.utils.iface``: on the Desktop ``ctx.desktop``
-    then hands back the live interface object, and in a standalone
-    ``QgsApplication`` - or a plain interpreter, where the session is still
-    constructible - the same capability refuses by name while the services that
-    need no interface keep working. The session owns the scope it builds, so
-    closing it disposes what the session started and nothing a plugin owns.
+    then hands back the live interface, and in a standalone ``QgsApplication`` -
+    or a plain interpreter - the same capability refuses by name while the
+    services that need no interface keep working. The session owns the scope it
+    builds, so closing it disposes what it started and nothing a plugin owns.
+
+    Args:
+        iface: The interface object, or ``None`` for ``qgis.utils.iface``.
+        settings_prefix: The prefix the session's settings live under.
+        notifications: The sink, or ``None`` for the session's own.
     """
     scope = ResourceScope()
     return ConsoleSession(
@@ -100,8 +104,14 @@ def bind(adapter: object) -> ConsoleSession:
     It borrows the plugin's context - the same service instances, so console and
     plugin read one project and one settings prefix - and owns no scope: the
     plugin's unload closes the session, and closing it here does not stop the
-    plugin. This is what
-    :meth:`~qgis_sdk.adapters.desktop.DesktopLifecycleAdapter.console` returns.
+    plugin. This is what ``DesktopLifecycleAdapter.console`` returns.
+
+    Args:
+        adapter: The loaded plugin adapter, read by attribute.
+
+    Raises:
+        QgisSdkConsoleError: The object exposes no plugin context, so there is
+            nothing to hand out.
     """
     # Duck-typed on purpose: the plugin may have vendored another copy of this
     # package, so its ``PluginContext`` is a different class with the same shape.
@@ -182,6 +192,11 @@ class ConsoleSession:
     :func:`connect` owns the ``ResourceScope`` it built; a session a plugin
     handed out borrows that plugin's context and scope instead and never
     disposes what the plugin owns.
+
+    Args:
+        context: The context whose services the session exposes.
+        owns_scope: Whether closing the session closes that scope.
+        name: The plugin it is bound to, or ``None`` for a free session.
     """
 
     __slots__ = ("_closed", "_context", "_name", "_owns_scope")
@@ -229,7 +244,18 @@ class ConsoleSession:
         return tuple(sorted(_loaded_plugins()))
 
     def plugin(self, name: str) -> PluginHandle:
-        """The handle for the plugin QGIS loaded as ``name``."""
+        """The handle for the plugin QGIS loaded as ``name``.
+
+        Args:
+            name: The name QGIS holds it under, i.e. its package directory.
+
+        Returns:
+            A handle on that plugin's actions and surfaces.
+
+        Raises:
+            QgisSdkConsoleError: No loaded plugin has that name; the message
+                lists the ones that are.
+        """
         from ._handle import PluginHandle
 
         self._ensure_open()

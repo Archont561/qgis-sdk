@@ -65,7 +65,12 @@ BatchValue = BatchScalar | tuple[str | int | float | bool | None, ...]
 
 @dataclass(frozen=True, slots=True)
 class BatchParam:
-    """One parameter of a batch item: its name and its plain value."""
+    """One parameter of a batch item: its name and its plain value.
+
+    Attributes:
+        name: The parameter's name, as the algorithm declares it.
+        value: The value, as one of the JSON scalars or an ordered array of them.
+    """
 
     name: str
     value: BatchValue
@@ -78,6 +83,10 @@ class BatchItem:
     The params map crosses as ordered name/value pairs because a map is not a
     shape the declaration subset carries - the same reason a render's request
     names its destination as a resolved path rather than a ref.
+
+    Attributes:
+        algorithm: The algorithm's id.
+        params: Its parameters, in the order the run gives them.
     """
 
     algorithm: str
@@ -85,7 +94,11 @@ class BatchItem:
 
     @classmethod
     def of(cls, run: AlgorithmRun) -> BatchItem:
-        """One item from a validated run, params in order."""
+        """One item from a validated run, params in order.
+
+        Args:
+            run: A run `coerce_run` has already accepted.
+        """
         return cls(
             algorithm=run.algorithm,
             params=tuple(BatchParam(name, value) for name, value in run.params.items()),
@@ -104,6 +117,13 @@ def coerce_batch(runs: Sequence[BatchRequest]) -> tuple[AlgorithmRun, ...]:
     Refused rather than tolerated because a batch of nothing reports no
     progress and answers no results - a caller that reached this either lost
     its requests or built them wrong, and both deserve the name.
+
+    Args:
+        runs: The requests, in the order they should run.
+
+    Raises:
+        QgisSdkAlgorithmRejectedError: The batch is empty, or an item is
+            neither a run, a typed run nor a script string.
     """
     if not runs:
         raise QgisSdkAlgorithmRejectedError(
@@ -113,7 +133,11 @@ def coerce_batch(runs: Sequence[BatchRequest]) -> tuple[AlgorithmRun, ...]:
 
 
 def batch_items(runs: Sequence[BatchRequest]) -> tuple[BatchItem, ...]:
-    """Every item as the job body receives it, after the same checks."""
+    """Every item as the job body receives it, after the same checks.
+
+    Args:
+        runs: The requests, in the order they should run.
+    """
     return tuple(BatchItem.of(run) for run in coerce_batch(runs))
 
 
@@ -129,6 +153,12 @@ def run_batch_items(
     The seam is per item: ``progress.report`` sees ``1/total``, ``2/total``
     and so on, and cancellation is read before each request, which is the
     granularity a run can honour (the atlas's per-page precedent).
+
+    Args:
+        backend: What runs one request, which the batch body closes over.
+        runs: The validated runs, in order.
+        progress: What each finished item reports against.
+        cancellation: Read before every request.
     """
     total = len(runs)
     results: list[RunResult] = []
@@ -141,7 +171,12 @@ def run_batch_items(
 
 
 def batch_body(backend: Any) -> Callable[..., Any]:
-    """The ``@job`` body of one batch run, as a declaration."""
+    """The ``@job`` body of one batch run, as a declaration.
+
+    Args:
+        backend: What runs one request. Held by the closure and reached from
+            the worker, never serialised into the job's inputs.
+    """
 
     @job(id=BATCH_JOB_ID, title="Run algorithm batch")
     def body(ctx: WorkerContext, runs: tuple[BatchItem, ...]) -> tuple[RunResult, ...]:
