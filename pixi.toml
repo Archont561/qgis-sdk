@@ -51,6 +51,13 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT/packages/qgis-sdk-runtime/src:$PIXI_PROJECT_ROO
 [feature.python.tasks.automation]
 cmd = "doit"
 
+# The Python API reference the site renders (decision-86). A task of its own
+# because the generator needs Fumero, griffe and the source tree on PYTHONPATH -
+# all of which this environment has and the `bun` one does not. `docs-build`
+# runs it before Next reads the content collection.
+[feature.python.tasks.docs-reference]
+cmd = "python -m automation.docs.reference"
+
 [feature.python.tasks.package]
 cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk-python/recipe.yaml --output-dir dist/conda -c conda-forge"
 

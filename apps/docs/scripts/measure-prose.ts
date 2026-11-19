@@ -15,6 +15,17 @@ import { headingCount, proseWords } from "./lib/prose";
 const DOCS = fileURLToPath(new URL("..", import.meta.url));
 const CONTENT = join(DOCS, "content/docs");
 
+/**
+ * The generated trees whose words are not prose.
+ *
+ * `reference/python` holds the API reference fumero writes from signatures and
+ * docstrings (decision-86): a parameter name and a type on their own line count
+ * as words here, and there are a few thousand of them. Leaving it in would make
+ * the corpus this metric reports a measure of the public surface rather than of
+ * the pages someone wrote.
+ */
+const NOT_PROSE = new Set(["reference/python"]);
+
 /** Every page under `content/docs`, as absolute paths. */
 async function pages(directory = CONTENT): Promise<readonly string[]> {
 	const entries = await readdir(directory, { withFileTypes: true });
@@ -22,6 +33,7 @@ async function pages(directory = CONTENT): Promise<readonly string[]> {
 	for (const entry of entries) {
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) {
+			if (NOT_PROSE.has(relative(CONTENT, path))) continue;
 			out.push(...(await pages(path)));
 			continue;
 		}

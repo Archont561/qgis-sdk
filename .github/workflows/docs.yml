@@ -75,7 +75,9 @@ jobs:
         id: s02
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
-          environments: bun
+          # `bun` renders the site; `build` writes the Python reference it
+          # renders (decision-86), which needs Fumero and the source tree.
+          environments: bun,build
           cache: true
           locked: true
 
@@ -91,6 +93,13 @@ jobs:
         id: s04
         run: pixi run -e bun install-js
 
+      # The Python API reference: one page per published module and per class,
+      # read out of the source and the docstrings (decision-86). Gitignored, so
+      # it is part of what this job builds rather than something it checks out.
+      - name: Generate the Python reference
+        id: s05
+        run: pixi run -e build docs-reference
+
       # Builds the bridge, the Storybook and then the site (apps/docs/out):
       # `generate` writes the guides into the content collection, `next build`
       # renders them, `postbuild` writes the llms exports, the sitemap and the
@@ -99,23 +108,23 @@ jobs:
       # log is not always reachable from a client, and "exit code 1" names
       # nothing.
       - name: Build the site
-        id: s05
+        id: s06
         run: python -m automation.ci run-log docs-build.log -- pixi run -e bun docs-build
 
       - name: Check internal links
-        id: s06
+        id: s07
         run: python -m automation.ci run-log docs-links.log -- pixi run -e bun bun run --filter '@workspace/docs' check-links
 
       # One step for whichever log the run actually got to.
       - name: Annotate the failure
-        id: s07
+        id: s08
         if: failure()
         run: |
           python -m automation.ci annotate-log docs-build.log --title "docs build" --skip-missing
           python -m automation.ci annotate-log docs-links.log --title "docs links" --skip-missing
 
       - name: Upload the site
-        id: s08
+        id: s09
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/docs/out

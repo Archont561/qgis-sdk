@@ -16,6 +16,12 @@
  * The named exports are the same objects the map carries: a page that needs a
  * card in its own JSX imports `Card` from here rather than from
  * `fumadocs-ui/components/card`, so an upgrade lands in one file.
+ *
+ * The `Pdx*` components render the Python reference fumero writes
+ * (decision-86). They are registered here for the same reason as the rest:
+ * `content/docs/reference/python/` is a build product, so nothing in this
+ * repository authors those tags by hand, and the only place that can notice a
+ * missing one is the map every route renders through.
  */
 
 import { Accordion, Accordions } from "fumadocs-ui/components/accordion";
@@ -35,6 +41,17 @@ import { TypeTable } from "fumadocs-ui/components/type-table";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { CliWalkthrough } from "@/components/cli-walkthrough";
 import { CompatNotice } from "@/components/compat-notice";
+import {
+	PdxAttribute,
+	PdxAttributes,
+	PdxConstructor,
+	PdxFunction,
+	PdxParameter,
+	PdxParameters,
+	PdxRef,
+	PdxReturns,
+	PdxSource,
+} from "@/components/mdx/pdx-components";
 import { RegistryStats } from "@/components/registry-stats";
 import { Versions } from "@/components/versions";
 
@@ -55,6 +72,15 @@ export {
 	Folder,
 	ImageZoom,
 	InlineTOC,
+	PdxAttribute,
+	PdxAttributes,
+	PdxConstructor,
+	PdxFunction,
+	PdxParameter,
+	PdxParameters,
+	PdxRef,
+	PdxReturns,
+	PdxSource,
 	RegistryStats,
 	Step,
 	Steps,
@@ -89,6 +115,15 @@ export const mdxComponents = {
 	Folder,
 	ImageZoom,
 	InlineTOC,
+	PdxAttribute,
+	PdxAttributes,
+	PdxConstructor,
+	PdxFunction,
+	PdxParameter,
+	PdxParameters,
+	PdxRef,
+	PdxReturns,
+	PdxSource,
 	RegistryStats,
 	Step,
 	Steps,
