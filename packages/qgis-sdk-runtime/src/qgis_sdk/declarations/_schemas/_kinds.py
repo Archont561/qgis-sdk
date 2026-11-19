@@ -80,6 +80,22 @@ def resolve_kind(
     marker is refused when ``strict`` (an algorithm's inputs all render in a
     toolbox) and skipped otherwise (an action may carry another library's
     metadata beside the SDK's).
+
+    Args:
+        path: The declaration's path followed by the input's name, used in the
+            error message.
+        annotation: The input's resolved annotation.
+        strict: Whether a marker that is not the SDK's own is refused. An
+            algorithm sets this, because every one of its inputs is rendered in
+            a toolbox and a marker nothing reads would silently do nothing.
+
+    Returns:
+        The kind, and the SDK marker that carried it - ``None`` for a primitive
+        and for an enum, neither of which has one.
+
+    Raises:
+        QgisSdkDeclarationError: The annotation is outside the supported kinds,
+            or carries a marker on a type it does not fit.
     """
     kinds = parameter_kinds()
     base, markers = annotation, ()

@@ -117,7 +117,16 @@ class _ToolMetadata(Metadata):
 
 @dataclass(frozen=True)
 class ToolDescription:
-    """A declared tool: its id, its title and the shape a user draws."""
+    """A declared tool: its id, its title and the shape a user draws.
+
+    Attributes:
+        id: The identifier the tool is started by.
+        title: The label a surface shows on the button that starts it.
+        captures: The one shape the drawing collects: ``point``, ``line`` or
+            ``polygon``.
+        handler: The method name on the plugin class, so a reader can find the
+            body that receives the geometry.
+    """
 
     id: str
     title: str
@@ -192,7 +201,29 @@ def tool(
     id: str | None = None,
     title: str | None = None,
 ) -> Any:
-    "Declare a method that captures one ``point``, ``line`` or ``polygon``.\n\n    ``@tool`` alone names the tool after the method and captures a polygon;\n    ``id=``, ``title=`` and ``captures=`` override any of the three. The method\n    is not wrapped: it is an ordinary instance method that a test can call with\n    a hand-built :class:`~qgis_sdk.models.features.Geometry`.\n"
+    """Declare a method that captures one ``point``, ``line`` or ``polygon``.
+
+    ``@tool`` alone names the tool after the method and captures a polygon;
+    ``id=``, ``title=`` and ``captures=`` override any of the three. The method
+    is not wrapped: it is an ordinary instance method that a test can call with
+    a hand-built :class:`~qgis_sdk.models.features.Geometry`.
+
+    Args:
+        method: The method, when the decorator was used bare. ``None`` when it
+            was called with arguments, in which case the decorator is returned.
+        captures: The shape the drawing collects: ``point``, ``line`` or
+            ``polygon``, which is what a map tool can collect.
+        id: The tool's identifier, or ``None`` to derive it from the method name.
+        title: The tool's label, or ``None`` to derive it.
+
+    Returns:
+        The decorated method, or the decorator when ``method`` is ``None``.
+
+    Raises:
+        QgisSdkDeclarationError: The target is not a method, already carries a
+            ``@tool`` marker, takes anything but the drawn geometry, asks to
+            capture a shape a user cannot draw, or carries a binding.
+    """
     _s = _CcState(method=method, captures=captures, id=id, title=title)
     for _p in (_cc_tool_p1, _cc_tool_p2, _cc_tool_p3):
         _r = _p(_s)
@@ -206,6 +237,13 @@ def declared_tools(cls: type) -> tuple[tuple[str, _ToolMetadata], ...]:
 
     Read from ``vars`` so a tool on a parent class is never the child's, the
     same rule ``bindings_of`` follows.
+
+    Args:
+        cls: The plugin class to read.
+
+    Returns:
+        One ``(method name, metadata)`` pair per declared tool, in the order the
+        class defines them.
     """
     found: list[tuple[str, _ToolMetadata]] = []
     for name, member in vars(cls).items():
@@ -239,6 +277,19 @@ def start(method: Any, ctx: Any) -> Callable[[], None]:
     same button - ends the drawing without calling the body. The body runs on
     the GUI thread when the geometry arrives: a tool with real work in it hands
     that work to ``ctx.jobs`` instead of doing it in the drawing's callback.
+
+    Args:
+        method: The bound method of a ``@tool``-declared method, called as
+            ``start(self.my_tool, ctx)``.
+        ctx: The context to draw on, which has to offer ``canvas.capture``.
+
+    Returns:
+        The canceller: calling it ends the drawing and the body never runs.
+
+    Raises:
+        QgisSdkDeclarationError: The method is not declared with ``@tool``, was
+            taken off the class rather than off an instance, or the context has
+            no canvas to draw on.
     """
     function = method.__func__ if inspect.ismethod(method) else method
     declared = vars(function).get(TOOL_ATTRIBUTE)

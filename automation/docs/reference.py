@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -91,10 +92,20 @@ def exclude_patterns(skipped: tuple[str, ...] = SKIPPED) -> tuple[str, ...]:
     return tuple(f"qgis_sdk.{name}*" for name in skipped)
 
 
+PARAMETER = re.compile(r"<PdxParameter\s[^>]*>(.*?)</PdxParameter>", re.DOTALL)
+"""One rendered parameter and its description.
+
+Anchored on the whitespace after the tag name, because `<PdxParameters>` opens
+the group that holds them. Splitting on the bare `<PdxParameter` counts the
+wrapper as a parameter with no description, which reads as a gap in the
+docstrings that is not there.
+"""
+
+
 def undescribed_parameters(pages: list[Path]) -> tuple[int, int]:
     """How many rendered parameters have no description, and how many there are.
 
-    A `<PdxParameter>` whose body is empty is a signature row the docstring says
+    A parameter whose body is empty is a signature row the docstring says
     nothing about. Counted from the rendered pages rather than from the source so
     the number is what a reader sees.
 
@@ -109,11 +120,9 @@ def undescribed_parameters(pages: list[Path]) -> tuple[int, int]:
     total = 0
     for page in pages:
         text = page.read_text(encoding="utf-8")
-        for block in text.split("<PdxParameter")[1:]:
-            total += 1
-            body = block.split(">", 1)[1].split("</PdxParameter>", 1)[0]
-            if not body.strip():
-                empty += 1
+        bodies = PARAMETER.findall(text)
+        total += len(bodies)
+        empty += sum(1 for body in bodies if not body.strip())
     return empty, total
 
 
