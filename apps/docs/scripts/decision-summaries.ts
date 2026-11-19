@@ -86,4 +86,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	79: "The landing and install pages state the qualified QGIS and Python versions read from the support matrix, the Storybook follows the site theme, the first-plugin guide runs start to finish on one page, and walkthroughs replay real command output.",
 	80: "Rude and its Clean Code plugin measure the shape of every Python definition, and the gate is a committed budget that fails on a violation added, on a new file that arrives with one, and on a violation fixed without the budget being lowered.",
 	85: "The generated public API inventory stays committed - it is what the per-tag diff, the freshness check and the review all read - and the documentation site rebuilds whenever it changes, with the list of render inputs held by a test.",
+	86: "Every documentation page declares the one need it serves - tutorial, how-to, reference or explanation - under a ratcheting word budget, and the Python reference is generated from docstrings rather than maintained by hand.",
 };

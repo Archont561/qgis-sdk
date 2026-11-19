@@ -33,6 +33,11 @@ pyyaml = "==6.0.3"
 # deterministic structural subset this gate measures.
 rude = "==0.1a4"
 rude-clean-code = "==0.3.1"
+# Generates the Python API reference from the published surface and its
+# docstrings (decision-86): griffe reads the module, the site gets one page per
+# module and class under content/docs/reference/python. Read-only over the
+# source tree, and the pages it writes are gitignored build products.
+fumero = "==0.4.3"
 
 [feature.python.activation.env]
 # Absolute, so a task or a `qgis-sdk test` subprocess that runs in another
