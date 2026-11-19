@@ -5,60 +5,69 @@ description: Install the qgis-sdk developer kit from PyPI or prefix.dev, the Typ
 
 <CompatNotice />
 
-The Python developer kit `qgis-sdk` installs two packages at matching
-versions: `qgis-sdk-runtime`, what a plugin imports inside QGIS, and
-`qgis-sdk-tools`, the `qgis-sdk` command. Neither installs anything into a
-QGIS: a built plugin vendors its own copy of the runtime.
-
-## Which Python?
-
-The tools run on any Python 3.11+ - a virtual environment, Pixi, the system
-interpreter. `qgis-sdk test --target qgis`, `qgis-sdk dev` and `qgis-sdk build`
-find a QGIS through `QGIS_PREFIX_PATH`, `qgis` on `PATH`, the current
-environment, or `[tool.qgis-sdk] qgis-prefix` in the project.
-
-If your PyQGIS background says to use QGIS's own interpreter and avoid virtual
-environments, that advice is for scripts. A plugin built here carries its own
-runtime, so the environment you develop in is not the environment it runs in -
-[the installation section of the Python
-guide](/python/installation/#if-you-arrived-from-pyqgis-do-not-use-a-virtualenv)
-has the three places the coupling actually is.
-
 ## How do I install the Python kit?
 
-With pip, into any environment:
+<Tabs items={["pip", "pixi", "from source"]} defaultValue="pip">
+<Tab value="pip">
+From PyPI, into any environment - a virtualenv, Pixi, the system interpreter:
 
 ```sh
 pip install qgis-sdk
 ```
 
-With Pixi, from the prefix.dev channel:
+</Tab>
+<Tab value="pixi">
+From the prefix.dev channel:
 
 ```sh
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
 
-The runtime alone, for the QGIS Python console, a host script or a copy to
-vendor:
+</Tab>
+<Tab value="from source">
+In a clone of this repository, which is what the contributing guides assume:
 
 ```sh
-pip install qgis-sdk-runtime
+pixi install
+pixi run -e default python -m qgis_sdk_tools --help
 ```
+
+</Tab>
+</Tabs>
+
+`qgis-sdk` installs the command and pins `qgis-sdk-runtime` - what a plugin
+imports inside QGIS - at its own version. The runtime alone, for a QGIS Python
+console or a copy to vendor, is `pip install qgis-sdk-runtime`. Nothing is
+written into a QGIS install: a built plugin carries its own copy.
+
+## Which Python?
+
+Any Python 3.11+ runs the tools, and a virtualenv is the normal place to work -
+[the Python guide](/python/installation/#if-you-arrived-from-pyqgis-do-not-use-a-virtualenv)
+explains why the "use QGIS's interpreter" advice is for scripts, and names the
+three places the coupling is real.
 
 ## How do I install the TypeScript SDK?
 
 Only a plugin with a web page needs it; `qgis-sdk new --web` writes the
 dependency for you.
 
+<Tabs items={["bun", "npm"]} defaultValue="bun">
+<Tab value="bun">
 ```sh
 bun add @archont561/qgis-sdk        # or its unscoped alias: bun add qgis-sdk
 bun add @archont561/qgis-sdk-ui     # the web components, optional
 ```
 
+</Tab>
+<Tab value="npm">
 ```sh
 npm install @archont561/qgis-sdk     # or: npm install qgis-sdk
 npm install @archont561/qgis-sdk-ui  # the web components, optional
 ```
+
+</Tab>
+</Tabs>
 
 ## Did it work?
 
@@ -66,10 +75,6 @@ npm install @archont561/qgis-sdk-ui  # the web components, optional
 qgis-sdk --help
 qgis-sdk targets      # the support matrix, and where this host stands in it
 ```
-
-`targets` prints the QGIS and Python versions the kit is qualified against
-and which of them this machine can reach, so you know up front whether the
-native test layers and `dev` will run here or only the QGIS-free ones.
 
 ## Where is it downloaded from?
 
@@ -82,5 +87,5 @@ shows a dash rather than taking the page with it.
 
 - [Your first plugin](/start/first-plugin/) - scaffold, check, test,
   run inside QGIS, build the ZIP.
-- [Supported targets](/python/supported-targets/) - the full matrix
-  and the qualification behind it.
+- [Supported targets](/python/supported-targets/) - the matrix, how a row is
+  qualified, and what an unqualified one is waiting on.
