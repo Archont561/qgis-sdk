@@ -23,8 +23,7 @@ class Metadata:
     """What every declaration decorator records: a validated id and a title.
 
     Attributes:
-        id: The identifier the declaration is known by. Unique within its kind,
-            and the name a generated client calls it by.
+        id: The name a generated client calls the declaration by.
         title: The label a host shows. Free prose, unlike the id.
     """
 
@@ -33,15 +32,11 @@ class Metadata:
 
 
 def metadata(id: str, title: str) -> Metadata:
-    """Validate the id and title every ``@plugin``/``@job``/``@provider.algorithm`` takes.
+    """Validate the id and title every declaration decorator takes.
 
     Args:
-        id: The identifier the author gave, which an id has to be: a letter
-            followed by letters, digits, ``_``, ``.`` or ``-``.
-        title: The label the author gave, which has to be a nonempty string.
-
-    Returns:
-        The two, together, as the marker the decorator sets.
+        id: A letter, then letters, digits, ``_``, ``.`` or ``-``.
+        title: A nonempty string.
 
     Raises:
         QgisSdkDeclarationError: Either one is not what an id or a title is.
@@ -80,15 +75,10 @@ def derive_id(name: str) -> str:
     leading underscores (an id starts with a letter).
 
     Args:
-        name: The Python name to derive from, such as ``FieldTools`` or
-            ``list_layers``.
-
-    Returns:
-        The snake_case id.
+        name: The Python name, such as ``FieldTools`` or ``list_layers``.
 
     Raises:
-        QgisSdkDeclarationError: The name yields something an id cannot be,
-            which a name that starts with a digit does.
+        QgisSdkDeclarationError: The name cannot start an id.
     """
     id = "_".join(word.lower() for word in _words(name))
     if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", id):
@@ -109,11 +99,8 @@ def derive_title(name: str) -> str:
     Args:
         name: The Python name to derive from.
 
-    Returns:
-        The title, spaced into words.
-
     Raises:
-        QgisSdkDeclarationError: The name has no words to make a title of.
+        QgisSdkDeclarationError: The name has no words.
     """
     words = _words(name)
     if not words:
@@ -162,13 +149,9 @@ def _declared_metadata(
 def validate_given(id: str | None, title: str | None) -> None:
     """Refuse a bad explicit id or title at decoration time, before any class exists.
 
-    Both are optional, because a declaration may leave either one to be derived
-    from the class it decorates. What is given is checked here, so the error
-    names the decorator rather than arriving from inside the decoration.
-
     Args:
-        id: The id the author passed, or ``None`` to derive it.
-        title: The title the author passed, or ``None`` to derive it.
+        id: The id the author passed, or ``None`` to derive one.
+        title: The title the author passed, or ``None`` to derive one.
 
     Raises:
         QgisSdkDeclarationError: Either one is not what an id or a title is.
@@ -182,20 +165,14 @@ def validate_given(id: str | None, title: str | None) -> None:
 def class_metadata(cls: type, id: str | None, title: str | None) -> Metadata:
     """The metadata a class declaration carries: given values, or derived ones.
 
-    A derived class id is the snake_case class name plus the module/qualname
-    hash suffix; a derived title is the class name spaced into words.
+    The id is the snake_case class name plus a hash of where the class lives;
+    the title is the class name spaced into words.
 
     Args:
-        cls: The class being decorated, which a derived id and title read.
-        id: The id the author passed, or ``None`` to derive it.
-        title: The title the author passed, or ``None`` to derive it.
+        cls: The class being decorated.
+        id: The id the author passed, or ``None`` to derive one.
+        title: The title the author passed, or ``None`` to derive one.
 
-    Returns:
-        The validated marker for the class.
-
-    Raises:
-        QgisSdkDeclarationError: The class has no name to derive from, or a
-            given value is not what an id or a title is.
     """
     return _declared_metadata(cls, id, title, suffixed=True)
 
@@ -203,41 +180,19 @@ def class_metadata(cls: type, id: str | None, title: str | None) -> Metadata:
 def function_metadata(function: Any, id: str | None, title: str | None) -> Metadata:
     """The metadata a module-level ``@job`` function declaration carries.
 
-    Derived the way a class id is - snake_case name plus the module/qualname
-    suffix - because a job id has to stay unique across modules the same way
-    an algorithm id does, and because the two are documented as one rule.
+    Derived as a class id is, because a job id has to stay unique across
+    modules the way an algorithm id does.
 
     Args:
-        function: The function being decorated, which a derived id and title
-            read.
-        id: The id the author passed, or ``None`` to derive it.
-        title: The title the author passed, or ``None`` to derive it.
-
-    Returns:
-        The validated marker for the function.
-
-    Raises:
-        QgisSdkDeclarationError: The function has no name to derive from, or a
-            given value is not what an id or a title is.
+        function: The function being decorated.
+        id: The id the author passed, or ``None`` to derive one.
+        title: The title the author passed, or ``None`` to derive one.
     """
     return _declared_metadata(function, id, title, suffixed=True)
 
 
 def attach_describe(target: Any) -> None:
-    """Install a collision-safe convenience entry point without wrapping target.
-
-    A decorated class or function gains ``describe()``, which answers its own
-    description. Nothing is wrapped and nothing is rebound: the call path stays
-    ordinary Python, and a target that already defines ``describe`` is refused
-    rather than silently losing its own method.
-
-    Args:
-        target: The class or function the decorator marked.
-
-    Raises:
-        QgisSdkDeclarationError: The target already defines ``describe`` and it
-            is not the SDK's own.
-    """
+    """Install a collision-safe convenience entry point without wrapping target."""
     absent = object()
     existing = inspect.getattr_static(target, "describe", absent)
     underlying = existing.__func__ if isinstance(existing, classmethod) else existing
@@ -273,20 +228,14 @@ def mark_function(
 ) -> None:
     """Record ``declared`` on a plain function under ``attribute``.
 
-    The function is not wrapped or bound. It gains a convenience ``describe``
-    attribute alongside the marker; calls remain ordinary Python calls. A class
-    is refused with the way forward, because ``@job`` used to take one.
+    The function is not wrapped or bound: it gains a ``describe`` attribute
+    beside the marker, and calls stay ordinary Python calls.
 
     Args:
         function: The function the decorator was applied to.
-        attribute: The attribute the marker is recorded under, which is what the
-            matching describer reads back.
+        attribute: The attribute the marker is recorded under.
         declared: The validated id and title.
-        decorator: The decorator's own spelling, for the error messages.
-
-    Raises:
-        QgisSdkDeclarationError: The target is a class, is not a function, or
-            already carries this decorator's marker.
+        decorator: The decorator's own spelling, for the errors.
     """
     if inspect.isclass(function):
         raise QgisSdkDeclarationError(
@@ -309,22 +258,14 @@ def declared_function_metadata(
 ) -> Metadata:
     """Return the function's own marker, or refuse with the describer's message.
 
-    The marker is read from ``vars`` rather than through ``getattr``, so a
-    decorated function that is later wrapped by another decorator is not taken
-    for a declaration it never made.
-
     Args:
         function: The function a describer was asked to describe.
-        attribute: The attribute the decorator records its marker under.
-        describer: The describer's own name, for the error message.
-        decorator: The decorator the describer requires, for the message.
-
-    Returns:
-        The marker the function carries.
+        attribute: The attribute the marker is recorded under.
+        describer: The describer's name, for the error.
+        decorator: The decorator it requires, for the error.
 
     Raises:
-        QgisSdkDeclarationError: The target is not a function, or does not carry
-            the marker its describer requires.
+        QgisSdkDeclarationError: The target is not a marked function.
     """
     if not inspect.isfunction(function) or attribute not in vars(function):
         raise QgisSdkDeclarationError(
@@ -346,15 +287,8 @@ def method_metadata(method: Any, id: str | None, title: str | None) -> Metadata:
 
     Args:
         method: The method being decorated.
-        id: The id the author passed, or ``None`` to derive it from the name.
-        title: The title the author passed, or ``None`` to derive it.
-
-    Returns:
-        The validated marker for the method.
-
-    Raises:
-        QgisSdkDeclarationError: The method has no name to derive from, or a
-            given value is not what an id or a title is.
+        id: The id the author passed, or ``None`` to derive one.
+        title: The title the author passed, or ``None`` to derive one.
     """
     return _declared_metadata(method, id, title, suffixed=False)
 
@@ -371,11 +305,7 @@ def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> 
         cls: The class the decorator was applied to.
         attribute: The attribute the marker is recorded under.
         declared: The validated id and title.
-        decorator: The decorator's own spelling, for the error messages.
-
-    Raises:
-        QgisSdkDeclarationError: The target is not a class, or already carries
-            this decorator's marker.
+        decorator: The decorator's own spelling, for the errors.
     """
     if not inspect.isclass(cls):
         raise QgisSdkDeclarationError(f"{decorator} requires a class")
@@ -401,13 +331,9 @@ def declare_class(
 
     Args:
         attribute: The attribute a decorated class records its marker under.
-        decorator: The decorator's own spelling, for the error messages.
-        id: The id every decorated class gets, or ``None`` to derive one per
-            class.
-        title: The title every decorated class gets, or ``None`` to derive one.
-
-    Returns:
-        The decorator, which returns the class it was given unchanged.
+        decorator: The decorator's own spelling, for the errors.
+        id: The id to give every decorated class, or ``None`` to derive one.
+        title: The title to give every decorated class, or ``None``.
     """
     validate_given(id, title)
 
@@ -435,14 +361,10 @@ def class_decorator(
 
     Args:
         attribute: The attribute a decorated class records its marker under.
-        decorator: The decorator's own spelling, for the error messages.
-        cls: The class, when the decorator was used bare, or ``None`` when it was
-            called with arguments.
-        id: The id the author passed, or ``None`` to derive one per class.
+        decorator: The decorator's own spelling, for the errors.
+        cls: The class when used bare, and ``None`` when called.
+        id: The id the author passed, or ``None`` to derive one.
         title: The title the author passed, or ``None`` to derive one.
-
-    Returns:
-        The decorated class when ``cls`` was given, and the decorator otherwise.
     """
     decorate = declare_class(attribute, decorator, id=id, title=title)
     if cls is None:
@@ -455,22 +377,14 @@ def declared_metadata(
 ) -> Metadata:
     """Return the class's own marker, or refuse with the describer's message.
 
-    Read from ``vars(cls)`` for the same reason as
-    :func:`declared_function_metadata`: a subclass that inherits a decorated
-    parent has not declared anything itself.
-
     Args:
         cls: The class a describer was asked to describe.
-        attribute: The attribute the decorator records its marker under.
-        describer: The describer's own name, for the error message.
-        decorator: The decorator the describer requires, for the message.
-
-    Returns:
-        The marker the class carries.
+        attribute: The attribute the marker is recorded under.
+        describer: The describer's name, for the error.
+        decorator: The decorator it requires, for the error.
 
     Raises:
-        QgisSdkDeclarationError: The target is not a class, or does not carry the
-            marker its describer requires.
+        QgisSdkDeclarationError: The target is not a marked class.
     """
     if not inspect.isclass(cls) or attribute not in vars(cls):
         raise QgisSdkDeclarationError(f"{describer} requires a class with {decorator}")
