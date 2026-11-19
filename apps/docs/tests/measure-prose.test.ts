@@ -8,7 +8,7 @@
  * when all it did was move a catalogue into a table.
  */
 import { describe, expect, test } from "bun:test";
-import { headingCount, proseOf, proseWords } from "../scripts/measure-prose";
+import { headingCount, proseOf, proseWords } from "../scripts/lib/prose";
 
 describe("proseWords", () => {
 	test("counts the body and not the frontmatter", () => {
