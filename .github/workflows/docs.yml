@@ -76,8 +76,9 @@ jobs:
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           # `bun` renders the site; `build` writes the Python reference it
-          # renders (decision-86), which needs Fumero and the source tree.
-          environments: bun,build
+          # renders (decision-86), which needs Fumero and the source tree. The
+          # list is space separated - a comma reads as one environment's name.
+          environments: bun build
           cache: true
           locked: true
 
