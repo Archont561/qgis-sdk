@@ -24,6 +24,10 @@ const MARKER = /^\s*:::/;
 const WRAPPER = /^\s*<\/?div data-qgis-sdk/;
 /** A JSX tag on a line of its own, which the expander emitted, not prose. */
 const JSX_LINE = /^\s*<\/?[A-Za-z][^>]*>\s*$/;
+/** The opening of a generated TypeTable, whose data is a lookup, not prose. */
+const TYPE_TABLE_OPEN = /<TypeTable[\s>]/;
+/** The self-close of a TypeTable, or its closing tag. */
+const TYPE_TABLE_CLOSE = /\/>|<\/TypeTable>/;
 const HEADING = /^\s{0,3}#{1,6}\s/;
 
 /** The prose of a page, as the count defines it. */
@@ -31,12 +35,23 @@ export function proseOf(markdown: string): string {
 	const body = markdown.replace(FRONTMATTER, "");
 	const kept: string[] = [];
 	let fence = false;
+	let typeTable = false;
 	for (const line of body.split("\n")) {
 		if (FENCE.test(line)) {
 			fence = !fence;
 			continue;
 		}
 		if (fence) continue;
+		// A generated TypeTable carries its data inline, between the opening
+		// tag and the self-close; the rows are a lookup, like a table's.
+		if (typeTable) {
+			if (TYPE_TABLE_CLOSE.test(line)) typeTable = false;
+			continue;
+		}
+		if (TYPE_TABLE_OPEN.test(line)) {
+			typeTable = TYPE_TABLE_CLOSE.test(line) === false;
+			continue;
+		}
 		if (
 			TABLE_ROW.test(line) ||
 			MARKER.test(line) ||

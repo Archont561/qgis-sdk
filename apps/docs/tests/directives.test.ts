@@ -72,7 +72,9 @@ describe("expandDirectives", () => {
 		const { markdown, components } = expandDirectives(
 			":::tabs\n:::tab pip\nFrom PyPI.\n:::\n:::tab pixi\nFrom prefix.dev.\n:::\n:::\n",
 		);
-		expect(components).toEqual(["tabs", "tab"]);
+		// Only the container is recorded: Radix renders one panel server-side,
+		// so a per-tab marker would never reach the exported HTML.
+		expect(components).toEqual(["tabs"]);
 		expect(markdown).toContain(
 			'<Tabs items={["pip", "pixi"]} defaultValue="pip">',
 		);
@@ -142,6 +144,41 @@ describe("expandDirectives", () => {
 		expect(() =>
 			expandDirectives(":::accordions\n:::accordion\nx\n:::\n:::\n"),
 		).toThrow(/:::accordion needs a title/);
+	});
+
+	test("renders a typetable from the resolver the caller supplies", () => {
+		const { markdown, components } = expandDirectives(
+			':::typetable module="qgis_sdk.ui"\n:::\n',
+			{
+				typeTable: (module) =>
+					module === "qgis_sdk.ui"
+						? '<TypeTable type={{ "Thing": { type: "() -> None" } }} />'
+						: null,
+			},
+		);
+		expect(components).toEqual(["typetable"]);
+		expect(markdown).toContain('<TypeTable type={{ "Thing"');
+		expect(markdown).toContain('data-qgis-sdk="typetable"');
+	});
+
+	test("rejects a typetable the generator did not supply", () => {
+		expect(() =>
+			expandDirectives(':::typetable module="qgis_sdk.ui"\n:::\n'),
+		).toThrow(/needs the inventory/);
+	});
+
+	test("rejects a typetable for a module the inventory does not hold", () => {
+		expect(() =>
+			expandDirectives(':::typetable module="qgis_sdk.nope"\n:::\n', {
+				typeTable: () => null,
+			}),
+		).toThrow(/qgis_sdk\.nope, which is not in the inventory/);
+	});
+
+	test("rejects a typetable with no module", () => {
+		expect(() =>
+			expandDirectives(":::typetable\n:::\n", { typeTable: () => "" }),
+		).toThrow(/:::typetable needs a module/);
 	});
 
 	test("rejects an unknown directive by name", () => {
@@ -281,11 +318,16 @@ describe("the guide sources", () => {
 	});
 
 	test("expand cleanly, so no directive is left unparsed", async () => {
+		// `typetable` renders from the inventory, which the generator supplies;
+		// the stub stands in for it so the parse check covers that block too.
+		const context = {
+			typeTable: () => "<TypeTable type={{}} />",
+		};
 		for (const markdown of await guides()) {
 			// A guide with no directives returns its own text; one with them comes
 			// back as JSX. Either way the parse is the check: a stray marker, an
 			// unknown name or an unclosed block throws here rather than shipping.
-			const expanded = expandDirectives(markdown);
+			const expanded = expandDirectives(markdown, context);
 			expect(expanded.components).toBeInstanceOf(Array);
 		}
 	});

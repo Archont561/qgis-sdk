@@ -160,6 +160,12 @@ export interface RenderOptions {
 	 * still declares a kind.
 	 */
 	readonly kinds?: (path: string) => Kind;
+	/**
+	 * Render a `TypeTable` for a module from the inventory, for the
+	 * `:::typetable` directive. The generator supplies it; without it a
+	 * `:::typetable` block is an error.
+	 */
+	readonly typeTables?: (module: string) => string | null;
 }
 
 export interface Page {
@@ -241,6 +247,23 @@ function headingOf(line: string): Heading | null {
 		: null;
 }
 
+/**
+ * The anchor a component carries when a heading became one.
+ *
+ * An accordion's `id` is the slug of its title and a tab's `id` is the slug of
+ * the heading it replaced, so both keep the old `#anchor` links working. The
+ * anchor map has to know them or a cross-guide link to one of them is left
+ * pointing at a heading that no longer exists.
+ */
+function componentAnchor(line: string): string | null {
+	const accordion = /^:::accordion\s+title="([^"]+)"/.exec(line);
+	if (accordion) {
+		return slugify(accordion[1] ?? "");
+	}
+	const tab = /^:::tab\s+.*\bid="([^"]+)"/.exec(line);
+	return tab ? (tab[1] ?? "") : null;
+}
+
 /** Split a guide into its title, preamble and `##` sections, and index its headings. */
 export function splitGuide(markdown: string): SplitGuide {
 	let title = "";
@@ -279,6 +302,10 @@ export function splitGuide(markdown: string): SplitGuide {
 			if (heading && current) {
 				const slug = uniqueSlug(heading.text);
 				anchors.set(slug, { page: current.slug, anchor: slug });
+			}
+			const component = segment.code ? null : componentAnchor(line);
+			if (component && current) {
+				anchors.set(component, { page: current.slug, anchor: component });
 			}
 			(current ? current.lines : intro).push(line);
 		}
@@ -517,7 +544,9 @@ class Renderer {
 				return text;
 			})
 			.join("\n");
-		const expanded = expandDirectives(rewritten);
+		const expanded = expandDirectives(rewritten, {
+			typeTable: this.options.typeTables,
+		});
 		if (expanded.components.length > 0) {
 			// A directive the layer does not know throws here, with its line, so a
 			// typo in a guide fails the build instead of rendering as text.

@@ -840,17 +840,16 @@ The default `qgis-sdk build` writes the plugin ZIP QGIS's *Install from ZIP*
 reads. An app has no such caller, so `--target app` writes a Python project
 instead:
 
-```
-dist/simple-0.1.0-app/
-  pyproject.toml          # [project.scripts] simple = "simple._launcher:main"
-  simple/
-    __main__.py           # the project's own entry, untouched
-    _launcher.py          # generated: probes externals, then qgis_sdk.app.main
-    ...                   # the plugin's modules, imports rewritten
-    _vendor/
-      qgis_sdk/           # the runtime, same vendoring rules as the ZIP
-      NOTICE              # which runtime, and every vendored distribution
-```
+:::files
+- dist/simple-0.1.0-app/
+  - pyproject.toml
+  - simple/
+    - __main__.py
+    - _launcher.py
+    - _vendor/
+      - qgis_sdk/
+      - NOTICE
+:::
 
 - the runtime is **vendored** as `<plugin>._vendor.qgis_sdk` by the same AST pass
   the ZIP build uses, so the distribution declares no runtime dependency and
@@ -1110,19 +1109,8 @@ number, a `str`, a `bool`, a colour string - and `mount()` builds the QGIS widge
 that mirrors it. Importing `qgis_sdk.ui` loads no Qt; the Qt half lives in
 `qgis_sdk.adapters.qgis.components` and is looked up by name at mount.
 
-| Component | Value | Native widget |
-|---|---|---|
-| `LayerPicker(name, kind="vector"\|"raster"\|"mesh"\|"point_cloud"\|"vector_tile"\|"annotation"\|"tiled_scene"\|"any")` | layer id or `None` | `QgsMapLayerComboBox` (follows the project) |
-| `FieldPicker(name, of=<LayerPicker>)` | field name or `None` | `QgsFieldComboBox` (follows `of`) |
-| `CrsPicker(name)` | `"EPSG:4326"` or `None` | `QgsProjectionSelectionWidget` |
-| `FileInput(name, filters=("*.csv",))` | file `FileRef` or `None` | `QgsFileWidget` |
-| `DirectoryInput(name)` | directory `FileRef` or `None` | `QgsFileWidget` (directory mode) |
-| `Distance(name)` | `float` metres, 0 or more | `QDoubleSpinBox` with ` m` |
-| `Number(name, range=(low, high), step=, integer=)` | `int` for an integral range, else `float` | `QSpinBox`/`QDoubleSpinBox` |
-| `Text(name)` | `str` | `QLineEdit` |
-| `Toggle(name)` | `bool` | `QCheckBox` |
-| `Choice(name, options=(...))` | one of the options (the first by default) | `QComboBox` |
-| `Colour(name, alpha=True)` | `#rrggbbaa` (`#rrggbb` when `alpha=False`) | `QgsColorButton` |
+:::typetable module="qgis_sdk.ui"
+:::
 
 Every component has `name` (the handler's parameter name), `label`,
 `object_name` (`form/<name>`, so a test or agent selects it by path),
@@ -3289,8 +3277,8 @@ worker runs no event loop. GUI work belongs in a subscriber, which runs on the
 driving thread; `ctx.jobs.watch(handle, ...)` subscribes all four events to the
 calling owner's scope in one call.
 
-### How do I name the jobs my plugin exposes?
-
+:::accordions
+:::accordion title="How do I name the jobs my plugin exposes?"
 A plugin declares the jobs an action may reach, in either of two forms:
 
 ```python
@@ -3327,9 +3315,8 @@ the plugin does declare. `bind` stays on `qgis_sdk.jobs.JobService` for hosts
 and tests. Two limits follow: `ctx.jobs.<name>` is a runtime lookup, so no
 editor completion (TASK-124), and the bridge carries `{id, status}`, not a live
 subscription.
-
-### What is checked before a job runs?
-
+:::
+:::accordion title="What is checked before a job runs?"
 `describe_job(add)` returns the `JobDescription` (`id`, `title`, the parameter
 names, which are required, the result type, and the object schema of the
 inputs plus the result schema from the declarations generator) without calling
@@ -3347,9 +3334,8 @@ Keywords that do not fit the signature - missing, unexpected or of the wrong
 shape - are refused by `delay` with `QgisSdkJobRejectedError` naming every
 problem before anything runs; positional arguments are a `TypeError`; a
 result of the wrong type fails the job, not the tick.
-
-### What may a job body touch?
-
+:::
+:::accordion title="What may a job body touch?"
 The whole body runs on a worker thread (decision-65), so it is handed a
 `WorkerContext`: `progress` and `cancellation`, and nothing else. Reading any
 other attribute - `ctx.layers`, `ctx.project`, `ctx.ui`, `ctx.algorithms` -
@@ -3368,7 +3354,8 @@ remembers which thread assembled it, so a GUI-bound capability read off another
 thread warns once and raises under `qgis-sdk dev`, which catches a captured
 `service = ctx.desktop` that no source check can see (decision-69). A helper, a
 live object passed in, or a by-name import is still yours to get right.
-
+:::
+:::
 ### Migrating from the 0.5 class form
 
 Up to `qgis-sdk-runtime` 0.5 a job was a class with `__init__(self, ctx)` and
@@ -3470,8 +3457,8 @@ There are no automatic retries: resubmission is `delay` again, with a new
 logical id, and `attempt` is carried as `1` so a later, explicit retry policy
 has somewhere to count.
 
-### How do hosts compose the service?
-
+:::accordions
+:::accordion title="How do hosts compose the service?"
 Hosts compose the service once per plugin:
 
 ```python
@@ -3508,9 +3495,8 @@ In tests, `qgis_sdk.testing.FakeWorkers` holds bodies until `run_one()` /
 `run_all()` - which is how races between workers, ticks and disposal are
 staged - and `ThreadWorkers` is a real `ThreadPoolExecutor`. The evidence is
 `tests/test_jobs*.py` and `tests/features/scoped_jobs.feature`.
-
-### How do I order one job after another?
-
+:::
+:::accordion title="How do I order one job after another?"
 `ctx.jobs.after(handle)` submits work that runs only after the jobs you name
 succeeded:
 
@@ -3529,7 +3515,8 @@ the dependent job with `QgisSdkJobPrerequisiteError` naming the prerequisite
 and its outcome, and the dependent body never runs. A chain works the same way
 - each `after` takes the handles of what it waits for - and a dependent job can
 still be cancelled while it waits.
-
+:::
+:::
 ### Migrating a 0.8 job to 0.9
 
 0.8 ran the body on the driving thread and left worker work to the author:

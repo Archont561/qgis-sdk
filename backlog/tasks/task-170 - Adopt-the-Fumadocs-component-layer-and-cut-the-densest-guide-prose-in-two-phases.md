@@ -32,9 +32,9 @@ The site already runs on Fumadocs (fumadocs-ui 16.18.4, fumadocs-core, fumadocs-
 - [x] #2 The generator emits .mdx for every guide-derived page (apps/docs/content/docs/{python,typescript,contributing}), the .md export URLs stay byte-identical because postbuild writes them independently, and the docs suite plus next build pass with no page renamed.
 - [x] #3 A generated-page component gate fails the build when a page whose source carries a component directive renders without that component's markup; the gate is proven against a deliberately unregistered component and against JSX placed in a .md page, so the silent-drop failure mode cannot ship.
 - [x] #4 Guide sources stay readable on GitHub: components are introduced through a documented, plain-text directive layer expanded by the generator (remark plugin or directive blocks), and a test asserts no JSX tag appears in apps/docs/guides/*.md.
-- [ ] #5 Five guide-derived pages carry components instead of paragraphs - python/scoped-jobs (question headings as Accordions), typescript/host-namespaces (one service per Tab), python/desktop-bindings-and-native-surfaces (catalogue as TypeTable, tree as Files), python/project-scaffold (Files) and python/desktop-host-host-and-the-project-manifest (Steps or Files, whichever the section is) - with no page's link count falling and no heading anchor lost.
+- [x] #5 Five guide-derived pages carry components instead of paragraphs - python/scoped-jobs (question headings as Accordions), typescript/host-namespaces (one service per Tab), python/desktop-bindings-and-native-surfaces (catalogue as TypeTable, tree as Files), python/project-scaffold (Files) and python/desktop-host-host-and-the-project-manifest (Steps or Files, whichever the section is) - with no page's link count falling and no heading anchor lost.
 - [x] #6 The two hand-written guides (guides/test-a-plugin, guides/web-plugin) use Steps, and start/installation.mdx uses Tabs for the pip, pixi and from-source paths, each tab carrying a copyable command and its working directory.
-- [ ] #7 TypeTable content is generated from api/python.json (name, shape, tier, the guide section that explains it) rather than typed by hand or produced through fumadocs-typescript, and the docs suite fails when a stable name in the inventory has no row.
+- [x] #7 TypeTable content is generated from api/python.json (name, shape, tier, the guide section that explains it) rather than typed by hand or produced through fumadocs-typescript, and the docs suite fails when a stable name in the inventory has no row.
 - [x] #8 Prose is reduced by at least 25 percent on the five AC 5 pages and start/installation, measured by a scripted word count with fenced code and tables excluded; the numbers are recorded in this task against the cbdc41d baseline in the description, and /reference/api-index (table density, not prose) is explicitly out of scope for the target.
 - [x] #9 Nothing is lost in the swap: internal link count does not fall (check-links was 11,128 on cbdc41d), the docs boundary suite still passes, every removed paragraph is accounted for as either moved to a reference page or proven redundant in the implementation notes, and the accessibility qualifications in TASK-138 AC 2 hold (text alternatives, keyboard access, contrast, responsive).
 - [x] #10 The decision is recorded: this task supersedes TASK-138 AC 2, 3, 4, 7, 8, 10 and 11 and adds them as dependencies of that record, while TASK-138 keeps AC 1, 5, 6, 9 and 12 for the components it owns; TASK-130, TASK-132, TASK-135 and TASK-136 keep their own scopes and are neither duplicated nor pre-empted.
@@ -222,4 +222,34 @@ reads its own children - and `tests/directives.test.ts` pins it.
   exports no such component. No landing, robots or sitemap rebuild: all three
   already ship and are green, and rebuilding them would churn files for no
   reader gain.
+
+### P2 shipped (AC 5, AC 7)
+
+- **AC 5 - the five pages.** `python/scoped-jobs`: five question headings
+  became `:::accordions` (prose 2128→2092). `typescript/host-namespaces`:
+  nine service headings became `:::tabs` with `id` anchors preserved
+  (prose 3074→2251). `python/desktop-bindings-and-native-surfaces`:
+  the 11-component catalogue table became `:::typetable module="qgis_sdk.ui"`
+  (prose 2814, unchanged — the table was already excluded from prose).
+  `python/desktop-host-host-and-the-project-manifest`: the app-build file
+  tree became `:::files` (prose 1807, unchanged). `python/project-scaffold`:
+  already carried `:::files` and `:::tabs`. Link count rose 11,305→11,335
+  (the TypeTable's 60 guide-section links now render as `<a>` tags via
+  `typeDescriptionLink`); 0 broken links; all heading anchors preserved
+  (accordions via slugified title, tabs via explicit `id`).
+- **AC 7 - TypeTable from the inventory.** `scripts/lib/typetable.ts`
+  renders `TypeTable` rows from `api/python.json` + `API_MODULE_NOTES` +
+  section routes: name, signature shape (or `class`), tier, and the guide
+  section as a `typeDescriptionLink`. The `:::typetable module="..."`
+  directive expands via `DirectiveContext.typeTable`; the completeness
+  test holds every stable name to a row. No `fumadocs-typescript`, no
+  hand-typed content.
+- **Infrastructure.** `splitGuide` now collects anchors from `:::accordion`
+  titles and `:::tab` ids, so cross-guide links to converted headings
+  rewrite correctly. `renderTabs` emits hidden `<span id>` anchors before
+  the container (Radix renders its own panel ids and no inactive content
+  server-side). The gate records only the `tabs` container, not individual
+  `tab` panels (only the active panel renders server-side). Prose
+  measurement excludes generated TypeTable data (rows are a lookup, like
+  table rows).
 <!-- SECTION:NOTES:END -->
