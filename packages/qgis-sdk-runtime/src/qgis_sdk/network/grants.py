@@ -165,6 +165,12 @@ def origin_of(url: str) -> str | None:
     Scheme and host are lower-cased and a default port is dropped, so the one
     origin a grant lists matches every spelling of it. A URL without an http(s)
     scheme or without a host has no origin a grant could name.
+
+    Args:
+        url: The address to reduce.
+
+    Returns:
+        The origin, or ``None`` when the URL has none.
     """
     try:
         parts = urlsplit(url)
@@ -211,6 +217,11 @@ class NetworkGrant:
     "same site". ``methods`` defaults to the read-only pair. ``host_auth`` is
     whether a request may name a QGIS authentication configuration; the view
     still never sees the credential, but spending it is a grant in itself.
+
+    Args:
+        origins: The origins, each ``scheme://host[:port]``; never a wildcard.
+        options: ``methods``, ``host_auth``, ``max_redirects``,
+            ``max_body_bytes`` and ``timeout_seconds``.
     """
 
     origins: frozenset[str]
@@ -252,14 +263,23 @@ class NetworkGrant:
         )
 
     def allows_origin(self, url: str) -> bool:
-        """Whether ``url`` sits on one of the granted origins."""
+        """Whether ``url`` sits on one of the granted origins.
+
+        Args:
+            url: The address to check.
+
+        Returns:
+            Whether the grant lets a request go there.
+        """
         return origin_of(url) in self.origins
 
     def constrain(self, request: NetworkRequest) -> NetworkRequest:
         """Return ``request`` held to this grant, or refuse it.
 
-        The refusal names the rule - origin, method, authentication - and the
-        origin asked for; never a header, a body or a credential.
+        A refusal names the rule and the origin, never a header or a credential.
+
+        Args:
+            request: The request the view asked the host to send.
         """
         origin = origin_of(request.url)
         if origin is None or origin not in self.origins:

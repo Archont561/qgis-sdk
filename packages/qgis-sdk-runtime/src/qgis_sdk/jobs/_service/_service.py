@@ -32,6 +32,12 @@ class JobService(JobServiceMixin1, JobServiceMixin2):
     than running author code here. The ``WorkerContext`` a body receives is
     built per attempt with progress and cancellation only; ``network``,
     ``algorithms`` and ``project`` stay on this side of the seam.
+
+    Args:
+        scope: The scope that owns the jobs submitted here.
+        options: What the submissions may reach: ``workers``, ``network``,
+            ``algorithms``, ``project``, plus ``registry`` (the declared names),
+            ``gui_thread``, ``on_fault`` and ``max_steps_per_job``.
     """
 
     def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:

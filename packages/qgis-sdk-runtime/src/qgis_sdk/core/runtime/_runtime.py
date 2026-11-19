@@ -369,6 +369,10 @@ class PluginRuntime(_PluginRuntimeMixin1, _PluginRuntimeMixin2, _PluginRuntimeMi
     context into registered functions. :meth:`start` registers providers when
     Processing is available; :meth:`unload` releases them and owned resources.
     A failed start rolls back its registrations.
+
+    Args:
+        app: The plugin to own.
+        context: The context its hooks, actions and surfaces run on.
     """
 
     def __init__(

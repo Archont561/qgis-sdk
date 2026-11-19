@@ -20,7 +20,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class JobFault:
-    """A subscriber that raised; it was detached and the job carried on."""
+    """A subscriber that raised; it was detached and the job carried on.
+
+    Attributes:
+        job_id: The attempt whose callback raised.
+        event: Which of the four events it was subscribed to.
+        error: What the callback raised.
+    """
 
     job_id: str
     event: JobEvent
@@ -28,7 +34,14 @@ class JobFault:
 
 
 class JobSubscription:
-    """One disposable callback registration on a handle."""
+    """One disposable callback registration on a handle.
+
+    Args:
+        attempt: The attempt the callback hears from.
+        event: Which event it is subscribed to.
+        callback: What the delivery calls.
+        owner: The scope it ends with, or ``None`` for the handle's lifetime.
+    """
 
     __slots__ = ("_active", "_attempt", "_callback", "_event", "_owner")
 

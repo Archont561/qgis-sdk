@@ -88,6 +88,12 @@ class JobServiceMixin1:
 
         One service per scope, so a scope that opens and closes does not
         accumulate copies and ``active`` answers the same either way.
+
+        Args:
+            scope: The owner work is submitted under.
+
+        Returns:
+            The service that submits into that owner's scope.
         """
         cached = self._runtime.children.get(scope)
         if cached is not None:
@@ -110,6 +116,12 @@ class JobServiceMixin1:
         Nothing is cached - a request scope exists once, so a second call is a
         second derivation - and the caller closes the scope when the response is
         sent, which is the abandonment.
+
+        Args:
+            scope: The request's scope; closing it abandons the jobs.
+
+        Returns:
+            A service whose jobs die with that scope.
         """
         scope.ensure_open()
         service = type(self).__new__(type(self))
@@ -151,6 +163,12 @@ class JobServiceMixin1:
         an action handler reads its own plugin context and still hands the
         window the lifetime it answers to. A host driving its own dispatch
         sets :data:`~qgis_sdk.jobs._ownership.INVOKING_SCOPE` the same way.
+
+        Args:
+            function: The ``@job`` function; it must carry a declaration.
+
+        Returns:
+            The bound job, ready for ``delay`` or ``after``.
         """
         self._scope.ensure_open()
         owner = self._owner()
@@ -174,7 +192,15 @@ class JobServiceMixin1:
 
 class JobServiceMixin2:
     def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
-        """``bind(function).delay(**arguments)`` in one call."""
+        """``bind(function).delay(**arguments)`` in one call.
+
+        Args:
+            function: The ``@job`` function to run.
+            arguments: The declared inputs, by name.
+
+        Returns:
+            The handle the caller waits on and subscribes to.
+        """
         return self.bind(function).delay(**arguments)
 
     def after(self, *handles: JobHandle) -> After:
@@ -185,6 +211,12 @@ class JobServiceMixin2:
         enforced before the dependent body is handed to a worker, so it holds
         for every backend; a prerequisite that fails or is cancelled fails the
         dependent job with ``QgisSdkJobPrerequisiteError``.
+
+        Args:
+            handles: The jobs to wait for; each must be submitted already.
+
+        Returns:
+            The ordering, on which ``bind``/``delay`` submit the dependent work.
         """
         return After(self, as_handles(handles))
 
@@ -243,6 +275,12 @@ class JobServiceMixin2:
 
         Refused outright from inside a tick, for the same reason a nested tick
         is ignored; the blocker names the condition.
+
+        Args:
+            max_ticks: How many ticks the jobs get to reach a safe point.
+
+        Returns:
+            Whether it was refused, and what blocked it.
         """
         runtime = self._runtime
         if runtime.ticking:

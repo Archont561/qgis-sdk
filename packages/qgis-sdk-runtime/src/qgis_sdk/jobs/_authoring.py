@@ -102,14 +102,14 @@ def job(
         @job(id="demo.sum", title="Sum two numbers")
         def sum_numbers(ctx: WorkerContext, a: int, b: int = 0) -> SumResult: ...
 
-    ``@job`` alone derives the id and title from the function name; ``id=``
-    and ``title=`` override either one. The decorator adds ``describe()`` but
-    does not wrap the function: the runtime hands the restricted context to
-    the worker, so a test calls the body directly with a fake.
+    A bare ``@job`` derives the id and title from the function name. The body
+    runs in its entirety on a worker (decision-65), so an ``async def`` is
+    refused with a migration note, and a test calls the body with a fake.
 
-    Since 0.9.0 the whole body runs on a worker (decision-65): a plain ``def``.
-    ``async def`` is refused with a migration note - a worker runs no event
-    loop, and the driving thread no longer executes job bodies.
+    Args:
+        function: The function, when used bare; ``None`` when called.
+        id: The name ``ctx.jobs`` reaches it by, or ``None`` to derive it.
+        title: The label a surface shows, or ``None`` to derive it.
     """
     decorate = _job_decorator(id, title)
     if function is None:
@@ -128,6 +128,18 @@ class JobDescription:
     the field stays in the transport description so a 0.8 reader still parses
     one, and ``describe_job`` refuses a coroutine function before it can be
     ``True``.
+
+    Attributes:
+        id: The name ``ctx.jobs`` reaches the job by.
+        title: The label a surface shows for it.
+        parameters: The input names, in signature order.
+        required: The subset without a default.
+        annotations: Each input's live annotation, checked before submission.
+        result_type: The live annotation of what the body returns.
+        inputs_schema: The JSON schema the inputs are validated against.
+        result_schema: The JSON schema the result is described by.
+        asynchronous: Always ``False``; kept so an older reader still parses.
+        schema_version: The description schema this object speaks.
     """
 
     id: str
@@ -205,8 +217,23 @@ def _job_inputs(
     return parameters[1:], hints
 
 
+def _declared_result(hints: dict[str, Any], path: str) -> Any:
+    """The result annotation a job has to declare, refused when it has none."""
+    result_type = hints.get("return", inspect.Signature.empty)
+    if result_type is inspect.Signature.empty:
+        raise QgisSdkDeclarationError(f"{path}: a job must declare its result")
+    return result_type
+
+
 def describe_job(function: Callable[..., Any]) -> JobDescription:
-    """Inspect one decorated function without calling it."""
+    """Inspect one decorated function without calling it.
+
+    Args:
+        function: The function ``@job`` decorated.
+
+    Returns:
+        Its description, with the inputs and result filled in.
+    """
     declared = declared_function_metadata(
         function, _JOB_ATTRIBUTE, "describe_job", "@job"
     )
@@ -214,9 +241,7 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
     _refuse_job_shape(function, path)
     inputs, hints = _job_inputs(function, path)
     properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
-    result_type = hints.get("return", inspect.Signature.empty)
-    if result_type is inspect.Signature.empty:
-        raise QgisSdkDeclarationError(f"{path}: a job must declare its result")
+    result_type = _declared_result(hints, path)
     return JobDescription(
         id=declared.id,
         title=declared.title,

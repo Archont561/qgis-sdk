@@ -160,6 +160,12 @@ class Context:
         A probe, not a use: it does not touch the scope. Asking about a name
         this context never carries is a ``ValueError``, so a typo cannot read
         as "not provided".
+
+        Args:
+            capability: The service name: ``"workers"``, ``"network"``, ...
+
+        Returns:
+            Whether the host provided it.
         """
         if capability not in self._capability_names:
             raise ValueError(
@@ -196,6 +202,27 @@ class PluginServices:
     ``host`` travels with the services rather than beside them: it is what the
     host says about itself (decision-52 point 4), and a host that builds a
     context to hand its services over is stating both at once.
+
+    Attributes:
+        host: Which host provides them: desktop, server, app or test.
+        desktop: The interface object, when the host has one.
+        network: HTTP, under the host's grants.
+        layers: Vector layers the plugin reads and writes.
+        rasters: Raster layers and the cells they hold.
+        features: Feature and expression reads, and edits.
+        layouts: Print layouts, for export.
+        connections: The stored database and browser connections.
+        canvas: The map canvas the plugin moves.
+        project: The QGIS project.
+        settings: The plugin's own settings prefix.
+        styles: Styles and symbols.
+        algorithms: Runs through the host's Processing.
+        workers: Offloading work off the GUI thread.
+        processing: The host-side registry of the plugin's providers.
+        ui: Windows the plugin opens.
+        files: Refs minted for this owner.
+        log: The plugin's log.
+        jobs: Named jobs, cancelled with the plugin.
     """
 
     host: Host = Host.DESKTOP

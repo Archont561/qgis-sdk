@@ -38,7 +38,16 @@ _METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
 
 @dataclass(frozen=True, slots=True)
 class NetworkDefaults:
-    """What a derived client carries; immutable, so sharing one is safe."""
+    """What a derived client carries; immutable, so sharing one is safe.
+
+    Attributes:
+        base_url: The address a relative URL resolves against.
+        headers: The headers every request sends.
+        timeout_seconds: How long a request may take.
+        auth_config: The QGIS authentication configuration to authenticate with.
+        max_redirects: How many redirects to follow before giving up.
+        max_body_bytes: The largest body that is buffered and returned.
+    """
 
     base_url: str | None = None
     headers: Headers = field(default_factory=Headers)
@@ -222,13 +231,15 @@ def build_request(
     url: str,
     options: RequestOptions | None = None,
 ) -> NetworkRequest:
-    """Validate and resolve one call into the request a transport receives.
+    """Validate one call into the request a transport receives.
 
-    Every refusal is a :class:`QgisSdkRequestRejectedError` raised before any
-    transport is touched, so a mistake costs no socket and no host round trip.
+    Args:
+        defaults: What the client sends unless the call overrides it.
+        method: The verb, which decides whether a body is allowed.
+        url: The address, relative or absolute.
+        options: The per-call knobs, as :class:`RequestOptions`.
     """
-    values = _request_values(options)
-    verb = _verb(method, url)
+    values, verb = _request_values(options), _verb(method, url)
     resolved = _with_params(_resolve_url(url, defaults.base_url, verb), values.params)
     body, implied_type = _encode_body(values.json, values.data, verb, resolved)
     headers = _merged_headers(defaults.headers, values.headers, implied_type)

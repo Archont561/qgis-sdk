@@ -39,16 +39,19 @@ if TYPE_CHECKING:
 class PluginContext(Context):
     """Capabilities owned by one plugin runtime, not an invocation.
 
-    Beside notifications and the owned scope it carries the curated services
-    (``desktop``, ``network``, ``layers``, ``project``, ``settings``,
-    ``styles``, ``algorithms``, ``workers``), exactly the Protocols the
-    web-view host surface wraps (decision-27), plus ``processing``, the
-    host-side registry ``PluginRuntime`` advertises the plugin's providers
-    with (decision-42). A host that builds the bridge from this context
-    (``HostServices.from_context``) hands both sides the same instances, so a
-    Python handler and a page read one project. Each service is a
-    :class:`Capability`: reading one the host did not provide fails by name
+    Beside notifications and the owned scope it carries the curated services,
+    exactly the Protocols the web-view host surface wraps (decision-27), plus
+    ``processing``, the host-side registry ``PluginRuntime`` advertises the
+    plugin's providers with (decision-42). A host that builds the bridge from
+    this context (``HostServices.from_context``) hands both sides the same
+    instances, so a Python handler and a page read one project. Each service is
+    a :class:`Capability`: reading one the host did not provide fails by name
     (decision-39).
+
+    Args:
+        notifications: The sink the plugin's messages go to.
+        scope: The scope that owns what the plugin opened.
+        services: What the host provides, or ``None`` for a bare context.
     """
 
     __slots__ = (
@@ -162,6 +165,12 @@ class PluginContext(Context):
         runtime exists (``ui``); a capability the factory already provided
         is a ``ValueError``, so a host cannot quietly replace an author's
         choice.
+
+        Args:
+            services: The capabilities to add, by name.
+
+        Returns:
+            The new context; ``self`` is unchanged.
         """
         for name in services:
             if name not in self._capability_names:
@@ -183,6 +192,25 @@ class UiServices:
 
     The plugin's own service objects, not view-owned copies: a surface handler
     reads the same project, layers and canvas a page does (decision-55).
+
+    Attributes:
+        host: Which host the view belongs to.
+        network: HTTP, under the host's grants.
+        actions: The view-scoped way into the plugin's actions.
+        algorithms: Runs through the host's Processing.
+        desktop: The interface object, when the host has one.
+        settings: The plugin's own settings prefix.
+        layers: Vector layers the plugin reads and writes.
+        rasters: Raster layers and the cells they hold.
+        features: Feature and expression reads, and edits.
+        project: The QGIS project.
+        canvas: The same canvas the plugin context carries.
+        files: Refs minted for this owner.
+        log: The plugin's log.
+        streams: The plugin's ``@stream`` methods, subscribed from this view.
+        styles: Styles and symbols.
+        ui: Windows the plugin opens.
+        jobs: Jobs owned by this view, cancelled with the window.
     """
 
     host: Host = Host.DESKTOP
@@ -215,9 +243,14 @@ class UiContext(Context):
     ``algorithms``, ``styles``, ``desktop`` and ``ui`` directly, so surface
     handlers need not declare actions. ``desktop`` is a native escape hatch.
     These are the plugin's service objects, not view-owned copies: capability
-    access checks the view scope, but a previously retained service still has
-    its own plugin lifetime. Direct calls are synchronous; the context does
-    not move work to a worker.
+    access checks the view scope, but a retained service keeps its plugin
+    lifetime. Direct calls are synchronous.
+
+    Args:
+        notifications: The sink the view's messages go to.
+        view: What this view may do to its own window.
+        scope: The scope that ends with the view.
+        services: What the host shares, or ``None`` for a bare context.
     """
 
     __slots__ = (
@@ -321,6 +354,11 @@ class UiContext(Context):
         The imperative form of ``@subscribe`` (decision-55): the subscription
         is owned by the view's scope and ends with the window. Returns the
         :class:`~qgis_sdk.ui.streams.ViewSubscription`.
+
+        Args:
+            stream: The plugin stream's name.
+            callback: What each delivery calls.
+            request: The stream's declared request, if it takes one.
         """
         return self.streams.subscribe(stream, callback, owner=self.scope, **request)
 
@@ -333,6 +371,11 @@ class AlgorithmServices:
     capabilities a host may not have, so they default to ``None`` - absent, not
     empty - and the context refuses them by name rather than handing a body a
     service that could not work (decision-39).
+
+    Attributes:
+        algorithms: How the body runs its Processing work.
+        project: The project it adds results to, when the host has one.
+        network: HTTP for a body that fetches, when the host has one.
     """
 
     algorithms: Algorithms

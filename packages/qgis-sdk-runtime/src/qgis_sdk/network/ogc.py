@@ -46,7 +46,14 @@ def _collection_entries(entries, response: Response) -> tuple[CollectionInfo, ..
 
 @dataclass(frozen=True, slots=True)
 class CollectionInfo:
-    """One entry of ``/collections``."""
+    """One entry of ``/collections``.
+
+    Attributes:
+        id: The collection id the items URL is built from.
+        title: The title the service advertises, when it has one.
+        description: The description it advertises, when it has one.
+        crs: The coordinate reference systems it declares.
+    """
 
     id: str
     title: str | None
@@ -56,7 +63,14 @@ class CollectionInfo:
 
 @dataclass(frozen=True, slots=True)
 class FeaturesPage:
-    """One page of ``/collections/{id}/items``: GeoJSON features and paging facts."""
+    """One page of ``/collections/{id}/items``: GeoJSON features and paging facts.
+
+    Attributes:
+        features: The GeoJSON features, as the service sent them.
+        number_returned: How many this page carries.
+        number_matched: How many the query matches in all, when the service says.
+        next_url: The next page's URL, or ``None`` on the last page.
+    """
 
     features: tuple[Mapping[str, object], ...]
     number_returned: int
@@ -120,7 +134,12 @@ def parse_features(response: Response) -> FeaturesPage:
 
 
 class OgcApiFeatures:
-    """Coroutine methods for one OGC API - Features landing URL."""
+    """Coroutine methods for one OGC API - Features landing URL.
+
+    Args:
+        network: The client the requests go through.
+        base_url: The landing URL the paths resolve against.
+    """
 
     def __init__(self, network: Network, base_url: str) -> None:
         self._network = network.configure(
@@ -138,7 +157,16 @@ class OgcApiFeatures:
         limit: int = 10,
         bbox: Sequence[float] | None = None,
     ) -> FeaturesPage:
-        """Fetch one page of a collection's features."""
+        """Fetch one page of a collection's features.
+
+        Args:
+            collection_id: The collection's id, from ``collections()``.
+            limit: How many features to ask for.
+            bbox: A ``(minx, miny, maxx, maxy)`` filter, or ``None`` for all.
+
+        Returns:
+            The page, with the link to the next one if there is more.
+        """
         params: dict[str, str | int | float | bool | None] = {"limit": limit}
         if bbox is not None:
             params["bbox"] = ",".join(f"{value:g}" for value in bbox)
@@ -147,7 +175,14 @@ class OgcApiFeatures:
         )
 
     async def next_page(self, page: FeaturesPage) -> FeaturesPage | None:
-        """Follow a page's ``next`` link, or return ``None`` on the last page."""
+        """Follow a page's ``next`` link, or return ``None`` on the last page.
+
+        Args:
+            page: The page whose link to follow.
+
+        Returns:
+            The next page, or ``None`` when this was the last one.
+        """
         if page.next_url is None:
             return None
         return parse_features(await self._network.get(page.next_url))
