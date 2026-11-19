@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 from qgis_sdk.declarations import QgisSdkDeclarationError, refuse_bindings
+from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
 from ._context import ServerContext
 
@@ -74,7 +75,14 @@ T = TypeVar("T")
 
 @dataclass(frozen=True, slots=True)
 class HookDeclaration:
-    """What a decorator recorded: the kind, the order and the OGC service id."""
+    """What a decorator recorded: the kind, the order and the OGC service id.
+
+    Attributes:
+        kind: Whether it is a filter, a service or an access-control hook.
+        priority: The order the host runs it in; lower runs first.
+        name: The OGC service name, for ``@server.service``.
+        version: The version QGIS advertises, for ``@server.service``.
+    """
 
     kind: HookKind
     priority: int = DEFAULT_PRIORITY
@@ -101,6 +109,10 @@ def filter(function: T | None = None, /, *, priority: int = DEFAULT_PRIORITY) ->
             if request.param("SERVICE") == "WMS" and request.param("VERSION") is None:
                 return request.with_params(VERSION="1.3.0")
             return None
+
+    Args:
+        function: The function, when used bare; ``None`` when called.
+        priority: The order the host runs it in; lower runs first.
     """
     return _declare("filter", function, priority=priority)
 
@@ -119,6 +131,11 @@ def service(
     service answers requests whose ``SERVICE`` parameter matches ``name`` -
     derived from the function name when it is not given - and QGIS advertises
     it at ``version`` in its service registry.
+
+    Args:
+        function: The function, when used bare; ``None`` when called.
+        name: The name it answers to, or ``None`` to derive it.
+        version: What QGIS advertises in its service registry.
     """
     return _declare(
         "service",
@@ -141,6 +158,10 @@ def access_control(
     instead of passing a filtered map to the client. A hook that wants a
     different refusal returns ``False`` and sets it on
     ``ctx.response`` (an XML ``ServiceException``, a different status).
+
+    Args:
+        function: The function, when used bare; ``None`` when called.
+        priority: The order the host runs it in; lower runs first.
     """
     return _declare("access_control", function, priority=priority)
 
@@ -220,6 +241,9 @@ class ServerHooks:
     metadata, two services claiming one name, or a service the plugin declares
     twice are all refused here rather than at the first request, when the server
     has already accepted traffic.
+
+    Args:
+        hooks: The declared functions, in declaration order.
     """
 
     __slots__ = ("_access_control", "_filters", "_services")
@@ -275,6 +299,12 @@ class ServerHooks:
         is what a host that has to *re-register* compares before it does: QGIS
         Server holds one object per identity, so a hook set whose identities
         moved cannot take the place of the one it registered.
+
+        Args:
+            hook: The decorated function.
+
+        Raises:
+            QgisSdkDeclarationError: It carries no hook declaration.
         """
         declaration = getattr(hook, _HOOK_ATTRIBUTE, None)
         if not isinstance(declaration, HookDeclaration):
@@ -298,3 +328,12 @@ class ServerHooks:
             f"{len(self._services)} services, "
             f"{len(self._access_control)} access-control hooks)"
         )
+
+
+def declaration_of(hook: Callable[..., Any], kind: str) -> HookDeclaration:
+    declaration = getattr(hook, "__qgis_sdk_server_hook__", None)
+    if not isinstance(declaration, HookDeclaration) or declaration.kind != kind:
+        raise QgisSdkUnsupportedCapabilityError(
+            f"{getattr(hook, '__name__', hook)!r} is not a @server.{kind} hook"
+        )
+    return declaration

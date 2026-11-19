@@ -22,6 +22,9 @@ class CaseInsensitiveMapping(Mapping[str, str]):
     ``SERVICE``/``VERSION``/``LAYERS`` and what an author assumes when they read
     an OGC parameter by name. Iteration yields the spellings the caller supplied,
     in their order, so a response that echoes the request echoes what arrived.
+
+    Args:
+        values: The entries, or ``None`` for an empty mapping.
     """
 
     __slots__ = ("_keys", "_values")
@@ -47,11 +50,23 @@ class CaseInsensitiveMapping(Mapping[str, str]):
         return len(self._values)
 
     def get(self, key: str, default: str | None = None) -> str | None:
-        """Return ``key`` whatever its case, or ``default``."""
+        """Return ``key`` whatever its case, or ``default``.
+
+        Args:
+            key: The entry to read.
+            default: What to return when it is absent.
+        """
         return self._values.get(str(key).casefold(), default)
 
     def merged(self, **overrides: str) -> CaseInsensitiveMapping:
-        """A copy with ``overrides`` replacing entries of any spelling."""
+        """A copy with ``overrides`` replacing entries of any spelling.
+
+        Args:
+            overrides: The entries to set; ``self`` is unchanged.
+
+        Returns:
+            The new mapping.
+        """
         values = {
             original: self._values[folded] for folded, original in self._keys.items()
         }
@@ -72,6 +87,13 @@ class ServerRequest:
     ``with_params`` returns a new request, which is how a filter rewrites a
     request without the host having to re-parse anything: the rewritten value
     reaches the hook after it, not the one that already read the old one.
+
+    Attributes:
+        method: The HTTP method.
+        url: The URL, as the host received it.
+        params: The OGC parameters, matched without regard to case.
+        headers: The request headers, likewise.
+        body: The raw body bytes.
     """
 
     method: str
@@ -87,15 +109,32 @@ class ServerRequest:
             object.__setattr__(self, "headers", CaseInsensitiveMapping(self.headers))
 
     def param(self, name: str, default: str | None = None) -> str | None:
-        """Return the OGC parameter ``name`` whatever its case, or ``default``."""
+        """Return the OGC parameter ``name`` whatever its case, or ``default``.
+
+        Args:
+            name: The parameter to read, such as ``"LAYERS"``.
+            default: What to return when it is absent.
+        """
         return self.params.get(name, default)
 
     def header(self, name: str, default: str | None = None) -> str | None:
-        """Return the request header ``name`` whatever its case, or ``default``."""
+        """Return the request header ``name`` whatever its case, or ``default``.
+
+        Args:
+            name: The header to read.
+            default: What to return when it is absent.
+        """
         return self.headers.get(name, default)
 
     def with_params(self, **overrides: str) -> ServerRequest:
-        """A copy with ``overrides`` merged into the parameters."""
+        """A copy with ``overrides`` merged into the parameters.
+
+        Args:
+            overrides: The parameters to set; ``self`` is unchanged.
+
+        Returns:
+            The rewritten request, handed to the next hook.
+        """
         return ServerRequest(
             method=self.method,
             url=self.url,

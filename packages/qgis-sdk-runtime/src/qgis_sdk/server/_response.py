@@ -32,6 +32,11 @@ class ServerResponse:
     case, and ``body`` is the bytes the host will write. A hook that returns the
     context's response changes it in place; a hook that returns a different one
     answers the request itself, which is the only way to short-circuit.
+
+    Attributes:
+        status: The HTTP status the host will send.
+        headers: The headers, matched without regard to case.
+        body: The bytes the host will write.
     """
 
     status: int = 200
@@ -47,7 +52,12 @@ class ServerResponse:
     # -- reading -----------------------------------------------------------------
 
     def header(self, name: str, default: str | None = None) -> str | None:
-        """Return the response header ``name`` whatever its case."""
+        """Return the response header ``name`` whatever its case.
+
+        Args:
+            name: The header to read.
+            default: What to return when it is not set.
+        """
         return self.headers.get(name, default)
 
     @property
@@ -63,7 +73,12 @@ class ServerResponse:
     # -- writing -----------------------------------------------------------------
 
     def set_header(self, name: str, value: str) -> ServerResponse:
-        """Set one header, replacing an entry of any other case; returns ``self``."""
+        """Set one header, replacing an entry of any other case; returns ``self``.
+
+        Args:
+            name: The header to set.
+            value: What it is set to.
+        """
         headers = {key: self.headers[key] for key in self.headers}
         for existing in list(headers):
             if existing.casefold() == str(name).casefold():
@@ -73,18 +88,31 @@ class ServerResponse:
         return self
 
     def set_status(self, status: int) -> ServerResponse:
-        """Set the HTTP status; returns ``self``."""
+        """Set the HTTP status; returns ``self``.
+
+        Args:
+            status: The status, such as ``404``.
+        """
         self.status = int(status)
         return self
 
     def write(self, body: bytes | str) -> ServerResponse:
-        """Append to the body, encoding text as UTF-8; returns ``self``."""
+        """Append to the body, encoding text as UTF-8; returns ``self``.
+
+        Args:
+            body: The bytes or text to append.
+        """
         chunk = body.encode("utf-8") if isinstance(body, str) else bytes(body)
         self.body += chunk
         return self
 
     def write_text(self, content: str, *, status: int | None = None) -> ServerResponse:
-        """Answer with text, setting the status when one is given."""
+        """Answer with text, setting the status when one is given.
+
+        Args:
+            content: The body, replacing whatever was written before.
+            status: The status to answer with, or ``None`` to keep the current.
+        """
         if status is not None:
             self.status = int(status)
         self.set_header("Content-Type", _CONTENT_TYPES["text"])
@@ -92,7 +120,12 @@ class ServerResponse:
         return self
 
     def write_xml(self, content: str, *, status: int | None = None) -> ServerResponse:
-        """Answer with XML, the default content type of a WMS/WFS response."""
+        """Answer with XML, the default content type of a WMS/WFS response.
+
+        Args:
+            content: The body, replacing whatever was written before.
+            status: The status to answer with, or ``None`` to keep the current.
+        """
         if status is not None:
             self.status = int(status)
         self.set_header("Content-Type", _CONTENT_TYPES["xml"])
@@ -100,7 +133,12 @@ class ServerResponse:
         return self
 
     def write_json(self, data: Any, *, status: int | None = None) -> ServerResponse:
-        """Answer with JSON, encoded the way the rest of the SDK encodes it."""
+        """Answer with JSON, encoded the way the rest of the SDK encodes it.
+
+        Args:
+            data: What to serialize.
+            status: The status to answer with, or ``None`` to keep the current.
+        """
         if status is not None:
             self.status = int(status)
         self.set_header("Content-Type", _CONTENT_TYPES["json"])
@@ -111,17 +149,32 @@ class ServerResponse:
 
     @classmethod
     def text(cls, content: str, *, status: int = 200) -> ServerResponse:
-        """A complete text response."""
+        """A complete text response.
+
+        Args:
+            content: The body.
+            status: The status to answer with.
+        """
         return cls(status=status).write_text(content)
 
     @classmethod
     def xml(cls, content: str, *, status: int = 200) -> ServerResponse:
-        """A complete XML response."""
+        """A complete XML response.
+
+        Args:
+            content: The body.
+            status: The status to answer with.
+        """
         return cls(status=status).write_xml(content)
 
     @classmethod
     def json(cls, data: Any, *, status: int = 200) -> ServerResponse:
-        """A complete JSON response."""
+        """A complete JSON response.
+
+        Args:
+            data: What to serialize.
+            status: The status to answer with.
+        """
         return cls(status=status).write_json(data)
 
     @classmethod
@@ -134,6 +187,12 @@ class ServerResponse:
         plain text body naming the reason, the status, and ``WWW-Authenticate``
         when the caller asks for it. An access-control hook returns ``False``
         instead and the host builds this for the layer it refused.
+
+        Args:
+            reason: The plain text body naming why.
+            status: The status, ``403`` unless the rule says otherwise.
+            headers: Extra headers; ``www_authenticate`` becomes
+                ``WWW-Authenticate``.
         """
         response = cls(status=status).write_text(reason)
         for name, value in headers.items():
