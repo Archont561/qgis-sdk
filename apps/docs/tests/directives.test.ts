@@ -80,6 +80,20 @@ describe("expandDirectives", () => {
 		expect(markdown).toContain('<Tab value="pixi">');
 	});
 
+	test("every tab carries the marker the build gate looks for", () => {
+		// A tab is a child of `Tabs`, so it cannot have a wrapper of its own
+		// next to it; the marker goes inside the panel. Without it the gate
+		// fails every generated page that uses tabs, which is how this was
+		// found.
+		const { markdown } = expandDirectives(
+			":::tabs\n:::tab pip\nFrom PyPI.\n:::\n:::tab pixi\nFrom prefix.dev.\n:::\n:::\n",
+		);
+		expect(markdown.match(/<div data-qgis-sdk="tab">/g)).toHaveLength(2);
+		for (const panel of markdown.split('<Tab value="').slice(1)) {
+			expect(panel).toContain('<div data-qgis-sdk="tab">');
+		}
+	});
+
 	test("rejects a tab outside tabs", () => {
 		expect(() => expandDirectives(":::tab pip\nx\n:::\n")).toThrow(
 			/:::tab belongs in :::tabs/,
