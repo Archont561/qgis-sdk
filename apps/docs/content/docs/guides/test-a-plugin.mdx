@@ -3,11 +3,14 @@ title: Test and run a plugin
 description: Scaffold a plugin, exercise it without QGIS, then opt into QGIS and Desktop checks.
 ---
 
-Start with the [installed developer kit](/start/installation/). The
-QGIS-free tests run on the SDK fakes; they are not a substitute for running a
-plugin inside QGIS.
+Start with the [installed developer kit](/start/installation/). The QGIS-free
+tests run on the SDK fakes; they are not a substitute for running a plugin
+inside QGIS.
 
-## Create and check the project
+<Steps>
+<Step>
+
+### Create and check the project
 
 ```sh
 qgis-sdk new field_tools --no-input
@@ -16,10 +19,12 @@ qgis-sdk check
 ```
 
 `check` reports project and declaration problems before QGIS loads the plugin.
-See [project checks](/python/project-checks/) for the rule IDs and
-remedies.
+See [project checks](/python/project-checks/) for the rule IDs and remedies.
 
-## Test without QGIS
+</Step>
+<Step>
+
+### Test without QGIS
 
 ```sh
 qgis-sdk test
@@ -27,23 +32,13 @@ qgis-sdk test
 
 Add tests under `tests/` for the plugin's actions and services. The fakes
 exercise plugin behavior without starting QGIS; see the
-[scoped plugin runtime](/python/scoped-plugin-runtime/) for the
-service boundary.
+[scoped plugin runtime](/python/scoped-plugin-runtime/) for the service
+boundary.
 
-### If you arrived from PyQGIS: mock `iface`, or use the fakes?
+</Step>
+<Step>
 
-Most PyQGIS testing material says to mock the QGIS interface. This kit exists
-partly to remove that practice: a mock asserts that your code called a method,
-while a fake refuses what the host would refuse, so a declaration QGIS would
-reject fails in a test instead of in a user's QGIS. Both targets check that, and
-on a real host a skip is not a pass - a fixture that needs PyQGIS fails when you
-asked for that target, and a session where every test skipped exits `1`.
-
-A mock is still the right tool for what the fakes do not model: a third-party Qt
-widget, an external HTTP client. The full comparison is in
-[the testing section of the Python guide](/python/running-tests-qgis-sdk-test/).
-
-## Qualify on a QGIS host
+### Qualify on a QGIS host
 
 With a supported QGIS installation available, run:
 
@@ -60,7 +55,10 @@ See [supported targets](/python/supported-targets/) and
 [developing against QGIS](/python/developing-against-qgis-qgis-sdk-dev/)
 for discovery and options.
 
-## Build for distribution
+</Step>
+<Step>
+
+### Build for distribution
 
 ```sh
 qgis-sdk build
@@ -69,6 +67,22 @@ qgis-sdk build
 Install the ZIP in `dist/` through QGIS's plugin manager. See the
 [build reference](/python/building-an-installable-zip-qgis-sdk-build/)
 for packaging details.
+
+</Step>
+</Steps>
+
+## If you arrived from PyQGIS: mock `iface`, or use the fakes?
+
+Most PyQGIS testing material says to mock the QGIS interface. This kit exists
+partly to remove that practice: a mock asserts that your code called a method,
+while a fake refuses what the host would refuse, so a declaration QGIS would
+reject fails in a test instead of in a user's QGIS. Both targets check that, and
+on a real host a skip is not a pass - a fixture that needs PyQGIS fails when you
+asked for that target, and a session where every test skipped exits `1`.
+
+A mock is still the right tool for what the fakes do not model: a third-party Qt
+widget, an external HTTP client. The full comparison is in
+[the testing section of the Python guide](/python/running-tests-qgis-sdk-test/).
 
 ## When something goes wrong, or the kit stops
 
