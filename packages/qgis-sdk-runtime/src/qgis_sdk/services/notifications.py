@@ -33,7 +33,13 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class NotificationAction:
-    """The button a notification carries: its label and the action it runs."""
+    """The button a notification carries: its label and the action it runs.
+
+    Attributes:
+        label: The text the button shows.
+        action_id: The declared action pressing it runs.
+        arguments: The arguments that action is called with.
+    """
 
     label: str
     action_id: str
@@ -42,7 +48,13 @@ class NotificationAction:
 
 @dataclass(frozen=True, slots=True)
 class Notification:
-    """One delivered message, as a backend sees it."""
+    """One delivered message, as a backend sees it.
+
+    Attributes:
+        level: Which of the four levels it was published at.
+        message: What the user is told.
+        action: The button it carries, if any.
+    """
 
     level: NotificationLevel
     message: str
@@ -52,18 +64,48 @@ class Notification:
 class Notifications(Protocol):
     """Publish a message through the chosen runtime, at one of four levels."""
 
-    def info(self, message: str) -> None: ...
+    def info(self, message: str) -> None:
+        """Publish an ordinary message.
 
-    def success(self, message: str) -> None: ...
+        Args:
+            message: What the user is told.
+        """
+        ...
 
-    def warning(self, message: str) -> None: ...
+    def success(self, message: str) -> None:
+        """Publish a message reporting that something worked.
 
-    def critical(self, message: str) -> None: ...
+        Args:
+            message: What the user is told.
+        """
+        ...
+
+    def warning(self, message: str) -> None:
+        """Publish a message reporting something the user should notice.
+
+        Args:
+            message: What the user is told.
+        """
+        ...
+
+    def critical(self, message: str) -> None:
+        """Publish a message reporting a failure.
+
+        Args:
+            message: What the user is told.
+        """
+        ...
 
     def with_action(
         self, label: str, action_id: str, /, **arguments: Any
     ) -> Notifications:
-        """The same service, with a button that runs ``action_id`` attached."""
+        """The same service, with a button that runs ``action_id`` attached.
+
+        Args:
+            label: The text the button shows.
+            action_id: The declared action pressing it runs.
+            **arguments: The arguments that action is called with.
+        """
         ...
 
 
@@ -73,19 +115,48 @@ class NotificationsBase:
     _action: NotificationAction | None = None
 
     def info(self, message: str) -> None:
+        """Publish an ordinary message.
+
+        Args:
+            message: What the user is told.
+        """
         self._deliver(Notification("info", message, self._action))
 
     def success(self, message: str) -> None:
+        """Publish a message reporting that something worked.
+
+        Args:
+            message: What the user is told.
+        """
         self._deliver(Notification("success", message, self._action))
 
     def warning(self, message: str) -> None:
+        """Publish a message reporting something the user should notice.
+
+        Args:
+            message: What the user is told.
+        """
         self._deliver(Notification("warning", message, self._action))
 
     def critical(self, message: str) -> None:
+        """Publish a message reporting a failure.
+
+        Args:
+            message: What the user is told.
+        """
         self._deliver(Notification("critical", message, self._action))
 
     def with_action(self, label: str, action_id: str, /, **arguments: Any) -> Any:
-        """A shallow copy of this service carrying the button; the sink is shared."""
+        """A shallow copy of this service carrying the button; the sink is shared.
+
+        Args:
+            label: The text the button shows.
+            action_id: The declared action pressing it runs.
+            **arguments: The arguments that action is called with.
+
+        Returns:
+            The copy, with the button attached.
+        """
         if not label or not action_id:
             raise ValueError("with_action needs a label and an action id")
         clone = copy.copy(self)

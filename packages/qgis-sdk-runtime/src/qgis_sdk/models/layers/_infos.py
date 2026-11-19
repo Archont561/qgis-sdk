@@ -26,6 +26,15 @@ class MeshLayerInfo:
     velocity - grouped by the provider. ``group_count`` is how many dataset
     groups the mesh declares, and zero is a legal answer: a mesh with geometry
     and no result stored on it is a mesh, not a broken one.
+
+    Attributes:
+        id: The runtime-owned id the mesh was opened under.
+        name: The name the layer is listed under in the project.
+        vertex_count: Vertices in the mesh's own geometry, as the provider counts them.
+        face_count: Faces (triangles or quads) the mesh is built from.
+        group_count: Dataset groups the provider declares: one per quantity it carries.
+        crs: The authority code its coordinates are in, if it has one.
+        kind: The discriminator a page reads: always ``mesh``.
     """
 
     id: str
@@ -58,7 +67,11 @@ class MeshLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> MeshLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {
             "kind",
             "id",
@@ -89,6 +102,14 @@ class PointCloudLayerInfo:
     hides: it is the size of the dataset, not of the current view. The
     attributes are the ones the file declares, in the file's own order, so a
     page can offer them as columns without reading a point.
+
+    Attributes:
+        id: The runtime-owned id the point cloud was opened under.
+        name: The name the layer is listed under in the project.
+        point_count: How many points the provider reports.
+        attribute_names: The per-point attributes beyond position, in provider order.
+        crs: The authority code its coordinates are in, if it has one.
+        kind: The discriminator a page reads: always ``point_cloud``.
     """
 
     id: str
@@ -117,7 +138,11 @@ class PointCloudLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> PointCloudLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {"kind", "id", "name", "point_count", "attribute_names", "crs"}
         unknown = set(value) - known
         if unknown:
@@ -143,6 +168,15 @@ class VectorTileLayerInfo:
     names the shape of the source without repeating its credentials, which is
     the same rule TASK-92 applies to authentication (ids and names, never
     secrets).
+
+    Attributes:
+        id: The runtime-owned id the tile layer was opened under.
+        name: The name the layer is listed under in the project.
+        source_type: The provider's own spelling of the source shape: ``xyz``, ``mbtiles``.
+        min_zoom: The lowest zoom the source declares tiles for.
+        max_zoom: The highest zoom the source declares tiles for.
+        crs: The authority code its tiles are rendered in.
+        kind: The discriminator a page reads: always ``vector_tile``.
     """
 
     id: str
@@ -180,7 +214,11 @@ class VectorTileLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> VectorTileLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {
             "kind",
             "id",
@@ -211,6 +249,13 @@ class AnnotationLayerInfo:
     a plugin drew in the project, and the only thing to say about it at this
     level is how many. The items themselves are ``QgsAnnotationItem`` handles
     and stay native until a later task models them.
+
+    Attributes:
+        id: The runtime-owned id the annotation layer was opened under.
+        name: The name the layer is listed under in the project.
+        item_count: How many annotation items it holds.
+        crs: The authority code its items are placed in, if it has one.
+        kind: The discriminator a page reads: always ``annotation``.
     """
 
     id: str
@@ -235,7 +280,11 @@ class AnnotationLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> AnnotationLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {"kind", "id", "name", "item_count", "crs"}
         unknown = set(value) - known
         if unknown:
@@ -258,6 +307,13 @@ class TiledSceneLayerInfo:
     where the scene sits, so that is what the description carries - the box, in
     the scene's own CRS. ``crs`` names the 3D system the numbers are in
     (``EPSG:4978`` for an ECEF scene).
+
+    Attributes:
+        id: The runtime-owned id the scene was opened under.
+        name: The name the layer is listed under in the project.
+        extent: The scene's own box, in the canvas model's shape.
+        crs: The authority code its coordinates are in, if it has one.
+        kind: The discriminator a page reads: always ``tiled_scene``.
     """
 
     id: str
@@ -282,7 +338,11 @@ class TiledSceneLayerInfo:
 
     @classmethod
     def from_wire(cls, value: Mapping[str, Any]) -> TiledSceneLayerInfo:
-        """Read one description, refusing a field it does not know."""
+        """Read one description, refusing a field it does not know.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         known = {"kind", "id", "name", "extent", "crs"}
         unknown = set(value) - known
         if unknown:
@@ -311,6 +371,9 @@ def layer_info(info: LayerInfo) -> dict[str, Any]:
 
     One function rather than two calls at every site: a handler that answers
     ``layers.list`` holds a union and must not branch on it to serialize it.
+
+    Args:
+        info: The opened layer's own description.
     """
     return info.to_wire()
 
@@ -322,6 +385,10 @@ class VectorExport:
     ``path`` is the destination the caller named, as a string so the value
     crosses the bridge unchanged; ``driver`` is the OGR driver the suffix
     selected (``GeoJSON`` or ``GPKG``).
+
+    Attributes:
+        path: The file that was written.
+        driver: The GDAL driver that wrote it.
     """
 
     path: str

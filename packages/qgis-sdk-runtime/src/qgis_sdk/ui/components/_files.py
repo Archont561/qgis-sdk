@@ -23,7 +23,11 @@ class _RefInput(Input):
     """A path chosen by the user, held as the ``FileRef`` ``ctx.files`` minted."""
 
     def set_path(self, path: str | PathLike[str]) -> None:
-        """Mint a ref for ``path`` through ``ctx.files`` and make it the value."""
+        """Mint a ref for ``path`` through ``ctx.files`` and make it the value.
+
+        Args:
+            path: The path to mint a ref for and store.
+        """
         files = self._require_ctx("files")
         try:
             ref = self._grant(files, Path(path))
@@ -32,7 +36,11 @@ class _RefInput(Input):
         self._commit(ref)
 
     def path(self, ref: FileRef | None = None) -> Path | None:
-        """The path behind ``ref`` (the current value by default), via ``ctx.files``."""
+        """The path behind ``ref`` (the current value by default), via ``ctx.files``.
+
+        Args:
+            ref: The ref to resolve, or ``None`` for the current value.
+        """
         ref = self._value if ref is None else ref
         if ref is None:
             return None
@@ -72,6 +80,10 @@ class FileInput(_RefInput):
     """One file; the value is a file ``FileRef`` the plugin's ``ctx.files`` resolves.
 
     ``filters`` are author globs (``("*.csv", "*.gpkg")``) the dialog offers.
+
+    Args:
+        name: The handler parameter this input fills.
+        **options: ``filters``, ``label``, ``value`` and ``required``.
     """
 
     kind = "file"

@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
+from ._labelling import (
+    Labelling,
+    StyleEntry,
+    StyleText,
+    labelling_from_wire,
+    style_entry_from_wire,
+)
 from ._renderers import (
     RENDERERS,
     CategorizedRenderer,
     GraduatedClass,
     GraduatedRenderer,
-    Labelling,
     Renderer,
     Rule,
     RuleBasedRenderer,
-    StyleEntry,
-    StyleText,
-    labelling_from_wire,
     renderer_from_wire,
-    style_entry_from_wire,
     symbol_fits_geometry,
     symbol_kind,
 )

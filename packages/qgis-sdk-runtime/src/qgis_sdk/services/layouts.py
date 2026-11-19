@@ -48,23 +48,28 @@ its pages and an atlas writes one page per feature.
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, Unpack, runtime_checkable
 
 from qgis_sdk.models import (
-    LAYOUT_FORMATS,
     AtlasExport,
-    AtlasPage,
     AtlasRequest,
     FileRef,
     LayoutExport,
     LayoutInfo,
     LayoutRequest,
     LayoutSettings,
-    QgisSdkExportRefusedError,
-    QgisSdkJobCancelledError,
+)
+from qgis_sdk.services._layout_render import (
+    NullCancellation,
+    NullProgress,
+    atlas_pages,
+    check_pattern,
+    exported,
+    free_layout_name,
+    page_path,
+    slug,
+    stop_if_cancelled,
 )
 from qgis_sdk.services.contracts import Cancellation, Progress
 
@@ -128,9 +133,11 @@ __all__ = [
     "NullCancellation",
     "NullProgress",
     "atlas_pages",
+    "check_pattern",
     "exported",
     "free_layout_name",
     "page_path",
+    "slug",
     "stop_if_cancelled",
 ]
 
@@ -139,30 +146,6 @@ __all__ = [
 #: reads ``layouts.export#2`` for the second one a session submits.
 EXPORT_JOB_ID = "layouts.export"
 ATLAS_JOB_ID = "layouts.atlas"
-
-#: The pattern's placeholders, checked before a render starts: an unknown name
-#: is a caller's typo and is refused by name rather than written into a file.
-_PATTERN_TOKENS = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)[^}]*\}")
-
-
-class NullProgress:
-    """A ``Progress`` for a render nobody is watching; every report is dropped."""
-
-    __slots__ = ()
-
-    def report(self, fraction: float) -> None:
-        """Accept and ignore one fraction."""
-        del fraction
-
-
-class NullCancellation:
-    """A ``Cancellation`` for a render nobody can cancel."""
-
-    __slots__ = ()
-
-    def is_cancelled(self) -> bool:
-        """Never cancelled: a blocking render runs to its end."""
-        return False
 
 
 @runtime_checkable
@@ -181,7 +164,11 @@ class LayoutBackend(Protocol):
         ...
 
     def load_template(self, template: Path) -> LayoutInfo:
-        """Load a ``.qpt`` template into the project and describe the layout."""
+        """Load a ``.qpt`` template into the project and describe the layout.
+
+        Args:
+            template: The template file to read.
+        """
         ...
 
     def render(
@@ -191,7 +178,13 @@ class LayoutBackend(Protocol):
         progress: Progress,
         cancellation: Cancellation,
     ) -> LayoutExport:
-        """Write the layout to ``request.destination`` under the export policy."""
+        """Write the layout to ``request.destination`` under the export policy.
+
+        Args:
+            request: What to render, where to, and in which format.
+            progress: The sink a render reports its fractions to.
+            cancellation: The signal it checks between pages.
+        """
         ...
 
     def render_atlas(
@@ -201,7 +194,13 @@ class LayoutBackend(Protocol):
         progress: Progress,
         cancellation: Cancellation,
     ) -> AtlasExport:
-        """Write one file per coverage feature into ``request.directory``."""
+        """Write one file per coverage feature into ``request.directory``.
+
+        Args:
+            request: The layout, directory, pattern and format to render with.
+            progress: The sink a render reports its fractions to.
+            cancellation: The signal it checks between pages.
+        """
         ...
 
 
@@ -238,6 +237,9 @@ class Layouts(Protocol):
         own, so ``report.qpt`` loads as a layout called ``report``. A name the
         project already holds gains a numeric suffix (``report (2)``), so
         loading a template never replaces a layout the user composed.
+
+        Args:
+            template: The ref the host minted for the ``.qpt`` file.
         """
         ...
 
@@ -246,11 +248,20 @@ class Layouts(Protocol):
 
         The outcome is a :class:`~qgis_sdk.models.LayoutExport`; ``overwrite``
         decides whether an existing destination is replaced or refused.
+
+        Args:
+            layout: The name of the layout in the project.
+            options: ``format``, ``destination``, ``settings`` and ``overwrite``.
         """
         ...
 
     def render(self, layout: str, **options: Unpack[ExportOptions]) -> LayoutExport:
-        """Export ``layout`` and wait for the file: the same work, no job."""
+        """Export ``layout`` and wait for the file: the same work, no job.
+
+        Args:
+            layout: The name of the layout in the project.
+            options: ``format``, ``destination``, ``settings`` and ``overwrite``.
+        """
         ...
 
     def run_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> JobHandle:
@@ -258,108 +269,20 @@ class Layouts(Protocol):
 
         ``pattern`` names each file without its suffix and may use ``{index}``
         and ``{feature_id}``; the default is ``page-001.pdf`` and so on.
+
+        Args:
+            layout: The name of the layout in the project.
+            options: ``format``, ``directory``, ``pattern``, ``settings`` and
+                ``overwrite``.
         """
         ...
 
     def render_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> AtlasExport:
-        """Run ``layout``'s atlas and wait for every file: the same work, no job."""
+        """Run ``layout``'s atlas and wait for every file: the same work, no job.
+
+        Args:
+            layout: The name of the layout in the project.
+            options: ``format``, ``directory``, ``pattern``, ``settings`` and
+                ``overwrite``.
+        """
         ...
-
-
-def slug(name: str) -> str:
-    """A file-name-safe form of a layout name, for a host-chosen output."""
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")
-    return cleaned or "layout"
-
-
-def free_layout_name(taken: Iterable[str], name: str) -> str:
-    """An unused layout name: ``name``, then ``name (2)``, ``name (3)`` and so on.
-
-    A template load adds a layout, it never replaces one the user composed, so a
-    name already in the project gains a numeric suffix - the answer the print
-    designer's own duplicate-name dialog gives. Shared, so the fake and the
-    native adapter answer the same list of names.
-    """
-    existing = set(taken)
-    if name not in existing:
-        return name
-    number = 2
-    while f"{name} ({number})" in existing:
-        number += 1
-    return f"{name} ({number})"
-
-
-def check_pattern(pattern: str) -> str:
-    """Refuse an atlas pattern naming a placeholder the render cannot fill."""
-    unknown = sorted(
-        {
-            token
-            for token in _PATTERN_TOKENS.findall(pattern)
-            if token not in ("index", "feature_id")
-        }
-    )
-    if unknown:
-        raise QgisSdkExportRefusedError(
-            pattern,
-            [
-                (
-                    f"unknown atlas pattern field(s) {', '.join(unknown)}; "
-                    "a pattern may use {index} and {feature_id}"
-                )
-            ],
-        )
-    return pattern
-
-
-def exported(request: LayoutRequest, written: Path, *, pages: int) -> LayoutExport:
-    """Describe a finished export from the file it wrote.
-
-    Shared by both backends so the size a caller reads is a fact about the file
-    rather than a number a renderer remembers: a writer that counts its own
-    bytes is a second source of truth, and the one on disk is the one that
-    matters.
-    """
-    return LayoutExport(
-        path=str(written),
-        format=request.format,
-        pages=pages,
-        bytes=written.stat().st_size,
-    )
-
-
-def atlas_pages(
-    request: AtlasRequest, written: list[tuple[int, int | None, Path]]
-) -> AtlasExport:
-    """Describe a finished atlas run from the files it wrote, in coverage order."""
-    return AtlasExport(
-        directory=request.directory,
-        format=request.format,
-        pages=tuple(
-            AtlasPage(index=index, feature_id=feature_id, path=str(path))
-            for index, feature_id, path in written
-        ),
-    )
-
-
-def page_path(request: AtlasRequest, *, index: int, feature_id: int | None) -> Path:
-    """The file name one atlas page gets: the pattern, filled, plus the suffix.
-
-    Shared so a caller reading the pattern and the files on disk sees the same
-    names on both backends; ``index`` is the page number a user counts from one,
-    which is what ``{index:03d}`` in a pattern means.
-    """
-    name = request.pattern.format(index=index, feature_id=feature_id)
-    return Path(request.directory) / f"{name}{LAYOUT_FORMATS[request.format]}"
-
-
-def stop_if_cancelled(cancellation: Cancellation) -> None:
-    """Raise the SDK's cancellation error if the job was asked to stop.
-
-    Called between pages, which is the granularity a render can honour: a page
-    already being drawn finishes, and the files already written stay written
-    because each one is a finished file rather than a partial one. The id is
-    the worker's own and stays zero: the scheduler settles the job as cancelled
-    from the error's type (decision-21).
-    """
-    if cancellation.is_cancelled():
-        raise QgisSdkJobCancelledError(0)

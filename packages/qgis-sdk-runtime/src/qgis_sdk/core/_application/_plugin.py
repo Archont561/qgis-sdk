@@ -289,6 +289,12 @@ class ActionRegistry:
         self._actions: list[_Entry] = []
 
     def action(self, *, id: str, title: str) -> Callable[[F], F]:
+        """Register a function as an action of this collection.
+
+        Args:
+            id: The action id to register under.
+            title: The action title.
+        """
         validate_metadata(id, title)
 
         def register(function: F) -> F:
@@ -300,6 +306,13 @@ class ActionRegistry:
     def stream(
         self, *, id: str, title: str, events: Mapping[str, Any]
     ) -> Callable[[F], F]:
+        """Register a function as a stream of this collection.
+
+        Args:
+            id: The stream id to register under.
+            title: The stream title.
+            events: The event kinds the stream emits.
+        """
         validate_metadata(id, title)
 
         def register(function: F) -> F:

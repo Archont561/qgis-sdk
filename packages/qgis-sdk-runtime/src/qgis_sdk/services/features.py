@@ -62,7 +62,12 @@ class EditingSession(Protocol):
     def add(
         self, attributes: dict[str, object], geometry: Geometry | None = None
     ) -> int:
-        """Buffer one new feature and return the id the provider assigned."""
+        """Buffer one new feature and return the id the provider assigned.
+
+        Args:
+            attributes: The field values, by field name.
+            geometry: The shape to add it with, or ``None`` for a bare row.
+        """
         ...
 
     def update(
@@ -71,11 +76,22 @@ class EditingSession(Protocol):
         attributes: dict[str, object] | None = None,
         geometry: Geometry | None = None,
     ) -> None:
-        """Buffer a change to one existing feature; fields left out are untouched."""
+        """Buffer a change to one existing feature; fields left out are untouched.
+
+        Args:
+            feature_id: The feature to change.
+            attributes: The field values to replace, or ``None`` for none.
+            geometry: The shape to replace it with, or ``None`` to keep the
+                current one.
+        """
         ...
 
     def delete(self, feature_id: int) -> None:
-        """Buffer the deletion of one feature."""
+        """Buffer the deletion of one feature.
+
+        Args:
+            feature_id: The feature to remove on commit.
+        """
         ...
 
     def commit(self) -> EditOutcome:
@@ -108,13 +124,23 @@ class Features(Protocol):
         the whole layer to filter it; ``query.limit`` is the caller's ask and the
         implementation refuses anything above its own ceiling
         (``MAX_FEATURE_PAGE``) instead of silently returning fewer rows.
+
+        Args:
+            layer_id: The layer to page through.
+            query: The filter, order, offset and limit to apply.
         """
         ...
 
     def feature(
         self, layer_id: str, feature_id: int, *, encoding: str = "wkb"
     ) -> Feature:
-        """Return one feature by id, in the requested geometry encoding."""
+        """Return one feature by id, in the requested geometry encoding.
+
+        Args:
+            layer_id: The layer to read from.
+            feature_id: The feature to read.
+            encoding: How the geometry comes back: ``wkb`` or ``wkt``.
+        """
         ...
 
     def evaluate(
@@ -129,11 +155,21 @@ class Features(Protocol):
         With no layer the expression is evaluated with the empty context: useful
         for arithmetic and string work, and the answer says ``valid: false`` when
         it needs a column that is not there.
+
+        Args:
+            text: The expression to evaluate.
+            layer_id: The layer whose fields it may read, if any.
+            feature_id: The feature to evaluate it against, if any.
         """
         ...
 
     def check(self, text: str, *, layer_id: str | None = None) -> ExpressionCheck:
-        """Parse ``text`` without running it, and say whether it would run."""
+        """Parse ``text`` without running it, and say whether it would run.
+
+        Args:
+            text: The expression to parse.
+            layer_id: The layer whose fields it may reference, if any.
+        """
         ...
 
     def begin_edit(self, layer_id: str) -> EditingSession:
@@ -142,5 +178,8 @@ class Features(Protocol):
         A provider that cannot edit (a read-only source, a raster layer) raises
         here, by name, rather than at the first write: a caller learns before it
         has buffered anything.
+
+        Args:
+            layer_id: The editable layer to open a session over.
         """
         ...

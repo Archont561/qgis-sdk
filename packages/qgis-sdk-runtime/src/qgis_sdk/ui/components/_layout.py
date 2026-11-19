@@ -18,6 +18,11 @@ class Button(Component):
 
     ``text`` is the caption (the label by default). The widget's
     ``objectName`` is ``buttons/<name>``.
+
+    Args:
+        name: The button's name in the surface.
+        text: The text on the button.
+        label: The text shown beside it, or ``None`` for none.
     """
 
     prefix = "buttons"
@@ -35,7 +40,11 @@ class Button(Component):
 
     @property
     def text(self) -> str:
-        """The caption on the button: ``text``, else the label."""
+        """The caption on the button: ``text``, else the label.
+
+        Args:
+            value: The text to put on the button.
+        """
         return self._text if self._text is not None else self.label
 
     @text.setter
@@ -43,7 +52,11 @@ class Button(Component):
         self._text = value
 
     def clicked(self, listener: Callable[[], None]) -> Callable[[], None]:
-        """Call ``listener()`` on each press; returns the unsubscribe."""
+        """Call ``listener()`` on each press; returns the unsubscribe.
+
+        Args:
+            listener: What each click is handed to.
+        """
         self._listeners.append(listener)
 
         def unsubscribe() -> None:
@@ -76,6 +89,11 @@ class Container(Component):
     Children are attached, mounted into the container's layout and disposed
     with it; two children sharing an ``objectName`` are refused at
     construction so a snapshot and a ``find`` are unambiguous.
+
+    Args:
+        name: The container's name in the surface.
+        children: The components it holds.
+        label: The text shown above it, or ``None`` for none.
     """
 
     def __init__(
@@ -117,7 +135,11 @@ class Container(Component):
         return self._children
 
     def find(self, name: str) -> Component:
-        """The child (at any depth) whose ``name`` matches, or a refusal by name."""
+        """The child (at any depth) whose ``name`` matches, or a refusal by name.
+
+        Args:
+            name: The component name to look for.
+        """
         for child in self._children:
             if child.name == name:
                 return child

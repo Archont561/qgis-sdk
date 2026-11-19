@@ -39,7 +39,15 @@ ScriptedModelOutputs = (
 
 @dataclass(frozen=True, slots=True)
 class FakeAlgorithmSetup:
-    """The collaborators one ``FakeAlgorithms`` backend is built from."""
+    """The collaborators one ``FakeAlgorithms`` backend is built from.
+
+    Attributes:
+        layers: The layer backend runs open their outputs on.
+        scope: The resource scope the fakes belong to.
+        catalogue: The catalogue of algorithms the fake describes.
+        files: The file authority outputs are granted through.
+        workers: The worker service a batch is submitted through.
+    """
 
     layers: FakeLayers
     scope: ResourceScope
@@ -50,7 +58,16 @@ class FakeAlgorithmSetup:
 
 @dataclass(frozen=True, slots=True)
 class DeclaredOutput:
-    """What one ``AlgorithmRequest`` type produces, as a vector dataset."""
+    """What one ``AlgorithmRequest`` type produces, as a vector dataset.
+
+    Attributes:
+        request_type: The request class this declaration answers for.
+        source: The dataset the output layer is opened from.
+        name: The name the produced layer carries.
+        geometry_type: The geometry the produced layer has.
+        field_names: The fields the produced layer has.
+        crs: The authority code the produced layer is in.
+    """
 
     request_type: type
     source: Path
@@ -62,7 +79,16 @@ class DeclaredOutput:
 
 @dataclass(frozen=True, slots=True)
 class VectorLayerDeclaration:
-    """One vector dataset a ``FakeLayers`` backend can open."""
+    """One vector dataset a ``FakeLayers`` backend can open.
+
+    Attributes:
+        source: The path or URI the test opens.
+        name: The name the opened layer carries.
+        geometry_type: The geometry its features have.
+        field_names: The attribute fields it has.
+        crs: The authority code its coordinates are in.
+        dataset_path: The file an export writes, when one is declared.
+    """
 
     source: Path
     name: str
@@ -74,7 +100,16 @@ class VectorLayerDeclaration:
 
 @dataclass(frozen=True, slots=True)
 class OtherLayerDeclaration:
-    """One mesh, point-cloud, tile or scene dataset a ``FakeLayers`` can open."""
+    """One mesh, point-cloud, tile or scene dataset a ``FakeLayers`` can open.
+
+    Attributes:
+        source: The path or URI the test opens.
+        name: The name the opened layer carries.
+        kind: Which of the four non-vector kinds it is.
+        crs: The authority code its coordinates are in.
+        dataset_path: The file an export writes, when one is declared.
+        detail: The keyword arguments that kind's model takes.
+    """
 
     source: Path
     name: str
@@ -86,7 +121,17 @@ class OtherLayerDeclaration:
 
 @dataclass(frozen=True, slots=True)
 class ConnectionDeclaration:
-    """One registered connection and the schemas it browses to."""
+    """One registered connection and the schemas it browses to.
+
+    Attributes:
+        name: The connection's name.
+        provider: The provider it is registered under.
+        auth_config: The ``authcfg`` id it authenticates with, if any.
+        schemas: The schemas its browse answers with.
+        valid: Whether opening it succeeds.
+        message: Why opening it fails, when it does.
+        accepts_auth: Whether attaching an auth configuration is allowed.
+    """
 
     name: str
     provider: str = "ogr"
@@ -99,7 +144,18 @@ class ConnectionDeclaration:
 
 @dataclass(frozen=True, slots=True)
 class TableDeclaration:
-    """One table or view inside a declared connection."""
+    """One table or view inside a declared connection.
+
+    Attributes:
+        connection: The connection the table lives in.
+        name: The table or view name.
+        provider: The provider of the connection.
+        schema: The schema it lives in.
+        kind: Whether it is a table or a view.
+        geometries: The geometry types its columns carry.
+        fields: The attribute fields opening it answers with.
+        crs: The authority code its coordinates are in.
+    """
 
     connection: str
     name: str

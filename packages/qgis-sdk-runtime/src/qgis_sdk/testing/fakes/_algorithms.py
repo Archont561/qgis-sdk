@@ -29,8 +29,8 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.processing.runs import coerce_run
 
+from ._algorithm_scripts import AlgorithmScripts
 from ._declarations import (
-    DeclaredOutput,
     FakeAlgorithmSetup,
     OtherLayerDeclaration,
     ScriptedModelOutputs,
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from qgis_sdk.files import FilesService
 
 
-class FakeAlgorithms:
+class FakeAlgorithms(AlgorithmScripts):
     """An ``Algorithms`` backend that runs nothing and returns declared outputs.
 
     ``list``/``describe`` answer from the shipped snapshot (or the
@@ -60,6 +60,11 @@ class FakeAlgorithms:
     """
 
     def __init__(self, setup: FakeAlgorithmSetup) -> None:
+        """Build the fake over the collaborators a run needs.
+
+        Args:
+            setup: The collaborators the fake is built from.
+        """
         self._layers = setup.layers
         self._scope = setup.scope
         self._catalogue = setup.catalogue
@@ -76,61 +81,11 @@ class FakeAlgorithms:
         self._scripted_models: dict[str, list[tuple[ScriptedModelOutputs, bool]]] = {}
         self._jobs = JobService(setup.scope, workers=setup.workers)
 
-    # -- setup, not part of the contract ----------------------------------
-
-    def declare_output(self, output: DeclaredOutput) -> None:
-        """Declare what a request type produces; setup, not part of the contract."""
-        self._layers.register(
-            VectorLayerDeclaration(
-                output.source,
-                name=output.name,
-                geometry_type=output.geometry_type,
-                field_names=output.field_names,
-                crs=output.crs,
-            )
-        )
-        self._outputs[output.request_type] = output.source
-
-    def script_run(
-        self,
-        algorithm_id: str,
-        outputs: ScriptedOutputs,
-        *,
-        repeat: bool = True,
-    ) -> None:
-        """Declare what the next ``run`` of ``algorithm_id`` produces.
-
-        ``outputs`` maps output names to values, or is a callable taking the
-        :class:`AlgorithmRun` and returning that mapping. A ``Path`` under a
-        vector output is opened through the fake layers (register it first);
-        a ``Path`` under a file output is granted through ``files`` and comes
-        back as a ``FileRef``; anything else is returned as given. With
-        ``repeat=False`` the answer is consumed by one run.
-        """
-        self._scripted.setdefault(algorithm_id, []).append((outputs, repeat))
-
-    def script_run_model(
-        self,
-        model: FileRef,
-        outputs: ScriptedModelOutputs,
-        *,
-        repeat: bool = True,
-    ) -> None:
-        """Declare what the next ``run_model`` of ``model`` produces.
-
-        A model has no registry entry to script against, so the answer is
-        keyed by the ref's id and the values are the final ones - owned
-        :class:`VectorLayerInfo`, :class:`FileRef` objects or scalars, exactly
-        the shapes :class:`RunResult` describes. A callable takes the ref and
-        the params of the run. With ``repeat=False`` the answer is consumed by
-        one run.
-        """
-        self._scripted_models.setdefault(model.id, []).append((outputs, repeat))
-
     # -- the contract ------------------------------------------------------
 
     @property
     def catalogue(self) -> Catalogue:
+        """The catalogue the fake describes from."""
         if self._catalogue is None:
             from qgis_sdk.processing.snapshot import core_catalogue
 
@@ -142,12 +97,22 @@ class FakeAlgorithms:
         return self.catalogue.providers
 
     def list(self, provider: str | None = None) -> tuple[AlgorithmInfo, ...]:
+        """Every algorithm the catalogue holds, optionally of one provider.
+
+        Args:
+            provider: The provider to narrow to, or ``None`` for all.
+        """
         self._scope.ensure_open()
         if provider is None:
             return self.catalogue.algorithms
         return self.catalogue.by_provider(provider)
 
     def describe(self, algorithm_id: str) -> AlgorithmInfo:
+        """The catalogue's description of one algorithm.
+
+        Args:
+            algorithm_id: The id to describe.
+        """
         self._scope.ensure_open()
         return self.catalogue.algorithm(algorithm_id)
 
@@ -156,7 +121,12 @@ class FakeAlgorithms:
         request: AlgorithmRun | TypedRun | str,
         params: Mapping[str, object] | None = None,
     ) -> RunResult:
-        """Validate like the host, record the run, answer from the script."""
+        """Validate like the host, record the run, answer from the script.
+
+        Args:
+            request: The request to run.
+            params: The parameter mapping, when ``request`` is an id.
+        """
         self._scope.ensure_open()
         run = coerce_run(request, params)
         info = self.describe(run.algorithm)
@@ -169,7 +139,12 @@ class FakeAlgorithms:
     def run_model(
         self, model: FileRef, params: Mapping[str, object] | None = None
     ) -> RunResult:
-        """Record the run and answer from the script, keyed by the ref's id."""
+        """Record the run and answer from the script, keyed by the ref's id.
+
+        Args:
+            model: The model ref to run.
+            params: The model's own parameters, by name.
+        """
         self._scope.ensure_open()
         if not isinstance(model, FileRef):
             raise QgisSdkAlgorithmRejectedError(
@@ -192,7 +167,11 @@ class FakeAlgorithms:
         return RunResult(algorithm=model.name, outputs=dict(answer))
 
     def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
-        """Submit the batch as one job through this backend's job service."""
+        """Submit the batch as one job through this backend's job service.
+
+        Args:
+            runs: The requests to run, in order.
+        """
         self._scope.ensure_open()
         return self._jobs.bind(batch_body(self)).delay(runs=batch_items(runs))
 
@@ -221,7 +200,11 @@ class FakeAlgorithms:
         return self._files
 
     def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
-        """Record the request and open the output declared for its type."""
+        """Record the request and open the output declared for its type.
+
+        Args:
+            request: The ``BufferRequest`` or ``CentroidRequest`` to run.
+        """
         self._scope.ensure_open()
         # The source has to be a layer this runtime owns, exactly as the native
         # adapter requires before it can hand the source to Processing.
@@ -317,19 +300,35 @@ class OtherKindLayers:
     """The four non-vector layer kinds, opened through one shared reader."""
 
     def open_mesh(self, source: Path) -> MeshLayerInfo:
-        """Return a new mesh layer for a declared mesh dataset."""
+        """Return a new mesh layer for a declared mesh dataset.
+
+        Args:
+            source: The mesh dataset to open.
+        """
         return self._open_kind(source, "mesh")  # type: ignore[return-value]
 
     def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
-        """Return a new point cloud layer for a declared point cloud dataset."""
+        """Return a new point cloud layer for a declared point cloud dataset.
+
+        Args:
+            source: The point cloud dataset to open.
+        """
         return self._open_kind(source, "point_cloud")  # type: ignore[return-value]
 
     def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
-        """Return a new vector tile layer for a declared tile source."""
+        """Return a new vector tile layer for a declared tile source.
+
+        Args:
+            source: The tile source to open.
+        """
         return self._open_kind(source, "vector_tile")  # type: ignore[return-value]
 
     def open_tiled_scene(self, source: Path) -> TiledSceneLayerInfo:
-        """Return a new tiled scene for a declared scene dataset."""
+        """Return a new tiled scene for a declared scene dataset.
+
+        Args:
+            source: The scene dataset to open.
+        """
         return self._open_kind(source, "tiled_scene")  # type: ignore[return-value]
 
     def _open_kind(self, source: Path, kind: str) -> LayerInfo:

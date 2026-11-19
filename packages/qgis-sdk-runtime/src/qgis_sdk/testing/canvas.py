@@ -116,6 +116,9 @@ class _FakeCanvasMixin1:
         box :meth:`select` recorded. Everything else refuses by name - the same
         refusal, in the same words, that the native adapter produces for a layer
         with no extent or nothing selected.
+
+        Args:
+            target: The layer, features or extent to move onto.
         """
         self._scope.ensure_open()
         landed = self._resolve(target)
@@ -129,6 +132,11 @@ class _FakeCanvasMixin1:
         self.refreshes += 1
 
     def apply_theme(self, name: str) -> MapThemes:
+        """Draw the canvas with one declared theme and report the result.
+
+        Args:
+            name: The theme to draw with.
+        """
         self._scope.ensure_open()
         if name not in self._theme_names:
             raise QgisSdkThemeNotFoundError(name)
@@ -141,7 +149,12 @@ class _FakeCanvasMixin1:
     def capture(
         self, shape: str, on_capture: Callable[[Geometry], None]
     ) -> Callable[[], None]:
-        """Start a capture session the test finishes with :meth:`draw`."""
+        """Start a capture session the test finishes with :meth:`draw`.
+
+        Args:
+            shape: What to draw: ``point``, ``line`` or ``polygon``.
+            on_capture: What each finished geometry is handed to.
+        """
         self._scope.ensure_open()
         _refuse_unknown_shape(shape)
         # One drawing at a time: a second capture replaces the first, exactly as
@@ -165,6 +178,11 @@ class _FakeCanvasMixin1:
     def watch_extent(
         self, on_extent: Callable[[CanvasExtent], None]
     ) -> Callable[[], None]:
+        """Call ``on_extent`` whenever the canvas moves, until cancelled.
+
+        Args:
+            on_extent: What each new extent is handed to.
+        """
         self._scope.ensure_open()
         subscription = _ExtentSubscription(on_extent=on_extent)
         self._subscriptions.append(subscription)
@@ -181,6 +199,9 @@ class _FakeCanvasMixin1:
 
         The geometry's type has to be the shape the session asked for: a polygon
         session finished with a point would be the fake disagreeing with itself.
+
+        Args:
+            geometry: The geometry the user drew.
         """
         self._scope.ensure_open()
         session = next(
@@ -204,7 +225,12 @@ class _FakeCanvasMixin1:
         session.on_capture(geometry)
 
     def select(self, layer_id: str, extent: CanvasExtent) -> None:
-        """Declare what is selected in one layer, and where that is."""
+        """Declare what is selected in one layer, and where that is.
+
+        Args:
+            layer_id: The layer the selection belongs to.
+            extent: The box the selection is made in.
+        """
         self._scope.ensure_open()
         self._selections[layer_id] = extent
 
@@ -214,6 +240,9 @@ class _FakeCanvasMixin1:
         A theme is project configuration rather than a canvas operation - the
         canvas only ever picks one - so the contract asks the backend for a
         theme instead of assuming one exists.
+
+        Args:
+            name: The theme the project is to hold.
         """
         self._scope.ensure_open()
         if name not in self._theme_names:
@@ -222,12 +251,20 @@ class _FakeCanvasMixin1:
 
 class _FakeCanvasMixin2:
     def clear_selection(self, layer_id: str) -> None:
-        """Declare that nothing is selected in one layer."""
+        """Declare that nothing is selected in one layer.
+
+        Args:
+            layer_id: The layer whose selection is cleared.
+        """
         self._scope.ensure_open()
         self._selections.pop(layer_id, None)
 
     def set_extent(self, extent: CanvasExtent) -> None:
-        """Move the canvas without a zoom, the way a pan does, and notify."""
+        """Move the canvas without a zoom, the way a pan does, and notify.
+
+        Args:
+            extent: The box the canvas is moved onto.
+        """
         self._scope.ensure_open()
         self._extent = extent
         self._notify(extent)
@@ -281,6 +318,12 @@ class FakeCanvas(_FakeCanvasMixin1, _FakeCanvasMixin2):
     """
 
     def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        """Build the canvas over one resource scope and the options the test passed.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            **options: The extent, layer extents, themes and active theme.
+        """
         values = _InitValues1(**options)
         self._scope = scope
         self._extent = values.extent

@@ -100,17 +100,32 @@ class _QgisSdkPluginMixin1:
         function's, snake_cased, exactly as a sequence entry of ``app.jobs``
         derives it. The function keeps its ``@job`` metadata - applied here
         when the author did not - so ``describe_job(add)`` works either way.
+
+        Args:
+            function: The job function, when used as ``@app.job`` bare.
+            key: The entry name to register it under.
+            id: The job id to declare, or ``None`` to derive one.
+            title: The job title to declare, or ``None`` to derive one.
         """
         if function is None:
             return lambda target: self.job(target, key=key, id=id, title=title)
         return register_declared_job(self, function, key, id, title)
 
     def surface(self, surface: type[S]) -> type[S]:
-        """Register a Dialog or Dock class without replacing it."""
+        """Register a Dialog or Dock class without replacing it.
+
+        Args:
+            surface: The Dialog or Dock class to register.
+        """
         self.add_surface(surface)
         return surface
 
     def add_surface(self, surface: type[Surface]) -> None:
+        """Register a Dialog or Dock class.
+
+        Args:
+            surface: The Dialog or Dock class to register.
+        """
         from qgis_sdk.ui.surfaces import is_surface_class
 
         if not is_surface_class(surface):
@@ -118,10 +133,19 @@ class _QgisSdkPluginMixin1:
         self._surfaces.append(surface)
 
     def add_provider(self, provider: Provider) -> None:
+        """Register a Processing provider.
+
+        Args:
+            provider: The Processing provider to register.
+        """
         self._providers.append(provider)
 
     def include(self, child: QgisSdkPlugin) -> None:
-        """Snapshot another plugin's declarations into this plugin atomically."""
+        """Snapshot another plugin's declarations into this plugin atomically.
+
+        Args:
+            child: The plugin to snapshot into this one.
+        """
         members = include_cycle_free(self, child)
         surfaces = validated_surfaces(self, child)
         providers = validated_providers(self, child)
@@ -158,22 +182,15 @@ class QgisSdkPlugin(_QgisSdkPluginMixin1, _QgisSdkPluginMixin2, ActionRegistry):
     """Collect functions explicitly and lower them to an SDK plugin class."""
 
     def __init__(self, *, id: str | None = None, title: str | None = None) -> None:
-        try:
-            module = sys._getframe(1).f_globals.get("__name__")
-        except (AttributeError, ValueError):  # pragma: no cover - no frame to read
-            module = None
-        if id is None:
-            if not isinstance(module, str) or module == "__main__":
-                raise QgisSdkDeclarationError(
-                    "cannot derive plugin id from the declaring module; pass id= explicitly"
-                )
-            id = module
-        if title is None:
-            if not isinstance(id, str):
-                raise QgisSdkDeclarationError("id and title must be strings")
-            parts = id.split(".")
-            name = parts[-2] if len(parts) > 1 and parts[-1] == "plugin" else parts[-1]
-            title = derive_title(name.replace("-", "_"))
+        """Collect a plugin's declarations explicitly, deriving id and title.
+
+        Args:
+            id: The plugin id, or ``None`` to derive it from the declaring module.
+            title: The plugin title, or ``None`` to derive it from the id.
+        """
+        module = _declaring_module()
+        id = _plugin_id(id, module)
+        title = _plugin_title(title, id)
         validate_metadata(id, title)
         super().__init__()
         self.id = id
@@ -184,6 +201,34 @@ class QgisSdkPlugin(_QgisSdkPluginMixin1, _QgisSdkPluginMixin2, ActionRegistry):
         self.module = module if isinstance(module, str) else None
         self._surfaces: list[type[Surface]] = []
         initial_plugin_fields(self)
+
+
+def _declaring_module() -> str | None:
+    try:
+        module = sys._getframe(2).f_globals.get("__name__")
+    except (AttributeError, ValueError):  # pragma: no cover - no frame to read
+        return None
+    return module if isinstance(module, str) else None
+
+
+def _plugin_id(id: str | None, module: str | None) -> str:
+    if id is not None:
+        return id
+    if not isinstance(module, str) or module == "__main__":
+        raise QgisSdkDeclarationError(
+            "cannot derive plugin id from the declaring module; pass id= explicitly"
+        )
+    return module
+
+
+def _plugin_title(title: str | None, id: str) -> str:
+    if title is not None:
+        return title
+    if not isinstance(id, str):
+        raise QgisSdkDeclarationError("id and title must be strings")
+    parts = id.split(".")
+    name = parts[-2] if len(parts) > 1 and parts[-1] == "plugin" else parts[-1]
+    return derive_title(name.replace("-", "_"))
 
 
 def _describe_function(function):

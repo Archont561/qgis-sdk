@@ -38,6 +38,10 @@ class _FakeFeaturesMixin1:
         A row's third item is one :class:`Geometry` or a mapping of encodings to
         geometries - ``{"wkt": ..., "geojson": ...}`` - which is how a test
         declares the encodings it will read back.
+
+        Args:
+            layer_id: The path the layer is opened by.
+            **options: The fields, rows, editability and atomicity to declare.
         """
         values = _DeclareValues1(**options)
         layer = FakeLayer(
@@ -54,7 +58,11 @@ class _FakeFeaturesMixin1:
         return layer
 
     def layer(self, layer_id: str) -> FakeLayer:
-        """Return the declared layer, or refuse by name."""
+        """Return the declared layer, or refuse by name.
+
+        Args:
+            layer_id: The layer the test declared.
+        """
         self._scope.ensure_open()
         layer = self._layers.get(layer_id)
         if layer is None:
@@ -64,7 +72,12 @@ class _FakeFeaturesMixin1:
     # -- reading ------------------------------------------------------------
 
     def page(self, layer_id: str, query: FeatureQuery) -> FeaturePage:
-        """Return one page ordered by feature id, filtered by the provider."""
+        """Return one page ordered by feature id, filtered by the provider.
+
+        Args:
+            layer_id: The layer to page through.
+            query: The filter, order, offset and limit to apply.
+        """
         layer = self.layer(layer_id)
         matching = [
             feature_id
@@ -89,24 +102,17 @@ class _FakeFeaturesMixin1:
     def feature(
         self, layer_id: str, feature_id: int, *, encoding: str = "wkb"
     ) -> Feature:
-        """Return one feature, or refuse by its id."""
+        """Return one feature, or refuse by its id.
+
+        Args:
+            layer_id: The layer to read from.
+            feature_id: The feature to read.
+            encoding: How the geometry comes back: ``wkb`` or ``wkt``.
+        """
         layer = self.layer(layer_id)
         if feature_id not in layer.rows:
             raise QgisSdkLayerNotFoundError(f"{layer_id}#{feature_id}")
         return self._feature(layer, feature_id, encoding, True)
-
-    def _literal(self, text: str, **context: Any) -> ExpressionOutcome:
-        """A literal as an outcome; one the subset cannot carry is a refusal.
-
-        Both callers of ``_literal_value`` answer the same way - a value when it
-        is one, a message when it is not - so the answer is written once.
-        """
-        try:
-            return ExpressionOutcome(
-                valid=True, value=self._literal_value(text, **context)
-            )
-        except QgisSdkUnsupportedCapabilityError as error:
-            return ExpressionOutcome(valid=False, message=str(error))
 
     def evaluate(
         self,
@@ -115,15 +121,17 @@ class _FakeFeaturesMixin1:
         layer_id: str | None = None,
         feature_id: int | None = None,
     ) -> ExpressionOutcome:
-        """Evaluate a comparison, a field name or a literal against one row."""
+        """Evaluate a comparison, a field name or a literal against one row.
+
+        Args:
+            text: The expression to evaluate.
+            layer_id: The layer whose fields it may read, if any.
+            feature_id: The feature to evaluate it against, if any.
+        """
         if layer_id is None:
             return self._literal(text)
         layer = self.layer(layer_id)
-        row: Mapping[str, Any] = {}
-        if feature_id is not None:
-            if feature_id not in layer.rows:
-                raise QgisSdkLayerNotFoundError(f"{layer_id}#{feature_id}")
-            row = layer.rows[feature_id]
+        row = _row_of(layer, layer_id, feature_id)
         try:
             parsed = ExpressionSubset.parse(text, layer.fields)
         except QgisSdkUnsupportedCapabilityError:
@@ -137,7 +145,12 @@ class _FakeFeaturesMixin1:
         return ExpressionOutcome(valid=True, value=parsed.matches(row))
 
     def check(self, text: str, *, layer_id: str | None = None) -> ExpressionCheck:
-        """Parse without running, reporting the columns the expression names."""
+        """Parse without running, reporting the columns the expression names.
+
+        Args:
+            text: The expression to parse.
+            layer_id: The layer whose fields it may reference, if any.
+        """
         fields: tuple[str, ...] = ()
         if layer_id is not None:
             fields = self.layer(layer_id).fields
@@ -164,6 +177,9 @@ class _FakeFeaturesMixin1:
         second one: the native adapter does the same, because two sessions
         committing one provider buffer is a race the caller cannot see (the
         layer, not the call, owns the buffer).
+
+        Args:
+            layer_id: The editable layer to open a session over.
         """
         layer = self.layer(layer_id)
         if not layer.editable:
@@ -185,41 +201,17 @@ class _FakeFeaturesMixin1:
         return session
 
     def session(self, session_id: str) -> FakeEditingSession:
-        """Return an open session, or refuse by id."""
+        """Return an open session, or refuse by id.
+
+        Args:
+            session_id: The id the session was opened under.
+        """
         session = self._sessions.get(session_id)
         if session is None:
             raise QgisSdkLayerNotFoundError(f"editing session {session_id!r}")
         return session
 
     # -- internals ----------------------------------------------------------
-
-    def _assign(self, layer_id: str) -> int:
-        feature_id = self._next_id[layer_id]
-        self._next_id[layer_id] = feature_id + 1
-        return feature_id
-
-    def _matches(self, layer: FakeLayer, feature_id: int, query: FeatureQuery) -> bool:
-        if query.ids is not None and feature_id not in query.ids:
-            return False
-        geometries = layer.geometries.get(feature_id) or {}
-        if query.bbox is not None:
-            # The fake only checks the point case, and only from WKT: a bbox
-            # over a real geometry is the provider's job, and guessing it here
-            # would let a test pass for a selection QGIS would answer
-            # differently.
-            point = geometries.get("wkt")
-            coordinates = point_coordinates(point) if point is not None else None
-            if coordinates is None:
-                return False
-            min_x, min_y, max_x, max_y = query.bbox
-            if not (
-                min_x <= coordinates[0] <= max_x and min_y <= coordinates[1] <= max_y
-            ):
-                return False
-        if query.expression is not None:
-            parsed = ExpressionSubset.parse(query.expression, layer.fields)
-            return parsed.matches(layer.rows[feature_id])
-        return True
 
 
 class _FakeFeaturesMixin2:
@@ -276,6 +268,47 @@ class _FakeFeaturesMixin2:
         self._sessions.clear()
         self._layers.clear()
 
+    def _literal(self, text: str, **context: Any) -> ExpressionOutcome:
+        """A literal as an outcome; one the subset cannot carry is a refusal.
+
+        Both callers of ``_literal_value`` answer the same way - a value when it
+        is one, a message when it is not - so the answer is written once.
+        """
+        try:
+            return ExpressionOutcome(
+                valid=True, value=self._literal_value(text, **context)
+            )
+        except QgisSdkUnsupportedCapabilityError as error:
+            return ExpressionOutcome(valid=False, message=str(error))
+
+    def _assign(self, layer_id: str) -> int:
+        feature_id = self._next_id[layer_id]
+        self._next_id[layer_id] = feature_id + 1
+        return feature_id
+
+    def _matches(self, layer: FakeLayer, feature_id: int, query: FeatureQuery) -> bool:
+        if query.ids is not None and feature_id not in query.ids:
+            return False
+        geometries = layer.geometries.get(feature_id) or {}
+        if query.bbox is not None:
+            # The fake only checks the point case, and only from WKT: a bbox
+            # over a real geometry is the provider's job, and guessing it here
+            # would let a test pass for a selection QGIS would answer
+            # differently.
+            point = geometries.get("wkt")
+            coordinates = point_coordinates(point) if point is not None else None
+            if coordinates is None:
+                return False
+            min_x, min_y, max_x, max_y = query.bbox
+            if not (
+                min_x <= coordinates[0] <= max_x and min_y <= coordinates[1] <= max_y
+            ):
+                return False
+        if query.expression is not None:
+            parsed = ExpressionSubset.parse(query.expression, layer.fields)
+            return parsed.matches(layer.rows[feature_id])
+        return True
+
 
 class FakeFeatures(_FakeFeaturesMixin1, _FakeFeaturesMixin2):
     """The ``Features`` protocol over :class:`FakeLayer` values.
@@ -286,6 +319,11 @@ class FakeFeatures(_FakeFeaturesMixin1, _FakeFeaturesMixin2):
     """
 
     def __init__(self, scope: ResourceScope) -> None:
+        """Build the fake over one resource scope.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+        """
         self._scope = scope
         self._layers: dict[str, FakeLayer] = {}
         self._sessions: dict[str, FakeEditingSession] = {}
@@ -307,3 +345,23 @@ class _DeclareValues1:
     rows: Iterable[tuple[int, Mapping[str, Any], Any]] = ()
     editable: bool = True
     atomic: bool = True
+
+
+def _row_of(
+    layer: FakeLayer, layer_id: str, feature_id: int | None
+) -> Mapping[str, Any]:
+    """The row an expression is evaluated against, or an empty one.
+
+    Args:
+        layer: The layer the expression reads.
+        layer_id: The layer's id, for the refusal to name.
+        feature_id: The feature to read, or ``None`` for no row.
+
+    Returns:
+        That feature's field values.
+    """
+    if feature_id is None:
+        return {}
+    if feature_id not in layer.rows:
+        raise QgisSdkLayerNotFoundError(f"{layer_id}#{feature_id}")
+    return layer.rows[feature_id]

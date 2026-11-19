@@ -106,7 +106,11 @@ def _wire_surface_facts1(ctx, disconnects, root, surface, unwire):
 
 
 def wires_of(cls: type) -> tuple[tuple[str, Wire], ...]:
-    """Every ``(method name, wire)`` a surface class declares, base classes first."""
+    """Every ``(method name, wire)`` a surface class declares, base classes first.
+
+    Args:
+        cls: The surface class to read.
+    """
     from qgis_sdk.declarations import WIRES_ATTRIBUTE
 
     found: list[tuple[str, Wire]] = []
@@ -131,15 +135,14 @@ def wire_surface(surface: Any, root: Any, ctx: UiContext) -> int:
     closes. A name no node carries is refused before anything connects.
     The behaviour mixins' ``_attach_behaviours`` runs last. Returns the
     number of ``@on``/``@subscribe`` connections made.
+
+    Args:
+        surface: The surface whose methods are wired.
+        root: What ``build()`` returned.
+        ctx: The context the connections belong to.
     """
     wires = wires_of(type(surface))
-    plan: list[Callable[[], Callable[[], None]]] = []
-    for method_name, wire in wires:
-        method = getattr(surface, method_name)
-        if wire.kind == "subscribe":
-            plan.append(subscription(ctx, wire, method))
-        else:
-            plan.append(connection(root, wire, method, surface))
+    plan = _plan(surface, root, ctx, wires)
     disconnects: list[Callable[[], None]] = []
     for connect in plan:
         disconnects.append(connect())
@@ -151,9 +154,29 @@ def wire_surface(surface: Any, root: Any, ctx: UiContext) -> int:
     return _wire_surface_facts1(ctx, disconnects, root, surface, unwire)
 
 
+def _plan(
+    surface: Any, root: Any, ctx: UiContext, wires: tuple[tuple[str, Wire], ...]
+) -> list[Callable[[], Callable[[], None]]]:
+    plan: list[Callable[[], Callable[[], None]]] = []
+    for method_name, wire in wires:
+        method = getattr(surface, method_name)
+        if wire.kind == "subscribe":
+            plan.append(subscription(ctx, wire, method))
+        else:
+            plan.append(connection(root, wire, method, surface))
+    return plan
+
+
 def subscription(
     ctx: UiContext, wire: Wire, method: Callable[..., Any]
 ) -> Callable[[], Callable[[], None]]:
+    """The connector that opens one ``@subscribe`` wire.
+
+    Args:
+        ctx: The context the subscription belongs to.
+        wire: The wire to open.
+        method: The method each event is handed to.
+    """
     if not ctx.has("streams"):
         raise QgisSdkUiError(
             f"@subscribe({wire.target!r}) needs ctx.streams, which this host "
@@ -177,6 +200,14 @@ def subscription(
 def connection(
     root: Any, wire: Wire, method: Callable[..., Any], surface: Any
 ) -> Callable[[], Callable[[], None]]:
+    """The connector that connects one ``@on`` wire.
+
+    Args:
+        root: What ``build()`` returned.
+        wire: The wire to connect.
+        method: The method each signal calls.
+        surface: The surface the method belongs to.
+    """
     _s = _CcState(root=root, wire=wire, method=method, surface=surface)
     for _p in (
         _cc_connection_p1,

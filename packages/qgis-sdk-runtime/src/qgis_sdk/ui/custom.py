@@ -28,6 +28,11 @@ class Custom(Component):
 
     ``widget`` is a callable (``factory(parent)`` or ``factory()``) or a
     widget instance. ``objectName`` is ``custom/<name>``.
+
+    Args:
+        name: The node's name in the surface.
+        widget: The adapter's widget for it.
+        label: The text shown for it, or ``None`` for none.
     """
 
     prefix = "custom"
@@ -58,7 +63,11 @@ class Custom(Component):
         return callable(self._source) and not _looks_like_widget(self._source)
 
     def resolve(self, parent: Any = None) -> Any:
-        """Produce the widget: call the factory once, or return the instance."""
+        """Produce the widget: call the factory once, or return the instance.
+
+        Args:
+            parent: The widget to parent the built widget to, or ``None``.
+        """
         if self._built is not None:
             return self._built
         source = self._source

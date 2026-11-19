@@ -38,12 +38,20 @@ TEST_TARGET_ENV: Final = "QGIS_SDK_TEST_TARGET"
 
 
 def dev_request(environ: os._Environ[str] | dict[str, str] | None = None) -> str | None:
-    """The dev session's request file, or ``None`` outside ``qgis-sdk dev``."""
+    """The dev session's request file, or ``None`` outside ``qgis-sdk dev``.
+
+    Args:
+        environ: The environment to read, or ``None`` for ``os.environ``.
+    """
     source = os.environ if environ is None else environ
     return source.get(DEV_REQUEST_ENV) or None
 
 
 def dev_server(environ: os._Environ[str] | dict[str, str] | None = None) -> str | None:
-    """The dev-server origin, or ``None`` outside ``qgis-sdk dev``."""
+    """The dev-server origin, or ``None`` outside ``qgis-sdk dev``.
+
+    Args:
+        environ: The environment to read, or ``None`` for ``os.environ``.
+    """
     source = os.environ if environ is None else environ
     return source.get(DEV_SERVER_ENV) or None

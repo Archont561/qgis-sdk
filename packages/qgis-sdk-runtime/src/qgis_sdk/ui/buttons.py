@@ -33,6 +33,14 @@ class RunButton(Button):
     ``values()``), a mapping or a zero-argument callable. ``progress`` is a
     :class:`JobProgress` to bind the returned handle to. ``last`` is what the
     latest call returned; ``finished(listener)`` hears it.
+
+    Args:
+        name: The button's name in the surface.
+        action_id: The action a press runs.
+        values: Where the arguments come from: a form, a mapping or a callable.
+        progress: The ``JobProgress`` a returned handle is bound to.
+        text: The text on the button.
+        label: The text shown beside it, or ``None`` for none.
     """
 
     _CC_SPECS_init_1 = (
@@ -76,7 +84,11 @@ class RunButton(Button):
         return self._last
 
     def finished(self, listener: Callable[[object], None]) -> Callable[[], None]:
-        """Call ``listener(result)`` after each call returned; returns the unsubscribe."""
+        """Call ``listener(result)`` after each call returned; returns the unsubscribe.
+
+        Args:
+            listener: What each call's result is handed to.
+        """
         self._finished.append(listener)
 
         def unsubscribe() -> None:
@@ -136,6 +148,12 @@ class AcceptCancel(Component):
     ``AcceptCancel`` mixin wires ``on_accept`` and closing); the component
     only reports the press. ``objectName`` is ``buttons/<name>`` with the two
     buttons at ``buttons/<name>/accept`` and ``buttons/<name>/cancel``.
+
+    Args:
+        name: The row's name in the surface.
+        accept_text: The Accept button's caption.
+        cancel_text: The Cancel button's caption.
+        label: The text shown for it, or ``None`` for none.
     """
 
     prefix = "buttons"
@@ -155,11 +173,19 @@ class AcceptCancel(Component):
         self._cancelled: list[Callable[[], None]] = []
 
     def accepted(self, listener: Callable[[], None]) -> Callable[[], None]:
-        """Call ``listener()`` on Accept; returns the unsubscribe."""
+        """Call ``listener()`` on Accept; returns the unsubscribe.
+
+        Args:
+            listener: What each Accept press is handed to.
+        """
         return _subscribe(self._accepted, listener)
 
     def cancelled(self, listener: Callable[[], None]) -> Callable[[], None]:
-        """Call ``listener()`` on Cancel; returns the unsubscribe."""
+        """Call ``listener()`` on Cancel; returns the unsubscribe.
+
+        Args:
+            listener: What each Cancel press is handed to.
+        """
         return _subscribe(self._cancelled, listener)
 
     def accept(self) -> None:

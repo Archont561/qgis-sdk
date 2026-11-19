@@ -41,6 +41,15 @@ class Number(Input):
     An integral range (or ``integer=True``) stores an ``int`` and renders a
     spin box; otherwise the value is a ``float``. ``step`` is the spin box
     increment.
+
+    Args:
+        name: The handler parameter this input fills.
+        range: ``(low, high)`` bounds, or ``None`` for unbounded.
+        step: The spin box increment.
+        integer: Whether the value is an ``int``.
+        label: The text shown for it, or ``None`` for none.
+        value: The value it starts with.
+        required: Whether a form refuses to submit it empty.
     """
 
     _CC_SPECS_init_1 = (
@@ -108,7 +117,15 @@ class Distance(Input):
 
 
 class Choice(Input):
-    """One of ``options``; the value is the chosen string, the first by default."""
+    """One of ``options``; the value is the chosen string, the first by default.
+
+    Args:
+        name: The handler parameter this input fills.
+        options: The strings to choose from.
+        label: The text shown for it, or ``None`` for none.
+        value: The value it starts with.
+        required: Whether a form refuses to submit it empty.
+    """
 
     kind = "choice"
 
@@ -152,7 +169,12 @@ class Choice(Input):
 
 
 class Colour(Input):
-    """A colour as ``#rrggbb`` or, with ``alpha`` (the default), ``#rrggbbaa``."""
+    """A colour as ``#rrggbb`` or, with ``alpha`` (the default), ``#rrggbbaa``.
+
+    Args:
+        name: The handler parameter this input fills.
+        **options: ``alpha``, ``label``, ``value`` and ``required``.
+    """
 
     kind = "colour"
 

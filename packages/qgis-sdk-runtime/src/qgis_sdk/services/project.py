@@ -63,11 +63,20 @@ class _ProjectRecords(Protocol):
         ...
 
     def set_variable(self, name: str, value: str) -> tuple[ProjectEntry, ...]:
-        """Set one project variable and return the variables it produced."""
+        """Set one project variable and return the variables it produced.
+
+        Args:
+            name: The variable name.
+            value: What it evaluates to.
+        """
         ...
 
     def unset_variable(self, name: str) -> tuple[ProjectEntry, ...]:
-        """Remove one project variable; removing an absent one is a no-op."""
+        """Remove one project variable; removing an absent one is a no-op.
+
+        Args:
+            name: The variable to remove.
+        """
         ...
 
     def custom_properties(self) -> tuple[ProjectEntry, ...]:
@@ -75,11 +84,20 @@ class _ProjectRecords(Protocol):
         ...
 
     def set_custom_property(self, name: str, value: str) -> tuple[ProjectEntry, ...]:
-        """Set one custom property and return the properties it produced."""
+        """Set one custom property and return the properties it produced.
+
+        Args:
+            name: The property name.
+            value: What to store under it.
+        """
         ...
 
     def unset_custom_property(self, name: str) -> tuple[ProjectEntry, ...]:
-        """Remove one custom property; removing an absent one is a no-op."""
+        """Remove one custom property; removing an absent one is a no-op.
+
+        Args:
+            name: The property to remove.
+        """
         ...
 
     def bookmarks(self) -> tuple[Bookmark, ...]:
@@ -91,11 +109,19 @@ class _ProjectRecords(Protocol):
 
         A bookmark of the same name is replaced rather than duplicated: the name
         is the identity a page jumps by.
+
+        Args:
+            name: The bookmark's name.
+            extent: The map extent it jumps to.
         """
         ...
 
     def remove_bookmark(self, name: str) -> tuple[Bookmark, ...]:
-        """Remove one bookmark by name; an unknown name raises."""
+        """Remove one bookmark by name; an unknown name raises.
+
+        Args:
+            name: The bookmark to remove.
+        """
         ...
 
     def bookmark(self, name: str) -> Bookmark:
@@ -106,6 +132,9 @@ class _ProjectRecords(Protocol):
         authority that moves the view, and a host with no canvas then has no
         bookmark call that silently does nothing. An unknown name raises
         ``QgisSdkBookmarkNotFoundError``.
+
+        Args:
+            name: The bookmark to read.
         """
         ...
 
@@ -114,6 +143,9 @@ class _ProjectRecords(Protocol):
 
         Destructive: everything the project held is gone. The tree the file
         produced is the answer, so a caller does not have to ask again.
+
+        Args:
+            source: The project file to read.
         """
         ...
 
@@ -125,6 +157,10 @@ class _ProjectRecords(Protocol):
         untouched. The project's own file is *not* remembered by this call:
         writing a copy does not make it the file :meth:`save` writes, which is
         the file the project was opened from.
+
+        Args:
+            destination: The file to write.
+            overwrite: Whether an existing file may be replaced.
         """
         ...
 
@@ -140,7 +176,11 @@ class _ProjectRecords(Protocol):
         ...
 
     def watch_changes(self, on_change: ProjectChanged) -> ProjectWatchCanceller:
-        """Call ``on_change`` whenever the project changes, until cancelled."""
+        """Call ``on_change`` whenever the project changes, until cancelled.
+
+        Args:
+            on_change: What each change is reported to.
+        """
         ...
 
 
@@ -164,6 +204,10 @@ class Project(_ProjectRecords, Protocol):
         Adding the same layer twice leaves one entry (and moves it when
         ``group`` names a different group). An unknown group id is refused by
         name - ``QgisSdkLayerNotFoundError`` - and nothing is added.
+
+        Args:
+            layer_id: The id the layer service knows it by.
+            group: The group node to add it into, or ``None`` for the root.
         """
         ...
 
@@ -173,6 +217,9 @@ class Project(_ProjectRecords, Protocol):
         Destructive: the project forgets the layer, so the *layer service* still
         owns it and ``Layers.get`` keeps answering. A layer the project does not
         hold is refused by name.
+
+        Args:
+            layer_id: The layer to remove from the tree.
         """
         ...
 
@@ -184,6 +231,11 @@ class Project(_ProjectRecords, Protocol):
         ``index`` is the position among the destination group's children; left
         out, the layer goes last. An index past the end is refused rather than
         clamped, because a clamp would silently place a layer somewhere else.
+
+        Args:
+            layer_id: The layer to move.
+            group: The group to move it into, or ``None`` to keep the current.
+            index: The position within that group, or ``None`` for the end.
         """
         ...
 
@@ -192,6 +244,10 @@ class Project(_ProjectRecords, Protocol):
 
         The node's own visibility, not its effective one: hiding a group hides
         what it holds without rewriting every child.
+
+        Args:
+            node_id: The layer id or group id whose own visibility to set.
+            visible: Whether it is shown.
         """
         ...
 
@@ -209,5 +265,8 @@ class Project(_ProjectRecords, Protocol):
         An identifier the host cannot resolve is refused with
         ``QgisSdkUnsupportedCapabilityError`` naming it; the project keeps its
         previous CRS.
+
+        Args:
+            auth_id: The authority id to set, such as ``"EPSG:3857"``.
         """
         ...

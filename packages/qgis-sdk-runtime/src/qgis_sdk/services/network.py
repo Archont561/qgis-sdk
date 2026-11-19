@@ -74,6 +74,13 @@ class NetworkTransport(Protocol):
 
         Returns a callable that cancels the request; a cancelled request is
         delivered as ``QgisSdkRequestCancelledError`` or not at all.
+
+        Args:
+            request: The validated request to perform.
+            deliver: What the one outcome is reported to, on the driving thread.
+
+        Returns:
+            The callable that cancels it.
         """
         ...
 
@@ -82,6 +89,9 @@ class NetworkTransport(Protocol):
 
         Raises ``QgisSdkBlockingOnGuiThreadError`` when the calling thread is
         the one a GUI depends on.
+
+        Args:
+            request: The validated request to perform.
         """
         ...
 
@@ -89,13 +99,35 @@ class NetworkTransport(Protocol):
 class BlockingNetwork(Protocol):
     """The explicit blocking form; only for threads that may wait."""
 
-    def get(self, url: str, **options: Unpack[RequestOptions]) -> Response: ...
+    def get(self, url: str, **options: Unpack[RequestOptions]) -> Response:
+        """Perform a ``GET`` and wait for it.
 
-    def post(self, url: str, **options: Unpack[RequestOptions]) -> Response: ...
+        Args:
+            url: The absolute URL to request.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
+
+    def post(self, url: str, **options: Unpack[RequestOptions]) -> Response:
+        """Perform a ``POST`` and wait for it.
+
+        Args:
+            url: The absolute URL to request.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
 
     def request(
         self, method: str, url: str, **options: Unpack[RequestOptions]
-    ) -> Response: ...
+    ) -> Response:
+        """Perform any method and wait for it.
+
+        Args:
+            method: The HTTP method to use.
+            url: The absolute URL to request.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
 
 
 class Network(Protocol):
@@ -107,19 +139,44 @@ class Network(Protocol):
     with other defaults and never mutates this one.
     """
 
-    def get(
-        self, url: str, **options: Unpack[RequestOptions]
-    ) -> Awaitable[Response]: ...
+    def get(self, url: str, **options: Unpack[RequestOptions]) -> Awaitable[Response]:
+        """Await one ``GET``.
 
-    def post(
-        self, url: str, **options: Unpack[RequestOptions]
-    ) -> Awaitable[Response]: ...
+        Args:
+            url: The URL to request, resolved against the base URL.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
+
+    def post(self, url: str, **options: Unpack[RequestOptions]) -> Awaitable[Response]:
+        """Await one ``POST``.
+
+        Args:
+            url: The URL to request, resolved against the base URL.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
 
     def request(
         self, method: str, url: str, **options: Unpack[RequestOptions]
-    ) -> Awaitable[Response]: ...
+    ) -> Awaitable[Response]:
+        """Await one request of any method.
 
-    def configure(self, **options: Unpack[ConfigureOptions]) -> Network: ...
+        Args:
+            method: The HTTP method to use.
+            url: The URL to request, resolved against the base URL.
+            **options: ``params``, ``json``, ``data``, ``headers``, ``timeout``.
+        """
+        ...
+
+    def configure(self, **options: Unpack[ConfigureOptions]) -> Network:
+        """Derive a client with other defaults; this one is left untouched.
+
+        Args:
+            **options: ``base_url``, ``headers``, ``timeout``, ``auth_config``,
+                ``max_redirects``, ``max_body_bytes``.
+        """
+        ...
 
     @property
     def blocking(self) -> BlockingNetwork:

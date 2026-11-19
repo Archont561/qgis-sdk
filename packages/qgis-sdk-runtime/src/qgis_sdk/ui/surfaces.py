@@ -73,6 +73,14 @@ class Surface:
     The host assigns ``ctx`` and ``initial`` on the instance before calling
     ``build()``, so a surface reads ``self.ctx.actions``, ``self.ctx.view``
     and ``self.ctx.notifications`` from the first line of ``build()`` on.
+
+    Attributes:
+        kind: What the surface is: ``dialog`` or ``dock``.
+        title: The window title.
+        id: The runtime-owned id the view is registered under.
+        ui: The UI context the surface's components attach to.
+        ctx: The plugin context the surface was built with.
+        initial: What the instance was handed before ``build``.
     """
 
     kind: ClassVar[SurfaceKind]
@@ -124,7 +132,11 @@ attach_describe(Surface)
 
 
 class Dialog(Surface):
-    """A window opened fresh every time: by a binding or by ``ctx.ui.open``."""
+    """A window opened fresh every time: by a binding or by ``ctx.ui.open``.
+
+    Attributes:
+        modal: Whether the window blocks the one that opened it.
+    """
 
     kind: ClassVar[SurfaceKind] = "dialog"
     #: Block the rest of QGIS while open; off by default (decision-55).
@@ -136,6 +148,9 @@ class Dock(Surface):
 
     ``class LayerPanel(Dock, area="left")`` picks the side; ``right`` is the
     default and an unknown name is refused when the class is created.
+
+    Attributes:
+        area: Where the dock sits in the main window.
     """
 
     kind: ClassVar[SurfaceKind] = "dock"
@@ -155,7 +170,16 @@ class Dock(Surface):
 
 @dataclass(frozen=True, slots=True)
 class SurfaceDescription:
-    """What a host needs to place one surface; never part of bridge JSON."""
+    """What a host needs to place one surface; never part of bridge JSON.
+
+    Attributes:
+        id: The runtime-owned id of the surface.
+        title: The window title.
+        kind: What the surface is: ``dialog`` or ``dock``.
+        area: Where a dock sits, and ``None`` for a dialog.
+        modal: Whether a dialog blocks, and ``None`` for a dock.
+        bindings: What the surface's signals are wired to.
+    """
 
     id: str
     title: str
@@ -166,7 +190,12 @@ class SurfaceDescription:
 
 
 def load_ui(cls: type, parent: Any = None) -> Any:
-    """Load the Designer file ``cls.ui`` names into a widget; needs QGIS."""
+    """Load the Designer file ``cls.ui`` names into a widget; needs QGIS.
+
+    Args:
+        cls: The surface class whose ``ui`` is loaded.
+        parent: The widget to parent the loaded widget to, or ``None``.
+    """
     import importlib
 
     from .components import NATIVE_CATALOGUE
@@ -192,6 +221,9 @@ def is_surface_class(value: object) -> bool:
     subclass the author already has - that declares ``kind = "dialog"`` or
     ``kind = "dock"`` and takes the ``UiContext`` as its one constructor
     argument; it is accepted without inheriting from the SDK.
+
+    Args:
+        value: The object to test.
     """
     if not isinstance(value, type):
         return False
@@ -201,7 +233,11 @@ def is_surface_class(value: object) -> bool:
 
 
 def is_widget_surface(value: object) -> bool:
-    """Whether ``value`` is a surface in the widget form (``kind`` declared, no base)."""
+    """Whether ``value`` is a surface in the widget form (``kind`` declared, no base).
+
+    Args:
+        value: The object to test.
+    """
     return (
         isinstance(value, type)
         and not issubclass(value, Surface)
@@ -210,12 +246,20 @@ def is_widget_surface(value: object) -> bool:
 
 
 def is_dock(cls: type) -> bool:
-    """Whether a surface class is a dock, whichever form it takes."""
+    """Whether a surface class is a dock, whichever form it takes.
+
+    Args:
+        cls: The surface class to test.
+    """
     return describe_surface(cls).kind == "dock"
 
 
 def describe_surface(cls: type) -> SurfaceDescription:
-    """Read a surface class's metadata without constructing it."""
+    """Read a surface class's metadata without constructing it.
+
+    Args:
+        cls: The surface class to read.
+    """
     if not is_surface_class(cls):
         name = getattr(cls, "__name__", repr(cls))
         raise QgisSdkDeclarationError(
@@ -232,6 +276,11 @@ def describe_surface(cls: type) -> SurfaceDescription:
     surface_id = given_id if given_id is not None else derive_id(cls.__name__)
     title = given_title if given_title is not None else derive_title(cls.__name__)
     kind: SurfaceKind = cls.kind
+    area, modal = _area_and_modal(cls, kind)
+    return SurfaceDescription(surface_id, title, kind, area, modal, bindings_of(cls))
+
+
+def _area_and_modal(cls: type, kind: SurfaceKind) -> tuple[str | None, bool]:
     if kind == "dock":
         area = str(getattr(cls, "area", "right"))
         if area not in DOCK_AREAS:
@@ -239,11 +288,8 @@ def describe_surface(cls: type) -> SurfaceDescription:
                 f"{cls.__name__}: dock area must be one of "
                 f"{', '.join(DOCK_AREAS)}, got {area!r}"
             )
-        modal = False
-    else:
-        area = None
-        modal = bool(getattr(cls, "modal", False))
-    return SurfaceDescription(surface_id, title, kind, area, modal, bindings_of(cls))
+        return area, False
+    return None, bool(getattr(cls, "modal", False))
 
 
 def _inherited(cls: type, attribute: str) -> str | None:

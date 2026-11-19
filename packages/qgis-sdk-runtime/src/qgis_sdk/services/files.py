@@ -27,13 +27,29 @@ class Files(Protocol):
         operations: Iterable[str] = ("read",),
         overwrite: bool = False,
     ) -> FileRef:
-        """Mint a ref for one file: read needs it to exist, write its parent."""
+        """Mint a ref for one file: read needs it to exist, write its parent.
+
+        Args:
+            path: The file the ref stands for.
+            operations: What the ref may be used for: ``read``, ``write``,
+                ``create`` or ``delete``.
+            overwrite: Whether a write may replace an existing file.
+        """
         ...
 
     def grant_directory(self, path: str | PathLike[str]) -> FileRef:
-        """Mint a read ref for an existing directory."""
+        """Mint a read ref for an existing directory.
+
+        Args:
+            path: The directory the ref stands for.
+        """
         ...
 
     def resolve(self, ref: FileRef | Any, *, operation: str = "read") -> Path:
-        """Return the canonical path behind ``ref`` for ``operation``, or refuse."""
+        """Return the canonical path behind ``ref`` for ``operation``, or refuse.
+
+        Args:
+            ref: The ref a service was handed.
+            operation: What the caller intends to do with the path.
+        """
         ...

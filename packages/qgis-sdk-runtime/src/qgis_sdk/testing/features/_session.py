@@ -20,7 +20,20 @@ __all__ = ["FakeEditingSession"]
 
 @dataclass
 class FakeEditingSession:
-    """A buffered edit session over one :class:`FakeLayer`."""
+    """A buffered edit session over one :class:`FakeLayer`.
+
+    Attributes:
+        session_id: The id the session is looked up by.
+        layer_id: The layer the session edits.
+        layer: The fake layer the edits are written to.
+        assign: How the session's id is assigned to new features.
+        on_close: What closing the session runs, if a test set one.
+        added: The features buffered to be added.
+        updated: The changes buffered for existing features.
+        deleted: The feature ids buffered for deletion.
+        closed: Whether the session was closed.
+        failure: What the next commit raises, when a test scripts one.
+    """
 
     session_id: str
     layer_id: str
@@ -50,6 +63,12 @@ class FakeEditingSession:
     def add(
         self, attributes: dict[str, object], geometry: Geometry | None = None
     ) -> int:
+        """Buffer one new feature and answer its id.
+
+        Args:
+            attributes: The field values, by field name.
+            geometry: The shape to add it with, or ``None`` for a bare row.
+        """
         self._ensure_open()
         unknown = set(attributes) - set(self.layer.fields)
         if unknown:
@@ -66,6 +85,13 @@ class FakeEditingSession:
         attributes: dict[str, object] | None = None,
         geometry: Geometry | None = None,
     ) -> None:
+        """Buffer a change to one existing feature.
+
+        Args:
+            feature_id: The feature to change.
+            attributes: The field values to replace, or ``None`` for none.
+            geometry: The shape to replace it with, or ``None`` to keep the current one.
+        """
         self._ensure_open()
         self._require(feature_id)
         merged_attributes, merged_geometry = self.updated.get(feature_id, ({}, None))
@@ -81,12 +107,21 @@ class FakeEditingSession:
         )
 
     def delete(self, feature_id: int) -> None:
+        """Buffer the deletion of one feature.
+
+        Args:
+            feature_id: The feature to remove on commit.
+        """
         self._ensure_open()
         self._require(feature_id)
         self.deleted.add(feature_id)
 
     def fail_next_commit(self, message: str) -> None:
-        """Make the next commit raise ``message``, as a refusing provider does."""
+        """Make the next commit raise ``message``, as a refusing provider does.
+
+        Args:
+            message: What the next commit raises.
+        """
         self.failure = message
 
     def commit(self) -> EditOutcome:

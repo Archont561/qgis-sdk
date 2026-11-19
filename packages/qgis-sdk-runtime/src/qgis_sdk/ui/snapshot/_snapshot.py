@@ -103,6 +103,9 @@ def ui_snapshot(target: object) -> dict[str, Any]:
     is snapshotted through it. Anything with ``objectName`` and ``children``
     is walked as a Qt widget tree: unnamed widgets are transparent, named
     ones become nodes.
+
+    Args:
+        target: The component, built surface or Qt widget to snapshot.
     """
     if isinstance(target, Component):
         return target.snapshot()
@@ -118,7 +121,11 @@ def ui_snapshot(target: object) -> dict[str, Any]:
 
 
 def snapshot_names(node: dict[str, Any]) -> tuple[str, ...]:
-    """Every ``objectName`` in ``node`` and below, depth first."""
+    """Every ``objectName`` in ``node`` and below, depth first.
+
+    Args:
+        node: The snapshot node to walk.
+    """
     return tuple(_names(node))
 
 
@@ -131,6 +138,11 @@ def _names(node: dict[str, Any]) -> Iterator[str]:
 
 
 def is_qobject(value: object) -> bool:
+    """Whether ``value`` walks like a Qt object.
+
+    Args:
+        value: The object to test.
+    """
     return callable(getattr(value, "objectName", None)) and callable(
         getattr(value, "children", None)
     )
@@ -164,6 +176,11 @@ def _named_descendants(widget: Any) -> Iterator[dict[str, Any]]:
 
 
 def is_widget(value: Any) -> bool:
+    """Whether ``value`` is a Qt widget.
+
+    Args:
+        value: The object to test.
+    """
     probe = getattr(value, "isWidgetType", None)
     return bool(probe()) if callable(probe) else True
 
@@ -178,6 +195,10 @@ def surface_snapshot(
     names the fields the surface was built from, which links a ``form/<field>``
     node back to its schema entry. ``screenshot`` is the digest of the PNG the
     caller captured beside this tree.
+
+    Args:
+        surface: The opened surface widget.
+        **options: ``surface_id``, ``kind``, ``title``, ``declared``, ``screenshot``, ``scale`` and ``palette``.
     """
     values = SurfaceValues1(**options)
     if not is_qobject(surface):
@@ -187,16 +208,23 @@ def surface_snapshot(
     fields = tuple(values.declared)
     labels = label_map(surface)
     nodes, findings = surface_nodes(surface, surface, labels, fields, parent="")
-    return surface_snapshot_facts112345678(
+    return _snapshot_of(
+        values,
         findings=findings,
-        kind=values.kind,
         nodes=nodes,
+        surface=surface,
+    )
+
+
+def _snapshot_of(values: SurfaceValues1, **facts: Any) -> dict[str, Any]:
+    return surface_snapshot_facts112345678(
+        kind=values.kind,
         palette=values.palette,
         scale=values.scale,
         screenshot=values.screenshot,
-        surface=surface,
         surface_id=values.surface_id,
         title=values.title,
+        **facts,
     )
 
 
@@ -205,6 +233,9 @@ def canonical_json(payload: Mapping[str, Any]) -> str:
 
     Two captures of the same surface render byte-identically, which is what an
     approved snapshot compares.
+
+    Args:
+        payload: The snapshot to render.
     """
     rendered = json.dumps(
         payload,

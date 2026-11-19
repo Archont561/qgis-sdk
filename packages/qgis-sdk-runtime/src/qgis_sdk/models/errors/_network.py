@@ -2,7 +2,14 @@ from ._jobs import QgisSdkNetworkError
 
 
 class QgisSdkAuthenticationError(QgisSdkNetworkError):
-    """The server or proxy demanded credentials the request could not supply."""
+    """The server or proxy demanded credentials the request could not supply.
+
+    Args:
+        message: What the server or proxy demanded.
+        status_code: The status it answered with, when it answered at all.
+        method: The HTTP method of the refused request.
+        url: The URL it was sent to.
+    """
 
     code = "authentication_failed"
 
@@ -25,7 +32,13 @@ class QgisSdkRedirectError(QgisSdkNetworkError):
 
 
 class QgisSdkResponseTooLargeError(QgisSdkNetworkError):
-    """The body exceeds the buffered ceiling; it was not read into memory."""
+    """The body exceeds the buffered ceiling; it was not read into memory.
+
+    Args:
+        limit: The buffered ceiling in bytes.
+        method: The HTTP method of the request.
+        url: The URL the oversized body came from.
+    """
 
     code = "response_too_large"
 
@@ -39,7 +52,14 @@ class QgisSdkResponseTooLargeError(QgisSdkNetworkError):
 
 
 class QgisSdkHttpStatusError(QgisSdkNetworkError):
-    """``raise_for_status`` found a 4xx or 5xx; the response stays attached."""
+    """``raise_for_status`` found a 4xx or 5xx; the response stays attached.
+
+    Args:
+        status_code: The HTTP status the server answered with.
+        reason: The reason phrase that came with it.
+        method: The HTTP method of the request.
+        url: The URL it was sent to.
+    """
 
     code = "http_status"
 
@@ -58,7 +78,12 @@ class QgisSdkDecodeError(QgisSdkNetworkError):
 
 
 class QgisSdkBlockingOnGuiThreadError(QgisSdkNetworkError):
-    """A blocking request was attempted on the GUI thread, which would freeze it."""
+    """A blocking request was attempted on the GUI thread, which would freeze it.
+
+    Args:
+        method: The HTTP method that was about to block.
+        url: The URL it was about to block on.
+    """
 
     code = "blocking_on_gui_thread"
 

@@ -11,7 +11,12 @@ from ._fields import DETAIL_KEYS, field_facts_full, widget_for
 def _details_of(
     concrete: Mapping[str, Any], intent: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """The declared details a field keeps, lists frozen to tuples."""
+    """The declared details a field keeps, lists frozen to tuples.
+
+    Args:
+        concrete: The field's concrete schema.
+        intent: The marker's intent schema.
+    """
     return {
         key: tuple(value) if isinstance(value, list) else value
         for key, value in {**concrete, **intent}.items()
@@ -20,7 +25,12 @@ def _details_of(
 
 
 def _choices_of(widget: str, concrete: Mapping[str, Any]) -> tuple[Any, ...]:
-    """An enum widget's choices; every other widget has none."""
+    """An enum widget's choices; every other widget has none.
+
+    Args:
+        widget: The widget family chosen for the field.
+        concrete: The field's concrete schema.
+    """
     return tuple(concrete["enum"]) if widget == "choice" else ()
 
 

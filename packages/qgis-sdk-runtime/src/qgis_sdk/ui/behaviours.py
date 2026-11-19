@@ -75,7 +75,12 @@ class RunsJobs(_Behaviour):
     progress_attribute: ClassVar[str] = "progress"
 
     def run(self, action_id: str, /, **values: object) -> Any:
-        """Call ``action_id`` through ``ctx.actions``; return its result or handle."""
+        """Call ``action_id`` through ``ctx.actions``; return its result or handle.
+
+        Args:
+            action_id: The action to run.
+            **values: The arguments, by parameter name.
+        """
         result = self.ctx.actions.call(action_id, **values)
         if _is_job_handle(result):
             self._track(result)
@@ -115,7 +120,13 @@ class SubscribesStreams(_Behaviour):
     def subscribe(
         self, stream: str, callback: Callable[[StreamEvent], None], /, **request: object
     ) -> ViewSubscription:
-        """Subscribe for this window's lifetime; returns the subscription."""
+        """Subscribe for this window's lifetime; returns the subscription.
+
+        Args:
+            stream: The stream name to open.
+            callback: What each event is handed to.
+            **request: The arguments the stream is opened with.
+        """
         subscription = self.ctx.on(stream, callback, **request)
         kept = list(getattr(self, "_qgis_sdk_subscriptions", ()))
         kept.append(subscription)

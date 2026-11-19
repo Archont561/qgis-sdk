@@ -1,59 +1,56 @@
 """Module errors."""
 
-from __future__ import annotations
-
-from ._base import (
-    QgisSdkAuthConfigNotFoundError,
-    QgisSdkBookmarkNotFoundError,
-    QgisSdkConnectionItemNotFoundError,
-    QgisSdkConnectionNotFoundError,
-    QgisSdkConnectionUnavailableError,
-    QgisSdkError,
-    QgisSdkExportFailedError,
-    QgisSdkExportRefusedError,
-    QgisSdkLayerNotFoundError,
-    QgisSdkLayoutNotFoundError,
-    QgisSdkOptionalDependencyError,
-    QgisSdkPackagedResourceError,
-    QgisSdkProjectFileError,
-    QgisSdkRasterBandError,
-    QgisSdkScopeClosedError,
-    QgisSdkStyleIncompatibleError,
-    QgisSdkStyleNotFoundError,
-    QgisSdkStyleTextError,
-    QgisSdkThemeNotFoundError,
-    QgisSdkUnsupportedCapabilityError,
-    QgisSdkValidationIssue,
-)
-from ._jobs import (
+from ._algorithms import (
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
+)
+from ._base import (
+    QgisSdkError,
+    QgisSdkOptionalDependencyError,
+    QgisSdkScopeClosedError,
+    QgisSdkUnsupportedCapabilityError,
+    QgisSdkValidationIssue,
+)
+from ._content import (
+    QgisSdkExportFailedError,
+    QgisSdkExportRefusedError,
+    QgisSdkPackagedResourceError,
+    QgisSdkProjectFileError,
+    QgisSdkStyleIncompatibleError,
+    QgisSdkStyleTextError,
+)
+from ._jobs import (
     QgisSdkAppError,
     QgisSdkBridgeError,
     QgisSdkBridgeProtocolError,
     QgisSdkBridgeRefusalError,
     QgisSdkConnectionError,
-    QgisSdkContractValidationError,
     QgisSdkFeatureEditError,
     QgisSdkFormError,
     QgisSdkGrantRefusedError,
     QgisSdkInvalidRequestError,
-    QgisSdkJobCancelledError,
-    QgisSdkJobNotSettledError,
-    QgisSdkJobPrerequisiteError,
-    QgisSdkJobRejectedError,
-    QgisSdkJobWaitRefusedError,
     QgisSdkNetworkError,
     QgisSdkRequestCancelledError,
     QgisSdkRequestRejectedError,
     QgisSdkRequestTimeoutError,
-    QgisSdkSchedulingBlockedError,
     QgisSdkStaleHandleError,
     QgisSdkTlsError,
     QgisSdkUiError,
     QgisSdkUnknownHandleError,
+)
+from ._lookup import (
+    QgisSdkAuthConfigNotFoundError,
+    QgisSdkBookmarkNotFoundError,
+    QgisSdkConnectionItemNotFoundError,
+    QgisSdkConnectionNotFoundError,
+    QgisSdkConnectionUnavailableError,
+    QgisSdkLayerNotFoundError,
+    QgisSdkLayoutNotFoundError,
+    QgisSdkRasterBandError,
+    QgisSdkStyleNotFoundError,
+    QgisSdkThemeNotFoundError,
 )
 from ._network import (
     QgisSdkAuthenticationError,
@@ -64,6 +61,15 @@ from ._network import (
     QgisSdkResponseTooLargeError,
     QgisSdkServiceResponseError,
     QgisSdkThreadSafetyWarning,
+)
+from ._scheduling import (
+    QgisSdkContractValidationError,
+    QgisSdkJobCancelledError,
+    QgisSdkJobNotSettledError,
+    QgisSdkJobPrerequisiteError,
+    QgisSdkJobRejectedError,
+    QgisSdkJobWaitRefusedError,
+    QgisSdkSchedulingBlockedError,
 )
 
 __all__ = [

@@ -87,11 +87,19 @@ class Algorithms(Protocol):
         ...
 
     def list(self, provider: str | None = None) -> tuple[AlgorithmInfo, ...]:
-        """Every registered algorithm, or those of one provider."""
+        """Every registered algorithm, or those of one provider.
+
+        Args:
+            provider: The provider to narrow to, or ``None`` for all of them.
+        """
         ...
 
     def describe(self, algorithm_id: str) -> AlgorithmInfo:
-        """The registry's description of one algorithm."""
+        """The registry's description of one algorithm.
+
+        Args:
+            algorithm_id: The ``provider:name`` id the registry knows.
+        """
         ...
 
     def run(
@@ -104,6 +112,11 @@ class Algorithms(Protocol):
         ``request`` is a generated request class instance, an
         :class:`~qgis_sdk.models.AlgorithmRun`, or an algorithm id with
         ``params`` (the ``processing.run`` shape).
+
+        Args:
+            request: The request to run, or the algorithm id to run with
+                ``params``.
+            params: The parameter mapping, when ``request`` is an id.
         """
         ...
 
@@ -120,6 +133,10 @@ class Algorithms(Protocol):
         scalar per number, string or boolean, and a tuple of layers per
         multiple-layers output - exactly what :meth:`run` answers for a
         registered algorithm.
+
+        Args:
+            model: The ref the host minted for the ``.model3`` file.
+            params: The model's own parameters, by name.
         """
         ...
 
@@ -131,6 +148,9 @@ class Algorithms(Protocol):
         reports shows ``1/3``, ``2/3``, ``3/3`` and stops before the next
         request when cancelled. The settled handle's ``result`` is the tuple
         of :class:`~qgis_sdk.models.RunResult`, oldest first.
+
+        Args:
+            runs: The requests to run, in order.
         """
         ...
 
@@ -146,5 +166,9 @@ class Algorithms(Protocol):
         ...
 
     def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
-        """Run ``request`` into a new output and return its layer description."""
+        """Run ``request`` into a new output and return its layer description.
+
+        Args:
+            request: The ``BufferRequest`` or ``CentroidRequest`` to run.
+        """
         ...

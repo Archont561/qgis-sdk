@@ -70,6 +70,9 @@ class Canvas(Protocol):
         ``QgisSdkLayerNotFoundError`` - the layer service's own answer - and a
         layer with nothing selected or no extent is
         ``QgisSdkUnsupportedCapabilityError`` naming which.
+
+        Args:
+            target: The layer, features or extent to move onto.
         """
         ...
 
@@ -86,6 +89,9 @@ class Canvas(Protocol):
 
         An unknown theme raises ``QgisSdkThemeNotFoundError`` carrying the name;
         the canvas keeps whatever theme it had.
+
+        Args:
+            name: The theme to draw with, as the project names it.
         """
         ...
 
@@ -98,6 +104,10 @@ class Canvas(Protocol):
         when the user finishes, and the returned canceller ends it without a
         callback - which is what a page closing, or a second capture starting,
         does. A session cancelled by the caller never calls ``on_capture``.
+
+        Args:
+            shape: What to draw: ``point``, ``line`` or ``polygon``.
+            on_capture: What each finished geometry is handed to.
         """
         ...
 
@@ -107,5 +117,8 @@ class Canvas(Protocol):
         The listener sees every change of extent after the subscription, in the
         order the canvas produced them. The returned canceller stops the
         subscription; it is idempotent.
+
+        Args:
+            on_extent: What each new extent is handed to.
         """
         ...

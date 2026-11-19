@@ -39,6 +39,10 @@ class FakeWorkers:
 
         ``item`` is what a real backend would show: this one records it in
         ``items`` so a test can assert the job reached it with its title.
+
+        Args:
+            fn: The callable to run when the test pumps the queue.
+            item: What a surface showing the work needs, when it is a job.
         """
         if item is not None:
             self.items.append(item)
@@ -80,6 +84,11 @@ class ThreadWorkers:
     """
 
     def __init__(self, *, max_workers: int = 2) -> None:
+        """Start a pool of worker threads.
+
+        Args:
+            max_workers: How many callables may run at once.
+        """
         self._pool = ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="qgis-sdk-worker"
         )
@@ -91,7 +100,12 @@ class ThreadWorkers:
     def offload(
         self, fn: Callable[[], Any], *, item: WorkItem | None = None
     ) -> Handoff:
-        """Queue ``fn`` on a worker thread; the job suspends on the handoff."""
+        """Queue ``fn`` on a worker thread; the job suspends on the handoff.
+
+        Args:
+            fn: The callable to run on a worker thread.
+            item: What a surface showing the work needs, when it is a job.
+        """
         if item is not None:
             self.items.append(item)
         handoff = Handoff(on_cancel=self._cancel)
@@ -115,7 +129,11 @@ class ThreadWorkers:
         return len(self._pending)
 
     def wait(self, timeout: float = 10.0) -> None:
-        """Block until every submitted callable finished."""
+        """Block until every submitted callable finished.
+
+        Args:
+            timeout: How long to wait, in seconds.
+        """
         done, _ = wait_futures(tuple(self._pending), timeout=timeout)
         self._pending -= set(done)
 

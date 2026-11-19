@@ -12,7 +12,13 @@ EDIT_KINDS = ("add", "update", "delete")
 
 @dataclass(frozen=True, slots=True)
 class ExpressionCheck:
-    """The answer to "does this expression parse": a verdict and, if not, why."""
+    """The answer to "does this expression parse": a verdict and, if not, why.
+
+    Attributes:
+        valid: Whether the text parsed against the layer's fields.
+        message: Why it did not, when it did not.
+        referenced_columns: The field names the text reads.
+    """
 
     valid: bool
     message: str | None = None
@@ -39,6 +45,11 @@ class ExpressionOutcome:
     ``value`` is a plain JSON value; a parsed expression whose result is null
     is a valid outcome with ``value`` ``None``, which a caller distinguishes
     from a failure by ``valid``.
+
+    Attributes:
+        valid: Whether the expression could be evaluated.
+        value: The value it produced, when it could.
+        message: Why there is no value, when there is none.
     """
 
     valid: bool
@@ -62,6 +73,11 @@ class EditOutcome:
     ``feature_ids`` is what the provider assigned for an add - a caller needs
     them to refer to the rows it just wrote - and empty for an update or a
     delete, which name a row the caller already had.
+
+    Attributes:
+        applied: How many buffered changes were written.
+        feature_ids: The features the changes touched, in the order applied.
+        committed: Whether the buffer was emptied by the call.
     """
 
     applied: int

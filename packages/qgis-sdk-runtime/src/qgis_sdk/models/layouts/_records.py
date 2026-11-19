@@ -35,6 +35,11 @@ class LayoutSettings:
     which is what a page whose layers carry unsupported effects needs;
     ``georeference`` writes a world file beside the export so the result can be
     opened as a map rather than a picture.
+
+    Attributes:
+        dpi: The resolution the layout is drawn at.
+        rasterize: Whether the whole layout is drawn as one image.
+        georeference: Whether the export writes a world file alongside it.
     """
 
     dpi: int = 300
@@ -54,6 +59,11 @@ class LayoutSettings:
 
     @classmethod
     def from_wire(cls, value: Any) -> LayoutSettings:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if value is None:
             return cls()
         if isinstance(value, cls):
@@ -69,7 +79,13 @@ class LayoutSettings:
 
 @dataclass(frozen=True, slots=True)
 class AtlasInfo:
-    """What an atlas is configured to do, whether or not it is enabled."""
+    """What an atlas is configured to do, whether or not it is enabled.
+
+    Attributes:
+        enabled: Whether the layout exports an atlas.
+        coverage_layer: The layer whose features drive the pages.
+        filename_expression: The expression that names each page's file.
+    """
 
     enabled: bool = False
     coverage_layer: str | None = None
@@ -84,6 +100,11 @@ class AtlasInfo:
 
     @classmethod
     def from_wire(cls, value: Any) -> AtlasInfo:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if value is None:
             return cls()
         if isinstance(value, cls):
@@ -99,7 +120,14 @@ class AtlasInfo:
 
 @dataclass(frozen=True, slots=True)
 class LayoutInfo:
-    """One print layout in the project: its name, its pages, its atlas."""
+    """One print layout in the project: its name, its pages, its atlas.
+
+    Attributes:
+        id: The runtime-owned id of the layout.
+        name: The name the project lists it under.
+        page_count: How many pages it holds.
+        atlas: What its atlas is configured to do, if it has one.
+    """
 
     id: str
     name: str
@@ -124,6 +152,11 @@ class LayoutInfo:
 
     @classmethod
     def from_wire(cls, value: Any) -> LayoutInfo:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -138,7 +171,14 @@ class LayoutInfo:
 
 @dataclass(frozen=True, slots=True)
 class LayoutExport:
-    """A finished export: the file, its format, how many pages, how many bytes."""
+    """A finished export: the file, its format, how many pages, how many bytes.
+
+    Attributes:
+        path: The file that was written.
+        format: The format it was written in.
+        pages: How many pages the file carries.
+        bytes: The size of the file on disk.
+    """
 
     path: str
     format: str
@@ -158,6 +198,11 @@ class LayoutExport:
 
     @classmethod
     def from_wire(cls, value: Any) -> LayoutExport:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -178,6 +223,11 @@ class AtlasPage:
     atlas pattern's ``{index}`` fills and the number a page shows; the coverage
     feature itself is an id, so it is spelled ``feature_id`` and is ``None``
     only for a page an atlas drew outside a coverage layer.
+
+    Attributes:
+        index: The page number, counting from one.
+        feature_id: The coverage feature it was drawn for, when it has an id.
+        path: The file that was written.
     """
 
     index: int
@@ -197,6 +247,11 @@ class AtlasPage:
 
     @classmethod
     def from_wire(cls, value: Any) -> AtlasPage:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -211,7 +266,13 @@ class AtlasPage:
 
 @dataclass(frozen=True, slots=True)
 class AtlasExport:
-    """Every file an atlas run wrote, in coverage order."""
+    """Every file an atlas run wrote, in coverage order.
+
+    Attributes:
+        directory: The directory the pages were written to.
+        format: The format every page was written in.
+        pages: One entry per page, in coverage order.
+    """
 
     directory: str
     format: str
@@ -234,6 +295,11 @@ class AtlasExport:
 
     @classmethod
     def from_wire(cls, value: Any) -> AtlasExport:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -252,6 +318,13 @@ class LayoutRequest:
     ``destination`` is a resolved path, because only a minted ref is authority
     and resolving one is a driving-thread act (decision-20). A body therefore
     never sees a ref it could re-resolve, and never sees a ``QgsLayout``.
+
+    Attributes:
+        layout: The name of the layout to render.
+        format: The format to write: ``pdf``, ``png`` or ``svg``.
+        destination: The file to write, when the caller named one.
+        settings: The resolution and rasteriser switches to use.
+        overwrite: Whether an existing destination may be replaced.
     """
 
     layout: str
@@ -263,7 +336,16 @@ class LayoutRequest:
 
 @dataclass(frozen=True, slots=True)
 class AtlasRequest:
-    """One atlas run, as a job body receives it."""
+    """One atlas run, as a job body receives it.
+
+    Attributes:
+        layout: The name of the layout to render.
+        format: The format to write.
+        directory: The directory the pages are written to.
+        pattern: The file-name pattern each page is named with.
+        settings: The resolution and rasteriser switches to use.
+        overwrite: Whether existing files may be replaced.
+    """
 
     layout: str
     format: str

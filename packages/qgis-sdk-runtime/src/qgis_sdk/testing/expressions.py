@@ -113,7 +113,13 @@ def _literal(token: _Token) -> Any:
 
 @dataclass(frozen=True, slots=True)
 class ParsedExpression:
-    """One parsed expression: a list of clauses joined by ``and`` / ``or``."""
+    """One parsed expression: a list of clauses joined by ``and`` / ``or``.
+
+    Attributes:
+        clauses: ``(field, operator, value)`` triples, in order.
+        joins: The joins between clauses: one fewer than the clauses.
+        columns: The field names the expression reads.
+    """
 
     #: ``(field, operator, value)`` triples, in order.
     clauses: tuple[tuple[str, str, Any], ...]
@@ -127,6 +133,9 @@ class ParsedExpression:
         ``and`` binds as tightly as ``or`` here on purpose: the fake refuses
         parentheses, so an expression whose meaning depends on precedence is
         one the fake will not run rather than one it silently reinterprets.
+
+        Args:
+            row: One row's field values.
         """
         result = _compare(row, *self.clauses[0])
         for join, clause in zip(self.joins, self.clauses[1:], strict=True):
@@ -263,7 +272,12 @@ class ExpressionSubset:
     @staticmethod
     @staticmethod
     def parse(text: str, fields: Iterable[str]) -> ParsedExpression:
-        """Parse ``text``, refusing anything outside the subset by name."""
+        """Parse ``text``, refusing anything outside the subset by name.
+
+        Args:
+            text: The expression text to read.
+            fields: The field names it may reference.
+        """
         if not isinstance(text, str) or not text.strip():
             raise QgisSdkUnsupportedCapabilityError(
                 "an expression is a non-empty string"

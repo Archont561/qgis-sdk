@@ -118,6 +118,14 @@ class MarkerSymbol:
 
     ``size`` and ``outline_width`` are millimetres - QGIS's own unit for a symbol
     dimension, and the one a legend is printed in.
+
+    Attributes:
+        color: The fill colour, as ``#RRGGBB`` or ``#RRGGBBAA``.
+        size: The marker's size in millimetres.
+        shape: The shape drawn: ``circle``, ``square``, ``triangle`` and so on.
+        outline_color: The outline colour, or ``None`` for no outline.
+        outline_width: The outline's width in millimetres.
+        kind: The discriminator a page reads: always ``marker``.
     """
 
     color: str
@@ -156,6 +164,11 @@ class MarkerSymbol:
 
     @classmethod
     def from_wire(cls, value: Any) -> MarkerSymbol:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -171,7 +184,13 @@ class MarkerSymbol:
 
 @dataclass(frozen=True, slots=True)
 class LineSymbol:
-    """How a polyline is drawn: one colour and a width in millimetres."""
+    """How a polyline is drawn: one colour and a width in millimetres.
+
+    Attributes:
+        color: The line colour, as ``#RRGGBB`` or ``#RRGGBBAA``.
+        width: The line's width in millimetres.
+        kind: The discriminator a page reads: always ``line``.
+    """
 
     color: str
     width: float = 0.26
@@ -186,6 +205,11 @@ class LineSymbol:
 
     @classmethod
     def from_wire(cls, value: Any) -> LineSymbol:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -195,7 +219,14 @@ class LineSymbol:
 
 @dataclass(frozen=True, slots=True)
 class FillSymbol:
-    """How a polygon is drawn: a fill colour and an outline."""
+    """How a polygon is drawn: a fill colour and an outline.
+
+    Attributes:
+        color: The fill colour, as ``#RRGGBB`` or ``#RRGGBBAA``.
+        outline_color: The outline colour, or ``None`` for no outline.
+        outline_width: The outline's width in millimetres.
+        kind: The discriminator a page reads: always ``fill``.
+    """
 
     color: str
     outline_color: str = "#000000"
@@ -223,6 +254,11 @@ class FillSymbol:
 
     @classmethod
     def from_wire(cls, value: Any) -> FillSymbol:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -248,7 +284,11 @@ SYMBOLS_FOR_GEOMETRY: dict[str, str] = {
 
 
 def symbol_from_wire(value: Any) -> Symbol:
-    """Return the symbol ``value`` describes, dispatching on its ``kind``."""
+    """Return the symbol ``value`` describes, dispatching on its ``kind``.
+
+    Args:
+        value: The mapping a page sent, whose ``kind`` picks the class.
+    """
     for model in (MarkerSymbol, LineSymbol, FillSymbol):
         if isinstance(value, model):
             return value
@@ -265,7 +305,12 @@ def symbol_from_wire(value: Any) -> Symbol:
 
 @dataclass(frozen=True, slots=True)
 class SingleSymbolRenderer:
-    """Every feature drawn the same way."""
+    """Every feature drawn the same way.
+
+    Attributes:
+        symbol: How every feature is drawn.
+        kind: The discriminator a page reads: always ``single``.
+    """
 
     symbol: Symbol
     kind: Literal["single_symbol"] = field(default="single_symbol", init=False)
@@ -275,6 +320,11 @@ class SingleSymbolRenderer:
 
     @classmethod
     def from_wire(cls, value: Any) -> SingleSymbolRenderer:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -284,7 +334,13 @@ class SingleSymbolRenderer:
 
 @dataclass(frozen=True, slots=True)
 class Category:
-    """One value of the renderer's field, and the symbol drawn for it."""
+    """One value of the renderer's field, and the symbol drawn for it.
+
+    Attributes:
+        value: The field value this category matches.
+        label: The legend text for the category.
+        symbol: How features holding that value are drawn.
+    """
 
     value: str
     label: str
@@ -299,6 +355,11 @@ class Category:
 
     @classmethod
     def from_wire(cls, value: Any) -> Category:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):

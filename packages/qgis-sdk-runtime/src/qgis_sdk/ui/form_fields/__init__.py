@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._coerce_values import coerce_values
 from ._coercion import (
     coerce,
     coerce_value,
@@ -9,7 +10,6 @@ from ._coercion import (
 )
 from ._fields import (
     FieldSpec,
-    coerce_values,
     form_fields,
     schema_fields,
 )

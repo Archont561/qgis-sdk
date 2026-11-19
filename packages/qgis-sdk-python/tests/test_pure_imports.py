@@ -138,7 +138,7 @@ LAYER_PATHS = {
     "http": SOURCE_ROOT / "http",
     "algorithms": SOURCE_ROOT / "algorithms",
     "batch": SOURCE_ROOT / "batch.py",
-    "bindings": SOURCE_ROOT / "bindings.py",
+    "bindings": SOURCE_ROOT / "bindings",
     "bridge": SOURCE_ROOT / "bridge",
     "core": SOURCE_ROOT / "core",
     "exports": SOURCE_ROOT / "exports.py",

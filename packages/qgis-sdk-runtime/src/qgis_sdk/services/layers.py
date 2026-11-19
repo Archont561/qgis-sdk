@@ -40,7 +40,11 @@ class Layers(Protocol):
     """
 
     def open_vector(self, source: Path) -> VectorLayerInfo:
-        """Open a local vector dataset and return its description."""
+        """Open a local vector dataset and return its description.
+
+        Args:
+            source: The dataset to open.
+        """
         ...
 
     def open_mesh(self, source: Path) -> MeshLayerInfo:
@@ -48,6 +52,9 @@ class Layers(Protocol):
 
         A mesh carries quantities as dataset *groups*, so ``group_count`` is how
         many the provider declares; zero is a mesh with geometry and no results.
+
+        Args:
+            source: The mesh dataset to open.
         """
         ...
 
@@ -56,6 +63,9 @@ class Layers(Protocol):
 
         ``point_count`` is the size of the dataset, not of the current subset: a
         page showing a filtered view still needs to know what it is filtering.
+
+        Args:
+            source: The point cloud dataset to open.
         """
         ...
 
@@ -65,6 +75,9 @@ class Layers(Protocol):
         The source's path is deliberately *not* part of the answer - a tile URL
         routinely carries a token, and a description is read by pages, logs and
         bug reports. ``source_type`` says what shape of source it is.
+
+        Args:
+            source: The vector tile source to open.
         """
         ...
 
@@ -73,6 +86,9 @@ class Layers(Protocol):
 
         An annotation layer has no dataset: it is a bag of drawn items, so it is
         created rather than opened, and a fresh one holds nothing.
+
+        Args:
+            name: What to call the layer it creates.
         """
         ...
 
@@ -81,6 +97,9 @@ class Layers(Protocol):
 
         A scene's tile count is a walk of its index rather than a field, so what
         the description carries is where the scene sits in its own CRS.
+
+        Args:
+            source: The tiled scene dataset to open.
         """
         ...
 
@@ -97,7 +116,11 @@ class Layers(Protocol):
         ...
 
     def layer(self, layer_id: str) -> LayerInfo:
-        """Return the description of one opened layer, of either kind."""
+        """Return the description of one opened layer, of either kind.
+
+        Args:
+            layer_id: The id the layer was opened under.
+        """
         ...
 
     def selection(self, layer_id: str) -> tuple[int, ...]:
@@ -105,6 +128,9 @@ class Layers(Protocol):
 
         A raster has no features, so its id raises
         ``QgisSdkUnsupportedCapabilityError`` naming the kind.
+
+        Args:
+            layer_id: The vector layer whose selection to read.
         """
         ...
 
@@ -130,5 +156,10 @@ class Layers(Protocol):
         Writer or commit failures raise ``QgisSdkExportFailedError``. A raster id
         is refused with ``QgisSdkUnsupportedCapabilityError``: rasters export
         through ``ctx.rasters``.
+
+        Args:
+            layer_id: The opened vector layer to export.
+            destination: The file to write; its suffix picks the format.
+            overwrite: Whether an existing file may be replaced.
         """
         ...

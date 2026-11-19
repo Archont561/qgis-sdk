@@ -18,6 +18,12 @@ class FakeFiles(FilesService):
     """
 
     def __init__(self, scope: ResourceScope, *, owner: str = "plugin:test") -> None:
+        """Build the file authority over one scope.
+
+        Args:
+            scope: The resource scope the fake belongs to.
+            owner: The runtime the refs are minted on behalf of.
+        """
         super().__init__(HostAuthority(), scope, owner=owner)
 
     @property

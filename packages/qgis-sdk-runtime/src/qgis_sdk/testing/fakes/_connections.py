@@ -41,6 +41,11 @@ class FakeConnections:
     """
 
     def __init__(self, layers: FakeLayers) -> None:
+        """Build the connection fake over the layer backend it opens through.
+
+        Args:
+            layers: The layer backend the browsed tables are opened on.
+        """
         self._layers = layers
         self._connections: dict[tuple[str, str], dict[str, object]] = {}
         self._tables: dict[tuple[str, str], list[dict[str, object]]] = {}
@@ -48,7 +53,11 @@ class FakeConnections:
         self._opened = 0
 
     def declare_connection(self, declaration: ConnectionDeclaration) -> None:
-        """Declare one registered connection and the schemas it browses to."""
+        """Declare one registered connection and the schemas it browses to.
+
+        Args:
+            declaration: The connection the fake answers for.
+        """
         key = (declaration.provider, declaration.name)
         self._connections[key] = {
             "auth_config": declaration.auth_config,
@@ -60,7 +69,11 @@ class FakeConnections:
         self._tables.setdefault(key, [])
 
     def declare_table(self, declaration: TableDeclaration) -> None:
-        """Declare one table or view inside a declared connection."""
+        """Declare one table or view inside a declared connection.
+
+        Args:
+            declaration: The table or view the fake answers for.
+        """
         key = (declaration.provider, declaration.connection)
         if key not in self._connections:
             raise QgisSdkDeclarationError(
@@ -75,6 +88,9 @@ class FakeConnections:
         The id is the registry's to choose here exactly as it is natively
         (``QgsAuthManager`` assigns one), so a test keeps the id it is handed
         and never writes one it expects back.
+
+        Args:
+            name: The name the configuration is registered under.
         """
         auth_config = f"cfg{len(self._auth) + 1:04d}"
         self._auth[auth_config] = AuthConfiguration(id=auth_config, name=name)
@@ -84,12 +100,25 @@ class FakeConnections:
         return tuple(self._describe(key) for key in self._connections)
 
     def connection(self, provider: str, name: str) -> ConnectionInfo:
+        """The description of one declared connection.
+
+        Args:
+            provider: The provider the connection is registered under.
+            name: The connection name.
+        """
         self._require(provider, name)
         return self._describe((provider, name))
 
     def browse(
         self, provider: str, name: str, schema: str | None = None
     ) -> tuple[ConnectionItem, ...]:
+        """The items one declared connection holds.
+
+        Args:
+            provider: The provider the connection is registered under.
+            name: The connection name.
+            schema: The schema to list, or ``None`` for the root.
+        """
         key = self._require(provider, name)
         declared = self._connections[key]
         schemas: tuple[str, ...] = declared["schemas"]  # type: ignore[assignment]
@@ -111,6 +140,14 @@ class FakeConnections:
     def open_layer(
         self, provider: str, name: str, schema: str, item: str
     ) -> VectorLayerInfo:
+        """The layer one declared table answers with.
+
+        Args:
+            provider: The provider the connection is registered under.
+            name: The connection name.
+            schema: The schema the item lives in.
+            item: The table or view to open.
+        """
         key = self._require(provider, name)
         for entry in self._tables[key]:
             declared: ConnectionItem = entry["item"]  # type: ignore[assignment]
@@ -119,22 +156,17 @@ class FakeConnections:
             refuse_unopenable(declared.kind)
             self._opened += 1
             source = Path(f"fake-connection:{provider}:{name}:{schema or '-'}:{item}")
-            fields: tuple[str, ...] = entry["fields"]  # type: ignore[assignment]
-            self._layers.register(
-                VectorLayerDeclaration(
-                    source,
-                    name=item,
-                    geometry_type=(
-                        declared.geometries[0] if declared.geometries else "none"
-                    ),
-                    field_names=fields,
-                    crs=entry["crs"],
-                )
-            )
+            declare_table(self._layers, source, item, declared, entry)
             return self._layers.open_vector(source)
         return missing_table(self, key, name, schema, item)
 
     def test(self, provider: str, name: str) -> ConnectionTest:
+        """Whether one declared connection opens.
+
+        Args:
+            provider: The provider the connection is registered under.
+            name: The connection name.
+        """
         key = self._require(provider, name)
         declared = self._connections[key]
         if declared["valid"]:
@@ -146,6 +178,13 @@ class FakeConnections:
         return tuple(self._auth.values())
 
     def attach_auth_config(self, provider: str, name: str, auth_config: str) -> None:
+        """Point one declared connection at an auth configuration.
+
+        Args:
+            provider: The provider the connection is registered under.
+            name: The connection name.
+            auth_config: The ``authcfg`` id to attach.
+        """
         key = self._require(provider, name)
         if auth_config not in self._auth:
             raise QgisSdkAuthConfigNotFoundError(auth_config)
@@ -171,3 +210,31 @@ class FakeConnections:
             provider=key[0],
             auth_config=declared["auth_config"],  # type: ignore[arg-type]
         )
+
+
+def declare_table(
+    layers: FakeLayers,
+    source: Path,
+    item: str,
+    declared: ConnectionItem,
+    entry: dict[str, object],
+) -> None:
+    """Declare one browsed table's dataset so opening it answers a layer.
+
+    Args:
+        layers: The layer fake the dataset is declared on.
+        source: The dataset path the table is opened by.
+        item: The table or view name the layer is named after.
+        declared: The browse item the connection answered with.
+        entry: The table's other declared values, its fields and CRS.
+    """
+    fields: tuple[str, ...] = entry["fields"]  # type: ignore[assignment]
+    layers.register(
+        VectorLayerDeclaration(
+            source,
+            name=item,
+            geometry_type=(declared.geometries[0] if declared.geometries else "none"),
+            field_names=fields,
+            crs=entry["crs"],  # type: ignore[arg-type]
+        )
+    )

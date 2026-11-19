@@ -1,32 +1,19 @@
-"""``ctx.on(stream, callback)``: a native surface subscribes to a plugin's streams.
-
-A page subscribes through the bridge (decision-23); a native surface has no
-wire, so :class:`ViewStreams` opens the same ``@stream`` methods directly:
-the method's iterator is pulled on :meth:`pump` and a
-:class:`~qgis_sdk.bridge.streams.PushSource` is started with a sink that
-delivers as it emits. Every event reaches the callback as a
-:class:`StreamEvent` on the GUI thread; an event the view's own synchronous
-action call produced carries ``echo=True`` (decision-55 point 2), so a
-surface that already updated itself can skip its own echo. Subscriptions are
-owned by the view's scope: closing the window disposes them.
-"""
+"""View-scoped subscriptions to a plugin's ``@stream`` methods."""
 
 from __future__ import annotations
 
-import contextlib
-import threading
-from collections import deque
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from qgis_sdk.bridge.streams import MAX_FRAMES_PER_PUMP, PushSource, split_event
+from qgis_sdk.bridge.streams import MAX_FRAMES_PER_PUMP, PushSource
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.declarations import STREAM_EVENT_KINDS, PluginDescription
+from qgis_sdk.declarations import PluginDescription
 from qgis_sdk.models import QgisSdkError, QgisSdkFormError, QgisSdkUiError
+from qgis_sdk.ui.form_fields import coerce_values
 
-from .actions import CALLING_VIEW
-from .form_fields import coerce_values
+if TYPE_CHECKING:
+    from ._subscription import ViewSubscription
 
 
 class _CcState:
@@ -69,6 +56,8 @@ def _cc_subscribe_p2(_s):
     except QgisSdkFormError as error:
         _s.error = error
         raise QgisSdkUiError(f"{_s.stream}: {_s.error}") from _s.error
+    from ._subscription import ViewSubscription
+
     _s.subscription = ViewSubscription(_s.self, _s.stream, _s.callback)
 
 
@@ -103,7 +92,7 @@ def _subscribe_facts1(owner, self, source, subscription):
     return subscription
 
 
-__all__ = ["StreamEvent", "ViewStreams", "ViewSubscription"]
+__all__ = ["StreamEvent", "ViewStreams"]
 
 EventKind = Literal["data", "progress", "state", "complete", "error"]
 
@@ -115,6 +104,12 @@ class StreamEvent:
     ``kind`` is ``data``/``progress``/``state`` for the stream's own events,
     ``complete`` or ``error`` when it ended (``payload`` is then ``None`` or
     the message). ``echo`` marks an event produced by this view's own call.
+
+    Attributes:
+        stream: The stream name the event belongs to.
+        kind: What happened: ``started``, ``data``, ``ended`` or ``failed``.
+        payload: The value the event carries, when it carries one.
+        echo: The value the handler returned, when the stream echoes it.
     """
 
     stream: str
@@ -137,152 +132,17 @@ class StreamSource(Protocol):
     def streams(self) -> Mapping[str, Callable[..., object]]: ...
 
 
-class ViewSubscription:
-    """One open subscription of a view; ``dispose()`` ends it early."""
-
-    __slots__ = (
-        "_callback",
-        "_pending",
-        "_source",
-        "_streams",
-        "_thread",
-        "active",
-        "stream",
-    )
-
-    def __init__(
-        self,
-        streams: ViewStreams,
-        stream: str,
-        callback: Callable[[StreamEvent], None],
-    ) -> None:
-        self._streams = streams
-        self.stream = stream
-        self._callback = callback
-        self._source: Iterator[Mapping[str, Any]] | PushSource | None = None
-        self._pending: deque[StreamEvent] = deque()
-        self._thread = threading.get_ident()
-        self.active = True
-
-    @property
-    def pulling(self) -> bool:
-        """Whether an iterator still feeds this subscription on ``pump``."""
-        return self.active and hasattr(self._source, "__next__")
-
-    @property
-    def pending(self) -> int:
-        """Events pushed from another thread, waiting for the next ``pump``."""
-        return len(self._pending)
-
-    # -- the sink a push source writes into -----------------------------------------
-
-    @property
-    def open(self) -> bool:
-        return self.active
-
-    def emit(self, payload: Any, *, kind: Any = "data") -> bool:
-        """Queue or deliver one event; ``False`` once disposed."""
-        if not self.active:
-            return False
-        name = getattr(kind, "value", kind)
-        if name not in STREAM_EVENT_KINDS:
-            self.fail(f"{name!r} is not a stream event kind")
-            return False
-        self._deliver(StreamEvent(self.stream, name, payload, echo=self._echo()))
-        return True
-
-    def complete(self) -> bool:
-        if not self.active:
-            return False
-        self._deliver(StreamEvent(self.stream, "complete", None))
-        self.dispose()
-        return True
-
-    def fail(self, error: BaseException | str) -> bool:
-        if not self.active:
-            return False
-        message = (
-            str(error)
-            if isinstance(error, (str, QgisSdkError))
-            else "The stream failed; the host recorded the details"
-        )
-        self._deliver(StreamEvent(self.stream, "error", message))
-        self.dispose()
-        return True
-
-    # -- lifecycle --------------------------------------------------------------------
-
-    def dispose(self) -> None:
-        """End the subscription; nothing is delivered after this."""
-        if not self.active:
-            return
-        self.active = False
-        source = self._source
-        self._source = None
-        close = getattr(source, "close", None)
-        if callable(close):
-            # Disposal never raises into a Qt slot; a failing close is the
-            # source's problem, already past the point anyone can act on it.
-            with contextlib.suppress(Exception):
-                close()
-        self._streams._forget(self)
-
-    def pump(self, limit: int = MAX_FRAMES_PER_PUMP) -> int:
-        """Deliver queued events and pull up to ``limit`` items from an iterator."""
-        delivered = 0
-        while self._pending and delivered < limit:
-            self._callback(self._pending.popleft())
-            delivered += 1
-        source = self._source
-        if not self.active or not hasattr(source, "__next__"):
-            return delivered
-        for _ in range(limit - delivered):
-            try:
-                item = next(source)  # type: ignore[arg-type]
-            except StopIteration:
-                self.complete()
-                break
-            except Exception as error:  # noqa: BLE001 - the stream must still end
-                self.fail(error)
-                break
-            try:
-                kind, payload = split_event(item)
-            except QgisSdkError as error:
-                self.fail(error)
-                break
-            self._callback(StreamEvent(self.stream, kind.value, payload))
-            delivered += 1
-            if not self.active:
-                break
-        return delivered
-
-    def _attach(self, source: Any) -> None:
-        self._source = source
-        if isinstance(source, PushSource) and not hasattr(source, "__next__"):
-            try:
-                source.start(self)
-            except Exception as error:  # noqa: BLE001 - the stream must still end
-                self.fail(error)
-
-    def _deliver(self, event: StreamEvent) -> None:
-        # Author code runs on the GUI thread only: an event pushed from another
-        # thread waits for the next pump.
-        if threading.get_ident() == self._thread:
-            self._callback(event)
-        else:
-            self._pending.append(event)
-            self._streams._wake()
-
-    def _echo(self) -> bool:
-        return CALLING_VIEW.get() == self._streams.view_id
-
-
 class ViewStreams:
     """The view-scoped way into the plugin's ``@stream`` methods.
 
     ``runtime`` is the started ``PluginRuntime``; ``view_id`` names the
     surface, which is what the echo flag compares against. ``wake`` is what
     a host hooks to learn that events arrived off the GUI thread.
+
+    Args:
+        runtime: The runtime whose streams are subscribed to.
+        view_id: The view the subscriptions belong to.
+        wake: How the driver thread is woken to deliver an event.
     """
 
     __slots__ = ("_runtime", "_subscriptions", "_view_id", "_wake_callback")
@@ -294,6 +154,13 @@ class ViewStreams:
         view_id: str,
         wake: Callable[[], None] | None = None,
     ) -> None:
+        """Build the stream service for one view over a started runtime.
+
+        Args:
+            runtime: The started runtime the streams are read from.
+            view_id: The view the subscriptions belong to.
+            wake: How the driver thread is woken to deliver an event.
+        """
         self._runtime = runtime
         self._view_id = view_id
         self._wake_callback = wake
@@ -331,6 +198,12 @@ class ViewStreams:
         ``owner`` is the scope that disposes the subscription when it closes,
         the view's. An unknown stream is refused by name; what the method
         raises while opening is refused with its message.
+
+        Args:
+            stream: The stream name to open.
+            callback: What each event is handed to.
+            owner: The scope that owns the subscription, or ``None``.
+            **request: The arguments the stream is opened with.
         """
         _s = _CcState(
             self=self, stream=stream, callback=callback, owner=owner, request=request
@@ -342,7 +215,11 @@ class ViewStreams:
         return None
 
     def pump(self, limit: int = MAX_FRAMES_PER_PUMP) -> int:
-        """Advance every open subscription; returns how many events were delivered."""
+        """Advance every open subscription; returns how many events were delivered.
+
+        Args:
+            limit: How many events to deliver at most.
+        """
         delivered = 0
         for subscription in tuple(self._subscriptions):
             delivered += subscription.pump(limit)

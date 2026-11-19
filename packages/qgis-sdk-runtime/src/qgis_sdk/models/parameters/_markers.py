@@ -79,6 +79,9 @@ class LayerParameter:
     travels on the wire as ``layer_kind`` so a page renders the same control the
     native form does, and the host refuses a value of the wrong kind by name
     rather than letting the handler discover it.
+
+    Attributes:
+        kind: The layer kind the user may pick, or ``None`` for any.
     """
 
     kind: LayerKind = "vector"
@@ -98,7 +101,12 @@ class CrsParameter:
 
 @dataclass(frozen=True, slots=True)
 class MetresParameter:
-    """The input is a distance in metres, so the host may label and bound it."""
+    """The input is a distance in metres, so the host may label and bound it.
+
+    Attributes:
+        minimum: The smallest distance a user may enter, if bounded.
+        maximum: The largest distance a user may enter, if bounded.
+    """
 
     minimum: float = 0.0
     maximum: float | None = None
@@ -109,6 +117,9 @@ class FileParameter:
     """The input is one existing file the user picked; the handler gets a ref.
 
     ``filters`` are globs (``*.gpkg``) in the order the picker offers them.
+
+    Attributes:
+        filters: The file glob patterns the picker offers.
     """
 
     filters: tuple[str, ...] = ()
@@ -130,7 +141,11 @@ class DirectoryParameter:
 
 @dataclass(frozen=True, slots=True)
 class FieldParameter:
-    """The input is an attribute field of the layer input named by ``of``."""
+    """The input is an attribute field of the layer input named by ``of``.
+
+    Attributes:
+        of: The layer whose fields the user picks from, by name.
+    """
 
     of: str
 
@@ -143,7 +158,13 @@ class FieldParameter:
 
 @dataclass(frozen=True, slots=True)
 class RangeParameter:
-    """The input is a number the host bounds between ``minimum`` and ``maximum``."""
+    """The input is a number the host bounds between ``minimum`` and ``maximum``.
+
+    Attributes:
+        minimum: The smallest value the widget accepts.
+        maximum: The largest value the widget accepts.
+        step: The increment one nudge moves by.
+    """
 
     minimum: float
     maximum: float
@@ -161,7 +182,11 @@ class RangeParameter:
 
 @dataclass(frozen=True, slots=True)
 class ColourParameter:
-    """The input is a colour, stored as ``#RRGGBB`` or ``#RRGGBBAA``."""
+    """The input is a colour, stored as ``#RRGGBB`` or ``#RRGGBBAA``.
+
+    Attributes:
+        alpha: Whether the picker offers an opacity channel.
+    """
 
     alpha: bool = True
 
@@ -199,7 +224,11 @@ Metres = Annotated[float, MetresParameter()]
 
 
 def FileInput(*, filters: Iterable[str] = ()) -> Any:
-    """One existing file, offered through ``filters``; the handler gets a FileRef."""
+    """One existing file, offered through ``filters``; the handler gets a FileRef.
+
+    Args:
+        filters: The file glob patterns the picker offers.
+    """
     return Annotated[FileRef, FileParameter(filters=tuple(filters))]
 
 
@@ -209,12 +238,22 @@ def DirectoryInput() -> Any:
 
 
 def FieldInput(*, of: str) -> Any:
-    """An attribute field name of the layer input called ``of``."""
+    """An attribute field name of the layer input called ``of``.
+
+    Args:
+        of: The layer whose fields the user picks from.
+    """
     return Annotated[str, FieldParameter(of=of)]
 
 
 def Range(minimum: float, maximum: float, *, step: float | None = None) -> Any:
-    """A number between ``minimum`` and ``maximum``; ints stay ints."""
+    """A number between ``minimum`` and ``maximum``; ints stay ints.
+
+    Args:
+        minimum: The smallest value the widget accepts.
+        maximum: The largest value the widget accepts.
+        step: The increment one nudge moves by.
+    """
     stored = int if isinstance(minimum, int) and isinstance(maximum, int) else float
     return Annotated[
         stored, RangeParameter(minimum=minimum, maximum=maximum, step=step)
@@ -222,5 +261,9 @@ def Range(minimum: float, maximum: float, *, step: float | None = None) -> Any:
 
 
 def Colour(*, alpha: bool = True) -> Any:
-    """A colour the host picks with its colour button, stored as hex."""
+    """A colour the host picks with its colour button, stored as hex.
+
+    Args:
+        alpha: Whether the picker offers an opacity channel.
+    """
     return Annotated[str, ColourParameter(alpha=alpha)]

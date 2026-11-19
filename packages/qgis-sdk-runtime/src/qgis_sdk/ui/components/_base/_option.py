@@ -18,7 +18,12 @@ Listener = Callable[[Any], None]
 
 @dataclass(frozen=True, slots=True)
 class Option:
-    """One entry a picker lists: the model value and the label shown for it."""
+    """One entry a picker lists: the model value and the label shown for it.
+
+    Attributes:
+        id: The value the model holds when it is chosen.
+        label: The text the widget shows for it.
+    """
 
     id: str
     label: str
@@ -30,11 +35,19 @@ class NativeRendering(Protocol):
     ``widget`` is the Qt widget; ``apply`` writes a validated value into it
     (and may refuse one the host cannot represent); ``options`` lists what
     the widget shows, when it owns that list; ``dispose`` disconnects.
+
+    Attributes:
+        widget: The adapter's widget for the component.
     """
 
     widget: Any
 
-    def apply(self, value: object) -> None: ...
+    def apply(self, value: object) -> None:
+        """Write a validated value into the widget.
+
+        Args:
+            value: The validated value to write into the widget.
+        """
 
     def options(self) -> tuple[Option, ...] | None: ...
 

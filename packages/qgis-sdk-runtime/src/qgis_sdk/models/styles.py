@@ -16,7 +16,14 @@ __all__ = ["StyleSpec"]
 
 @dataclass(frozen=True, slots=True)
 class StyleSpec:
-    """One reviewed style resource and the layers it may be applied to."""
+    """One reviewed style resource and the layers it may be applied to.
+
+    Attributes:
+        id: The identifier a caller applies the style by.
+        resource: The packaged file the style lives in.
+        geometry_type: The geometry a layer must carry to use it.
+        required_fields: The attribute fields the style's rules read.
+    """
 
     id: str
     resource: str
@@ -29,6 +36,9 @@ class StyleSpec:
         All reasons are reported, not the first one: a caller fixing a style
         mismatch should not need one round trip per problem. The message never
         includes the layer object, only its description.
+
+        Args:
+            layer: The layer the style is about to be applied to.
         """
         reasons: list[str] = []
         if layer.geometry_type != self.geometry_type:

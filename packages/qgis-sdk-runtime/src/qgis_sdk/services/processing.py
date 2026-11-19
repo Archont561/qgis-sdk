@@ -43,5 +43,9 @@ class Processing(Protocol):
     """
 
     def register_provider(self, provider: RegistrableProvider) -> ProviderRegistration:
-        """Advertise ``provider``; the returned registration removes it again."""
+        """Advertise ``provider``; the returned registration removes it again.
+
+        Args:
+            provider: The provider the plugin owns.
+        """
         ...

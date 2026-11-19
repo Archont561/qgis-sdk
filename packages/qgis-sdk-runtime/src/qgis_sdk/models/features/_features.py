@@ -31,6 +31,11 @@ class Feature:
     Attributes are plain JSON values keyed by field name; a field the provider
     has no value for is ``None`` rather than absent, so a page can tell a null
     from a column it never asked for.
+
+    Attributes:
+        id: The provider's id for the row.
+        attributes: The field values, by field name.
+        geometry: The shape the row is drawn with, or ``None`` for a bare row.
     """
 
     id: int
@@ -50,6 +55,11 @@ class Feature:
 
     @classmethod
     def from_wire(cls, value: Any) -> Feature:
+        """Rebuild this value from its wire shape.
+
+        Args:
+            value: The mapping a page sent, whose keys are checked.
+        """
         if isinstance(value, cls):
             return value
         if not isinstance(value, Mapping):
@@ -70,6 +80,15 @@ class FeatureQuery:
     the matching rows, so a page never holds the layer to filter it itself.
     ``ids`` and ``bbox`` are the two filters a page can express without writing
     an expression at all. ``limit`` is bounded by ``MAX_FEATURE_PAGE``.
+
+    Attributes:
+        limit: The most features one page may hold.
+        cursor: Where the next page starts, as the previous page returned it.
+        expression: The filter the provider evaluates, if any.
+        bbox: The box features must overlap, if any.
+        ids: The features to read by id, if the caller named any.
+        encoding: How geometry comes back: ``wkb`` or ``wkt``.
+        with_geometry: Whether geometry is read at all.
     """
 
     limit: int = DEFAULT_FEATURE_PAGE
@@ -111,6 +130,12 @@ class FeaturePage:
     ``next_cursor`` is present only when something is left, and it is the id the
     next page starts *after*, so a client that stops early has lost nothing it
     cannot ask for again.
+
+    Attributes:
+        items: The features this page carries, in provider order.
+        truncated: Whether more features match than this page holds.
+        next_cursor: Where to continue, or ``None`` at the end.
+        total: How many features match, when the provider counts them.
     """
 
     items: tuple[Feature, ...] = ()

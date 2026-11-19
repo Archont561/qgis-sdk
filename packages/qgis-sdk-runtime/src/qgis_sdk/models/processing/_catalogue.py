@@ -3,138 +3,40 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from types import MappingProxyType
-from typing import Annotated, Any, get_args, get_origin
+from typing import Any
 
 from qgis_sdk.models.errors import (
     QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
 )
-from qgis_sdk.models.files import FileRef
-from qgis_sdk.models.layers import RasterLayerInfo, VectorLayerInfo
 
 from ._validation_state import (
     CcReturn,
     CcState,
-    FolderOutputParameter,
-    HtmlOutputParameter,
-    MultipleLayers,
     OutputInfo,
-    OutputKind,
     ParameterInfo,
     cc_validate_paramet_p7,
     cc_validate_paramet_p8,
     cc_validate_paramet_p9,
 )
 
-_OUTPUT_KINDS: tuple[OutputKind, ...] = (
-    OutputKind(
-        "outputVector",
-        None,
-        (VectorLayerInfo,),
-        "QgsProcessingOutputVectorLayer",
-        "the VectorLayerInfo of the layer it produced",
-        (VectorLayerInfo,),
-    ),
-    OutputKind(
-        "outputRaster",
-        None,
-        (RasterLayerInfo,),
-        "QgsProcessingOutputRasterLayer",
-        "the RasterLayerInfo of the raster it produced",
-        (RasterLayerInfo,),
-    ),
-    OutputKind(
-        "outputFile",
-        None,
-        (FileRef,),
-        "QgsProcessingOutputFile",
-        "the FileRef of the file it produced",
-        (FileRef,),
-    ),
-    OutputKind(
-        "outputFolder",
-        FolderOutputParameter,
-        (FileRef,),
-        "QgsProcessingOutputFolder",
-        "the FolderOutput ref of the folder it produced",
-        (FileRef,),
-    ),
-    OutputKind(
-        "outputNumber",
-        None,
-        (int, float),
-        "QgsProcessingOutputNumber",
-        "the number it produced",
-        (int, float),
-    ),
-    OutputKind(
-        "outputString",
-        None,
-        (str,),
-        "QgsProcessingOutputString",
-        "the string it produced",
-        (str,),
-    ),
-    OutputKind(
-        "outputBoolean",
-        None,
-        (bool,),
-        "QgsProcessingOutputBoolean",
-        "the boolean it produced",
-        (bool,),
-    ),
-    OutputKind(
-        "outputHtml",
-        HtmlOutputParameter,
-        (FileRef,),
-        "QgsProcessingOutputHtml",
-        "the HtmlOutput ref of the report it produced",
-        (FileRef,),
-    ),
-    OutputKind(
-        "outputMultilayer",
-        None,
-        (MultipleLayers,),
-        "QgsProcessingOutputMultipleLayers",
-        "the MultipleLayers it produced",
-        (tuple,),
-    ),
-)
-
-
-def output_kinds() -> Mapping[str, OutputKind]:
-    """Every declared result kind, by its QGIS output type id."""
-    return MappingProxyType({kind.name: kind for kind in _OUTPUT_KINDS})
-
-
-def output_kind_for(annotation: Any) -> OutputKind | None:
-    """The kind one declared result annotation names, or ``None``.
-
-    A plain stored type names its kind directly (``VectorLayerInfo``,
-    ``FileRef``, a scalar, ``MultipleLayers``); the two ``FileRef`` collisions
-    are spelled as markers (``FolderOutput``, ``HtmlOutput``).
-    """
-    base = annotation
-    markers: tuple[Any, ...] = ()
-    if get_origin(annotation) is Annotated:
-        base, *markers = get_args(annotation)
-    for kind in _OUTPUT_KINDS:
-        if kind.marker is not None and any(
-            isinstance(marker, kind.marker) for marker in markers
-        ):
-            return kind
-    for kind in _OUTPUT_KINDS:
-        if kind.marker is None and any(
-            base is stored or base == stored for stored in kind.stored
-        ):
-            return kind
-    return None
-
 
 @dataclass(frozen=True, slots=True)
 class AlgorithmInfo:
-    """One algorithm: identity, help, parameters and outputs."""
+    """One algorithm: identity, help, parameters and outputs.
+
+    Attributes:
+        id: The ``provider:name`` id ``run`` takes.
+        provider: The provider that registered it.
+        name: Its own name within the provider.
+        label: The name the toolbox shows.
+        group: The toolbox group it is listed under.
+        group_id: The group's stable id, for ordering.
+        help: The algorithm's own help text.
+        parameters: One entry per input, in the registry's order.
+        outputs: One entry per declared output.
+        deprecated: Whether the registry marks it as deprecated.
+    """
 
     id: str
     provider: str
@@ -152,6 +54,11 @@ class AlgorithmInfo:
         object.__setattr__(self, "outputs", tuple(self.outputs))
 
     def parameter(self, name: str) -> ParameterInfo | None:
+        """Return the named parameter's description, or ``None`` if it has none.
+
+        Args:
+            name: The parameter name to read.
+        """
         for parameter in self.parameters:
             if parameter.name == name:
                 return parameter
@@ -187,6 +94,11 @@ class AlgorithmInfo:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> AlgorithmInfo:
+        """Read this value from a plain mapping.
+
+        Args:
+            data: The mapping the catalogue carries.
+        """
         return cls(
             id=data["id"],
             provider=data["provider"],
@@ -205,7 +117,13 @@ class AlgorithmInfo:
 
 @dataclass(frozen=True, slots=True)
 class ProviderInfo:
-    """One registered provider."""
+    """One registered provider.
+
+    Attributes:
+        id: The provider's id, as an algorithm id quotes it.
+        label: The name the toolbox shows.
+        version: The provider's own version string.
+    """
 
     id: str
     label: str = ""
@@ -216,6 +134,11 @@ class ProviderInfo:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ProviderInfo:
+        """Read this value from a plain mapping.
+
+        Args:
+            data: The mapping the catalogue carries.
+        """
         return cls(
             id=data["id"], label=data.get("label", ""), version=data.get("version", "")
         )
@@ -223,7 +146,14 @@ class ProviderInfo:
 
 @dataclass(frozen=True, slots=True)
 class Catalogue:
-    """Every provider and algorithm one registry held, as plain data."""
+    """Every provider and algorithm one registry held, as plain data.
+
+    Attributes:
+        qgis_version: The QGIS build the snapshot was read from.
+        providers: Every provider the registry held.
+        algorithms: Every algorithm, across all providers.
+        _index: The id lookup built on load.
+    """
 
     qgis_version: str
     providers: tuple[ProviderInfo, ...] = ()
@@ -238,16 +168,30 @@ class Catalogue:
         self._index.update({a.id: a for a in self.algorithms})
 
     def algorithm(self, algorithm_id: str) -> AlgorithmInfo:
-        """The algorithm with this id, or ``QgisSdkAlgorithmNotFoundError``."""
+        """The algorithm with this id, or ``QgisSdkAlgorithmNotFoundError``.
+
+        Args:
+            algorithm_id: The ``provider:name`` id to look up.
+        """
         try:
             return self._index[algorithm_id]
         except KeyError:
             raise QgisSdkAlgorithmNotFoundError(algorithm_id) from None
 
     def __contains__(self, algorithm_id: object) -> bool:
+        """Whether the catalogue holds this id.
+
+        Args:
+            algorithm_id: The id to test for.
+        """
         return algorithm_id in self._index
 
     def by_provider(self, provider_id: str) -> tuple[AlgorithmInfo, ...]:
+        """Every algorithm one provider registered, in catalogue order.
+
+        Args:
+            provider_id: The provider to narrow to.
+        """
         return tuple(a for a in self.algorithms if a.provider == provider_id)
 
     def to_dict(self) -> dict[str, Any]:
@@ -278,6 +222,11 @@ class Catalogue:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Catalogue:
+        """Read this value from a plain mapping.
+
+        Args:
+            data: The mapping the catalogue carries.
+        """
         return cls(
             qgis_version=str(data.get("qgis_version", "")),
             providers=tuple(
@@ -290,6 +239,11 @@ class Catalogue:
 
     @classmethod
     def from_json(cls, text: str) -> Catalogue:
+        """Read this value from its JSON text.
+
+        Args:
+            text: The JSON document to read.
+        """
         return cls.from_dict(json.loads(text))
 
 
@@ -301,6 +255,10 @@ def validate_parameters(info: AlgorithmInfo, params: Mapping[str, object]) -> No
     checked is what pure code can know from the catalogue: unknown names,
     missing required inputs, numbers, booleans and enum choices. Layer and
     file existence are the backend's to check.
+
+    Args:
+        info: The algorithm's registry description.
+        params: The mapping the caller asked to run with.
     """
     _s = CcState(**locals())
     for _p in (
@@ -316,7 +274,12 @@ def validate_parameters(info: AlgorithmInfo, params: Mapping[str, object]) -> No
 
 @dataclass(frozen=True, slots=True)
 class AlgorithmRun:
-    """A request by algorithm id and parameter mapping, as ``processing.run`` takes."""
+    """A request by algorithm id and parameter mapping, as ``processing.run`` takes.
+
+    Attributes:
+        algorithm: The ``provider:name`` id to run.
+        params: The parameter mapping, by parameter name.
+    """
 
     algorithm: str
     params: Mapping[str, object] = field(default_factory=dict)

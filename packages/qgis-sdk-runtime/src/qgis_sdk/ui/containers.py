@@ -26,7 +26,14 @@ class Row(Container):
 
 
 class Panel(Container):
-    """A padded column; ``scrollable=True`` scrolls when the window is short."""
+    """A padded column; ``scrollable=True`` scrolls when the window is short.
+
+    Args:
+        name: The panel's name in the surface.
+        children: The components it holds.
+        label: The text shown above it, or ``None`` for none.
+        scrollable: Whether it scrolls when the window is too short.
+    """
 
     def __init__(
         self,
@@ -50,6 +57,12 @@ class Group(Container):
 
     ``collapsible=True`` renders the QGIS collapsible group box so a long
     dialog can fold a section away; it is a presentation choice, not state.
+
+    Args:
+        name: The group's name in the surface.
+        children: The components it holds.
+        label: The title shown around them.
+        collapsible: Whether the user may fold it shut.
     """
 
     def __init__(
@@ -75,6 +88,12 @@ class Tabs(Container):
     ``current()`` is the name of the page shown, ``set_current(name)``
     switches it (an unknown name is refused, nothing changes) and
     ``changed(listener)`` hears every switch, the user's included.
+
+    Args:
+        name: The tabs' name in the surface.
+        children: One page per child.
+        label: The text shown above them, or ``None`` for none.
+        current: The page shown first, by name.
     """
 
     def __init__(
@@ -105,7 +124,11 @@ class Tabs(Container):
         return self._current if self._current is not None else self._children[0].name
 
     def set_current(self, name: str) -> None:
-        """Show the page called ``name``; an unknown name is refused."""
+        """Show the page called ``name``; an unknown name is refused.
+
+        Args:
+            name: The page to show.
+        """
         if name not in self.pages:
             raise QgisSdkUiError(
                 f"{self._describe()} has no page {name!r}; it has: "
@@ -114,7 +137,11 @@ class Tabs(Container):
         self._commit(name)
 
     def changed(self, listener: Callable[[str], None]) -> Callable[[], None]:
-        """Call ``listener(name)`` on each switch; returns the unsubscribe."""
+        """Call ``listener(name)`` on each switch; returns the unsubscribe.
+
+        Args:
+            listener: What each page change is handed to.
+        """
         self._listeners.append(listener)
 
         def unsubscribe() -> None:

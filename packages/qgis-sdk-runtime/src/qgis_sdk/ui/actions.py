@@ -32,6 +32,15 @@ __all__ = ["CALLING_VIEW", "ActionCall", "ViewActions"]
 CALLING_VIEW: ContextVar[str | None] = ContextVar("qgis_sdk_calling_view", default=None)
 
 
+def _coerced_values(
+    actions: ViewActions, action: ActionDescription, values: object
+) -> Any:
+    try:
+        return coerce_values(action, values, markers=actions._markers.get(action.id))
+    except QgisSdkFormError as error:
+        raise QgisSdkUiError(str(error)) from error
+
+
 def _invoke(handler, coerced, scope):
     """Dispatch the handler inside the view's scope when there is one.
 
@@ -77,6 +86,14 @@ class ViewActions:
         markers: Mapping[str, Mapping[str, str]] | None = None,
         scope: ResourceScope | None = None,
     ) -> None:
+        """Build the dispatcher for one view over a started runtime.
+
+        Args:
+            runtime: The started runtime the actions are read from.
+            view_id: The view the calls are made from.
+            markers: The handler markers, by action id.
+            scope: The view's own scope, or ``None`` for a new one.
+        """
         self._runtime = runtime
         self._view_id = view_id
         self._scope = scope
@@ -111,11 +128,18 @@ class ViewActions:
 
         What ``Form.for_action`` builds its inputs from; an unknown id is
         refused naming the ids the plugin has.
+
+        Args:
+            action_id: The action to describe.
         """
         return self._find(action_id)
 
     def running(self, action_id: str) -> bool:
-        """Whether ``action_id`` is still running from this view."""
+        """Whether ``action_id`` is still running from this view.
+
+        Args:
+            action_id: The action to ask about.
+        """
         pending = self._running.get(action_id)
         if pending is None:
             return False
@@ -125,22 +149,20 @@ class ViewActions:
         return True
 
     def call(self, action_id: str, /, **values: object) -> object:
-        """Run ``action_id`` with coerced ``values``; return its result or job handle."""
+        """Run ``action_id`` with coerced ``values``; return its result or job handle.
+
+        Args:
+            action_id: The action to run.
+            **values: The arguments, by parameter name.
+        """
         action = self._find(action_id)
         if self.running(action.id):
             raise QgisSdkUiError(
                 f"{action.id} is still running from {self._view_id}; "
                 "wait for it to settle before calling it again"
             )
-        handler = self._handlers.get(action.id)
-        if handler is None:
-            raise QgisSdkUiError(f"{action.id} is not bound: the plugin is not running")
-        try:
-            coerced = coerce_values(
-                action, values, markers=self._markers.get(action.id)
-            )
-        except QgisSdkFormError as error:
-            raise QgisSdkUiError(str(error)) from error
+        handler = self._handler_of(action)
+        coerced = _coerced_values(self, action, values)
         self._running[action.id] = _RUNNING
         token = CALLING_VIEW.set(self._view_id)
         try:
@@ -151,6 +173,12 @@ class ViewActions:
         if _is_job_handle(result) and not _settled(result):
             self._running[action.id] = result
         return result
+
+    def _handler_of(self, action: ActionDescription) -> Any:
+        handler = self._handlers.get(action.id)
+        if handler is None:
+            raise QgisSdkUiError(f"{action.id} is not bound: the plugin is not running")
+        return handler
 
     def __getattr__(self, name: str) -> ActionCall:
         if name.startswith("_"):
@@ -179,6 +207,12 @@ class ActionCall:
     __slots__ = ("_actions", "_id")
 
     def __init__(self, actions: ViewActions, action_id: str) -> None:
+        """Bind one action id to its dispatcher.
+
+        Args:
+            actions: The dispatcher the call goes through.
+            action_id: The action the call runs.
+        """
         self._actions = actions
         self._id = action_id
 
@@ -191,6 +225,11 @@ class ActionCall:
         return self._actions.running(self._id)
 
     def __call__(self, **values: object) -> Any:
+        """Run the bound action with keyword arguments.
+
+        Args:
+            **values: The arguments, by parameter name.
+        """
         return self._actions.call(self._id, **values)
 
     def __repr__(self) -> str:

@@ -25,6 +25,11 @@ def split_name_and_children(
     The first positional of a container is its name when it is a string and
     its children when it is a sequence, so the declarative form
     (``tools = Row([run, clear])``) needs no keyword.
+
+    Args:
+        kind: The component kind, for the refusal to name.
+        name: The name or the children, whichever the caller passed first.
+        children: The children, when the caller named them by keyword.
     """
     if name is None or isinstance(name, str):
         return name, tuple(children or ())
@@ -116,6 +121,9 @@ class _ComponentMixin1:
         Pickers list through the context's services from here on and a
         ``FileInput`` can mint refs. The context's scope closing detaches
         the component and drops every listener. Returns ``self``.
+
+        Args:
+            ctx: The surface's context to bind to.
         """
         if self._ctx is not None:
             if self._ctx is ctx:
@@ -136,6 +144,9 @@ class _ComponentMixin2:
 
         The adapter module imports Qt; without QGIS this refuses by name
         instead of raising an ``ImportError`` from deep inside Qt.
+
+        Args:
+            parent: The widget to parent the built widget to, or ``None``.
         """
         if self._native is not None:
             return self._native.widget
@@ -223,6 +234,10 @@ class Component(_ComponentMixin1, _ComponentMixin2):
     ``attach(ctx)`` binds it to a surface's :class:`UiContext`, ``mount()``
     builds the widget, ``snapshot()`` is its node in a UI snapshot
     (decision-51).
+
+    Args:
+        name: What the node is called; ``None`` until the surface names it.
+        label: The text shown for it, or ``None`` for none.
     """
 
     #: ``objectName`` prefix; a container uses its bare name.
