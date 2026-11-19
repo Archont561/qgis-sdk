@@ -52,6 +52,8 @@
  * page that renders without its components is caught instead of shipped.
  */
 
+import { slugify } from "./slug";
+
 /** A directive block, as parsed: its name, the rest of its line, its content. */
 export interface Block {
 	readonly name: string;
@@ -475,21 +477,13 @@ function renderTabs(block: Block): string {
 	);
 }
 
-/** A heading-like id for an accordion, so its anchor can be linked. */
-function anchor(value: string): string {
-	return value
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-}
-
 function renderAccordion(block: Block): string {
 	const title = required(
 		block,
 		"title",
 		':::accordion needs a title, e.g. title="Why?"',
 	);
-	const id = parseAttributes(block.argument).values.get("id") ?? anchor(title);
+	const id = parseAttributes(block.argument).values.get("id") ?? slugify(title);
 	return tagged(
 		"accordion",
 		`<Accordion title=${quoted(title)} id=${quoted(id)}>\n\n${bodyOf(block)}\n\n</Accordion>`,

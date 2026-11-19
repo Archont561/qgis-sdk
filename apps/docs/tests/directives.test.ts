@@ -276,3 +276,24 @@ describe("the guide sources", () => {
 		}
 	});
 });
+
+describe("an accordion anchor", () => {
+	test("is the heading slug the guides already link to", () => {
+		// The heading leaves the page and becomes a panel title, so the id on the
+		// accordion is the only thing keeping `#how-do-i-name-a-job` a live link.
+		// One slug function for both, or the two drift on the first question mark.
+		const { markdown } = expandDirectives(
+			':::accordions\n:::accordion title="What may a job body touch?"\nBody.\n:::\n:::\n',
+		);
+		expect(markdown).toContain('id="what-may-a-job-body-touch"');
+	});
+
+	test("follows the guide's rule for punctuation, not a second rule", () => {
+		const { markdown } = expandDirectives(
+			':::accordions\n:::accordion title="Hosts: compose the service (0.9)"\nBody.\n:::\n:::\n',
+		);
+		// `slugify` drops the punctuation and keeps the words apart: the same id
+		// the heading had before it became a panel.
+		expect(markdown).toContain('id="hosts-compose-the-service-09"');
+	});
+});
