@@ -231,9 +231,9 @@ if (typeof value === "object" && value !== null && "kind" in value) {
 
 ## Host namespaces
 
-`./host` is the curated host surface a page may call (decision-27). It is
-generated from `qgis_sdk.bridge.host`, ships inside this package, and is versioned
-with it, so it cannot drift from the Python it talks to.
+`./host` is the curated host surface a page may call (decision-27), generated
+from `qgis_sdk.bridge.host` and versioned with this package, so it cannot drift
+from the Python it talks to.
 
 ```ts
 import { createHost } from "@archont561/qgis-sdk/host";
@@ -247,52 +247,36 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
 - **The declared inventory:** `layers.list`, `layers.get`,
   `layers.open_vector`, `project.layer_ids`, `settings.get`,
   `notifications.info`, `styles.apply`, `files.export`, `blob.get`, the
-  `network.fetch` stream, `algorithms.providers`, `algorithms.list`,
-  `algorithms.describe`, `algorithms.run` (below) and, since 0.10.0,
-  `features.page`, `features.get`, `expressions.evaluate`,
-  `expressions.validate`, `editing.begin/add/update/delete/commit/rollback`,
-  the `canvas` namespace with its `canvas.extent_changed` and `canvas.capture`
-  streams, the `rasters` namespace, the `project` namespace down to the
-  layer tree, the CRS, the entries, the bookmarks, the file and the
-  `project.changed` stream, the `symbology`, `labelling` and `styles`
-  namespaces, and since 0.11.0 `algorithms.run_model` and `algorithms.batch`
-  (below).
-  Anything else of the QGIS API is not reachable from a page; the operations it
-  would need wait for their owning task, and the Python manifest records which.
+  `network.fetch` stream, the four `algorithms.*` calls below and, since 0.10.0,
+  the `features`, `expressions`, `editing`, `canvas`, `rasters`, `project`,
+  `symbology`, `labelling` and `styles` namespaces, plus `algorithms.run_model`
+  and `algorithms.batch` since 0.11.0. Anything else of the QGIS API is not
+  reachable from a page; the operations it would need wait for their owning
+  task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
   `{items, truncated, next_cursor?}`. `limit` is capped at 200 (1000 for a
-  feature page, 100 by default), and the generated validator refuses a larger one
-  before the call leaves the page. A cursor is only ever the value the host
-  handed back in `next_cursor`: anything else is refused as `invalid_payload`
-  instead of being read as "start over", and the generated validator refuses it
-  before the call leaves the page.
-- **Typed results.** `host.layers.get` returns the layer's own interface, not a
-  record: one of the seven kind descriptions, discriminated by `kind`, so
-  `geometry_type` is one of the declared literals, `crs` is `string | null` on
-  every one, and `band_count` is reachable only after `kind === "raster"`.
+  feature page, 100 by default), and a cursor is only ever a value the host
+  handed back - anything else is `invalid_payload`, not "start over".
+- **Typed results.** `host.layers.get` returns the layer's own interface, one of
+  the seven kinds discriminated by `kind`, so `band_count` is reachable only
+  after `kind === "raster"`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown
   one is a `QgisSdkHostContractError` before the transport), responses are
-  additive (a field a newer host added is tolerated, a missing one is refused).
-  The error extends `QgisSdkError` with `code: "contract_validation_failed"`
-  and names the `operation`.
-- **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported, and the
-  handshake advertises the same version, so a page can tell what it is talking to
+  additive (a newer field is tolerated, a missing one refused), and the error
+  names the `operation` with `code: "contract_validation_failed"`.
+- **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported and the
+  handshake advertises the same version, so a page knows what it is talking to
   before its first call.
 - **Reached through a grant, never wholesale.** Every operation belongs to one
-  grant (`layers.read`, `layers.open`, `project.read`, `files.export`,
-  `algorithms.read`, `algorithms.run`, `network.fetch`, `canvas.read`,
-  `canvas.control`, ...), and the page is
-  registered with `register_host_operations(only=...)`: what
+  grant (`layers.read`, `layers.open`, `project.write`, `canvas.control`, ...),
+  and the page is registered with `register_host_operations(only=...)`: what
   `[tool.qgis-sdk.web] grants` does not name is *absent* on this side too, so
-  `host.settings` is `undefined` rather than a call that fails. The same names
-  narrow the plugin's console (`[tool.qgis-sdk.console] grants`, every operation
-  by default), and `qgis-sdk check --grants` prints the page/console matrix for
-  one project. The complete list is
-  [doc-22's host operations table](../../../backlog/docs/plans/doc-22%20-%20Service-coverage-map.md#host-operations).
-- **A different vocabulary for the plugin's own actions.** The plugin HTTP API
-  (`PluginHttpServer(actions=...)`) is the third authority-bearing client and it
-  names **action and stream ids**, not host operations; there is no agent
-  namespace to configure (decision-49 was withdrawn in 0.8.0).
+  `host.settings` is `undefined` rather than a failing call. The same names
+  narrow the plugin's console, and `qgis-sdk check --grants` prints the
+  page/console matrix.
+- **A different vocabulary for the plugin's own actions.** `PluginHttpServer`
+  is the third authority-bearing client and names **action and stream ids**; there
+  is no agent namespace to configure (decision-49, withdrawn in 0.8.0).
 
 ### Features, expressions and editing from a page
 
@@ -314,32 +298,26 @@ const subscription = await client.subscribe(
 );
 ```
 
-- **Each event is one `FeaturePage`**: `{items, truncated, next_cursor?}` where
-  `next_cursor` is the last feature id of the page and `truncated` says more rows
-  remain. The stream pages on by itself, so a consumer does not loop; `cursor` is
-  optional and pins where it starts. A consumer that wants exactly one page opens
-  the subscription and closes it after the first event, which costs the host one
-  page rather than the layer.
-- **Geometry is encoded, never an object graph.** `GeoJSON` text can be handed
-  straight to a renderer, `wkb` is base64 of the provider's bytes for a consumer
-  that stores them, `wkt` is text; `encoding` names which, and
-  `geometry_type`/`crs`/`part_count`/`vertex_count`/`is_empty` describe it
-  without a parser. A page asking for an encoding the source did not declare is
+- **Each event is one `FeaturePage`**: `{items, truncated, next_cursor?}`, where
+  `next_cursor` is the page's last feature id. The stream pages on by itself;
+  `cursor` only pins where it starts, and closing after the first event costs the
+  host one page rather than the layer.
+- **Geometry is encoded, never an object graph.** `GeoJSON` text goes straight to
+  a renderer, `wkb` is base64 of the provider's bytes, `wkt` is text; `encoding`
+  names which, and `geometry_type`/`crs`/`part_count`/`vertex_count`/`is_empty`
+  describe it without a parser. An encoding the source did not declare is
   refused by name.
-- **`features.get`** returns one `Feature` in the same shapes, for a page that
-  already has an id.
-- **`expressions.evaluate` returns `ExpressionOutcome`**: `{valid, value?,
-  message?}`. `valid: true` with `value: null` is a parsed expression whose value
-  is null; `valid: false` with a message is a syntax or evaluation error. Neither
-  is a failed call, so a console and a page see the same answer.
-  `expressions.validate` returns `ExpressionCheck` with `referenced_columns`, for
-  validating a form before anything runs.
+- **`features.get`** answers one `Feature` in the same shapes, for a page that
+  has an id.
+- **`expressions.evaluate` returns `ExpressionOutcome`**
+  (`{valid, value?, message?}`): `valid: true` with a null `value` is a parsed
+  expression whose value is null, and `valid: false` with a message is a syntax
+  or evaluation error - neither is a failed call.
+  `expressions.validate` answers `ExpressionCheck` with `referenced_columns`.
 - **Editing is a view-owned session.** `editing.begin({layer_id})` returns
-  `{session_id, layer_id}`; `add`/`update`/`delete` return the pending count;
-  `commit` returns `EditOutcome(applied, feature_ids, committed)` and `rollback`
-  discards. The session belongs to the view that began it: an id from another
-  view is refused as `unknown_handle`, and disposing the view closes every
-  session it held.
+  `{session_id, layer_id}`, `add`/`update`/`delete` return the pending count,
+  `commit` an `EditOutcome` and `rollback` discards. The session belongs to the
+  view that began it.
 - **No atomicity is promised.** `commit` reports `committed: false` or raises
   with the provider's message; the host never claims a transaction the provider
   does not have, and nothing here spans two layers. The tested boundaries per
@@ -350,20 +328,16 @@ const subscription = await client.subscribe(
 
 The four `algorithms` operations of 0.7.0
 ([decision-64](../../../backlog/decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md))
-expose the host's Processing registry behind two grants: `algorithms.read`
-for `providers`, `list({provider?, limit?, cursor?})` and
-`describe({algorithm_id})` - pages of `ProviderInfo` / `AlgorithmSummary`
-and one `AlgorithmInfo` whose parameters carry `required`, `default_json`
-(the default as JSON text, `null` when none), `options`, bounds and
-`destination` - and `algorithms.run` for
-`run({algorithm_id, params})`. The wire is generic JSON: `params` is the
-map the algorithm's own description validates on the host before anything
-runs, and the `RunResult` is a list of tagged outputs - `{name, kind:
-"vector", layer}`, `{name, kind: "file", file}` or `{name, kind: "value",
-value}`. A layer input is an owned layer id; a file input is a `FileRef`
-this view holds, resolved against the view before the algorithm sees it;
-a file the run produced comes back as a read-only `FileRef` minted for the
-view. `HOST_FINGERPRINT` moved once for the four operations.
+sit behind two grants: `algorithms.read` for `providers`, `list` and `describe`
+(pages of `ProviderInfo` / `AlgorithmSummary`, and one `AlgorithmInfo` whose
+parameters carry `required`, `default_json`, `options`, bounds and
+`destination`), and `algorithms.run` for `run({algorithm_id, params})`. The wire
+is generic JSON: `params` is the map the algorithm's description validates on
+the host, and `RunResult` is a list of tagged outputs - `{name, kind: "vector",
+layer}`, `{name, kind: "file", file}` or `\{name, kind: "value", value\}`. A
+layer input is an owned layer id, a file input a `FileRef` this view holds, and a
+produced file comes back as a read-only `FileRef` minted for the view.
+`HOST_FINGERPRINT` moved once for these operations.
 
 Since 0.11.0 the same grant carries two more operations.
 `run_model({model, params})` runs a Processing **model** the view holds as a
@@ -371,11 +345,10 @@ Since 0.11.0 the same grant carries two more operations.
 answers the same tagged `RunResult`: the model's exposed outputs, each in
 the kind its own description declares, and `algorithm` naming the model ref.
 `batch({runs})` runs several `{algorithm_id, params}` requests in order and
-answers `{results: RunResult[]}` oldest first. On the wire a batch is one
-call that answers when every request finished - the job form lives on the
-service side, where a page's host shows one progress bar per request and a
-user can cancel the rest between them (the `layouts.export` precedent: the
-wire answers the finished thing, the service owns the job).
+answers `{results: RunResult[]}` oldest first. A batch is one call that answers
+when every request finished: the job form belongs to the service, which can
+show a bar per request and cancel the rest between them (the `layouts.export`
+precedent).
 
 The typing lives next to the page, not in this package. `qgis-sdk
 processing generate --web-out web/src/processing.schema.ts` (the scaffold's
@@ -393,25 +366,22 @@ const { outputs } = await runAlgorithm(qgis, "native:buffer", {
 outputs.OUTPUT; // VectorLayerInfo | undefined, as NativeBufferResult declares
 ```
 
-Under it the root exports the generic pieces the generated module imports:
-`runAlgorithm<R, K>(qgis, id, params, options?)` (sends one
-`algorithms.run` and keys the tagged outputs by name), `outputsByName`,
-`AlgorithmHost`, `AlgorithmRun<Result>`, `AlgorithmRegistryLike`, and the
-value aliases `LayerRef`, `Destination` (`FileRef | null`: a page never
-names a path), `Extent`, `PointValue` and `RangeValue`. A test scripts the
-operation like any host id: `harness.expectInvoke("algorithms.run", (payload)
-=> ({ algorithm: "native:buffer", outputs: [...] }))`. The scaffold writes
-`web/src/processing.schema.ts` for `native` from the runtime's own snapshot
-and grants `algorithms.run`; `bindings` regenerates it against the project's
-QGIS, so a registry that differs shows up as drift rather than a stale type.
+The root exports what the generated module imports: `runAlgorithm<R, K>`,
+`outputsByName`, `AlgorithmHost`, `AlgorithmRun<Result>`,
+`AlgorithmRegistryLike` and the value aliases `LayerRef`, `Destination`
+(`FileRef | null`: a page never names a path), `Extent`, `PointValue` and
+`RangeValue`. A test scripts the call like any host id, with
+`harness.expectInvoke("algorithms.run", ...)`; `bindings` regenerates the
+schema against the project's QGIS, so a registry that differs is drift, not a
+stale type.
 
 ### The map canvas from a page
 
-The `canvas` namespace is the view the user is looking at. Two grants split it:
-`canvas.read` for `extent()`, `scale()`, `crs()`, `center()`, `themes()` and the
-`extent_changed` stream, and `canvas.control` for `zoom_to`, `refresh`,
-`apply_theme` and `capture` - a page that may draw a scale bar cannot pan the map
-under somebody's cursor.
+The `canvas` namespace is the view the user is looking at. `canvas.read` covers
+`extent()`, `scale()`, `crs()`, `center()`, `themes()` and the `extent_changed`
+stream; `canvas.control` covers `zoom_to`, `refresh`, `apply_theme` and
+`capture` - a page that may draw a scale bar cannot pan the map under
+somebody's cursor.
 
 ```ts
 const extent = await qgis.host.canvas.extent();      // CanvasExtent
@@ -425,32 +395,26 @@ const stop = await qgis.host.canvas.extent_changed({}, {
 ```
 
 - **An extent is four numbers and a CRS.** `CanvasExtent { x_min, y_min, x_max,
-  y_max, crs? }`; `CanvasPoint` is the centre in the same CRS. Nothing here is a
-  native rectangle, so a page can draw a box or place a marker without a host
-  object.
+  y_max, crs? }`, with `CanvasPoint` the centre in that CRS - no native
+  rectangle, so a page can draw a box without a host object.
 - **`zoom_to` answers where the map landed**, not `null`: a real canvas grows the
-  box to the window's aspect ratio, so the answer is at least what was asked for
-  and is what a page should draw against. `kind` is `layer`, `selection` or
-  `extent`; `margin` is a fraction of the target's span added on every side, and
-  a target the canvas cannot honour fails by name instead of moving nothing.
-- **Applying a theme is `canvas.apply_theme({name})`**, which returns the new
-  `MapThemes`: `active` is always one of `names`, and an unknown name fails with
-  the name in the message rather than leaving a stale label on screen.
-- **`canvas.capture` is a stream with one event.** Subscribe with
-  `{shape: "point" | "line" | "polygon"}`, receive the drawn geometry as one
-  `data` frame and a `complete` terminal; the tool is removed when the
-  subscription ends, whichever way it ends. A page cannot finish a drawing - the
-  user does - so the subscription is how a page waits for one.
-- **`canvas.extent_changed` is ordered per subscription.** `seq` starts at zero
-  and increases by one, so a gap is detectable; a refresh is not a move and
-  produces no frame. A server host has no canvas: every operation is declared and
-  fails by name there.
+  box to the window's aspect ratio. `kind` is `layer`, `selection` or `extent`,
+  `margin` a fraction of the target's span on every side, and a target the
+  canvas cannot honour fails by name.
+- **`canvas.apply_theme({name})` returns the new `MapThemes`**, whose `active` is
+  always one of `names`; an unknown name fails with the name in the message.
+- **`canvas.capture` is a stream with one event**: subscribe with
+  `{shape: "point" | "line" | "polygon"}`, receive the drawn geometry as a `data`
+  frame and a `complete` terminal, and the tool goes when the subscription ends.
+  The user finishes the drawing, so waiting on it is the only way.
+- **`canvas.extent_changed` is ordered per subscription** (`seq` from zero), and
+  a refresh produces no frame. A server host has no canvas: every operation is
+  declared and fails by name there.
 
 ### Rasters from a page
 
-`rasters` reads raster bands. It is its own namespace because a raster is not a
-vector layer with different fields, and `layers.*` only reports *that* one
-exists - `layers.list` and `layers.get` answer both kinds, each with its `kind`.
+`rasters` reads raster bands, its own namespace because a raster is not a vector
+layer with different fields; `layers.*` only reports *that* one exists.
 
 ```ts
 const info = await qgis.host.rasters.open({ file: ref }); // RasterLayerInfo
@@ -467,26 +431,21 @@ const sample = await qgis.host.rasters.sample({
 sample.values; // readonly (number | null)[] - None per band, never 0
 ```
 
-- **Two grants.** `rasters.open` for opening a file the view holds a read ref
-  for; `rasters.read` for `get`, `statistics` and `sample`.
-- **`LayerInfo` is a union of seven.** `layers.get` answers `VectorLayerInfo |
-  RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo |
-  AnnotationLayerInfo | TiledSceneLayerInfo`, and the discriminator is `kind`, so
-  a page narrows with one comparison rather than guessing from the fields.
-- **A band number is 1-based** and outside `1..band_count` fails by name
-  (`operation_failed`, with the band in the message); a no-data pixel or a point
-  outside the raster answers `null` for that band.
-- **The point carries its CRS.** `point.crs` says what the numbers mean; the host
-  transforms and answers `sample.point` where it landed. Omit `crs` and the point
-  is read in the raster's own.
+- **Two grants.** `rasters.open` for a held read ref's file; `rasters.read` for
+  `get`, `statistics` and `sample`.
+- **`LayerInfo` is a union of seven**, discriminated by `kind`, so a page narrows
+  with one comparison instead of guessing from the fields.
+- **A band number is 1-based**; outside `1..band_count` it fails by name
+  (`operation_failed`), and a no-data pixel or an outside point is `null`.
+- **The point carries its CRS**: the host transforms and answers `sample.point`
+  where it landed. Omitted, the point is read in the raster's own.
 - **No export operation.** A page never names a filesystem destination
-  (decision-20): the export is a plugin action that runs it as a job and returns
-  a `FileRef`.
+  (decision-20): the export is a plugin action that runs as a job and returns a
+  `FileRef`.
 
 ### Every layer kind from a page
 
-A project holds more than vectors and rasters, and the generated client says so:
-each kind has its own interface and each has its own `open` operation, all behind
+Each layer kind has its own interface and its own `open` operation, all behind
 the one grant `layers.open`.
 
 ```ts
@@ -513,29 +472,17 @@ const scene = await qgis.host.layers.open_tiled_scene({ file: sceneRef });
 scene.extent;          // { x_min, y_min, x_max, y_max, crs }
 ```
 
-- **`kind` discriminates all seven.** `layers.list` answers a `LayerPage` whose
-  `items` are the union; switch on `kind` to reach a field, and the compiler
-  refuses a field the kind does not have.
-- **`layers.open_annotation` takes a name.** The request is `{ name: string }`
-  with a non-blank pattern, not a `FileRef`: an annotation layer is a drawing
-  surface the project holds, so there is no file to resolve and nothing for the
-  file authority to check.
-- **A tiled scene answers a box.** There is no `tile_count` in the interface
-  because QGIS has no synchronous one; `extent` is what the host can answer
-  honestly.
+- **`kind` discriminates all seven**: `layers.list` answers a `LayerPage` of the
+  union, and the compiler refuses a field the kind does not have.
+- **`layers.open_annotation` takes a name** (`{name: string}`, non-blank): the
+  project holds the drawing surface, so there is no file to resolve.
+- **A tiled scene answers a box**: QGIS has no synchronous `tile_count`, and
+  `extent` is what the host can answer honestly.
 - **One grant for five operations.** `layers.open` covers every kind, so a page
-  that could open a vector can open a mesh too - and a page granted nothing new
-  gets nothing new.
-- **Vector-only work still refuses.** `features.*`, `expressions.*`,
-  `editing.*` and `layers.export_vector` fail by name for another kind
-  (`unsupported_layer_kind`), so a page shows the refusal instead of an empty
-  table that reads as "this layer has no features".
-
-`isVectorLayer(info)` still narrows to `VectorLayerInfo`, which is what the
-host-query stores need; a page that wants the other kinds switches on `kind`
-directly. Nothing about the fingerprint's *meaning* changed: it moved because the
-surface grew, and a `0.7.0` client is refused by a host that gained these five
-operations until it is regenerated against it.
+  granted nothing new gets nothing new.
+- **Vector-only work still refuses**: `features.*`, `expressions.*`, `editing.*`
+  and `layers.export_vector` fail `unsupported_layer_kind`, so a page shows the
+  refusal instead of an empty table that reads as "no features".
 
 ### Symbology from a page
 
@@ -570,35 +517,32 @@ const qml = await qgis.host.styles.export({ layer_id, format: "qml" });
 await qgis.host.styles.import({ layer_id, format: "qml", text: qml.text });
 ```
 
-- **Four renderers, three symbols.** `Renderer` is
-  `SingleSymbolRenderer | CategorizedRenderer | GraduatedRenderer |
-  RuleBasedRenderer`, and `Symbol` is `MarkerSymbol | LineSymbol | FillSymbol`.
-  A heatmap is not in the union because the host refuses it by name
-  (`unsupported_capability`) rather than describing it as a single symbol.
-- **`kind` narrows; nothing is cast.** `renderer.categories` exists only after
+- **Four renderers, three symbols.** `Renderer` is `SingleSymbolRenderer |
+  CategorizedRenderer | GraduatedRenderer | RuleBasedRenderer`, `Symbol` is
+  `MarkerSymbol | LineSymbol | FillSymbol`. A heatmap is refused by name
+  (`unsupported_capability`) rather than described as a single symbol.
+- **`kind` narrows; nothing is cast**: `renderer.categories` exists only after
   `renderer.kind === "categorized"`, and `symbol.shape` is one of five literals.
-- **A symbol its geometry cannot draw is refused.** Setting a marker on a line
-  layer answers `style_incompatible` naming both, instead of a layer that
-  reports success and paints nothing.
+- **A symbol its geometry cannot draw is refused**: a marker on a line layer
+  answers `style_incompatible` naming both, instead of reporting success and
+  painting nothing.
 - **Reads and writes are different grants.** `symbology.read` covers
-  `symbology.get` and `labelling.get`; `symbology.write` covers the two `set`
-  calls; `styles.read` covers `styles.list` and `styles.export`, and
-  `styles.write` covers `styles.import`. A page that only displays the current
-  renderer needs no write grant at all.
-- **The four that replace a drawing are `destructive`.** `symbology.set`,
-  `labelling.set`, `styles.import` and `styles.apply` carry the annotation, so a
-  tool set to "ask each time" asks before them.
+  `symbology.get` and `labelling.get`, `symbology.write` the two `set` calls,
+  `styles.read` `list`/`export` and `styles.write` `import` - a page that only
+  displays a renderer needs no write grant.
+- **The four that replace a drawing are `destructive`**: `symbology.set`,
+  `labelling.set`, `styles.import` and `styles.apply`, so a tool set to "ask each
+  time" asks before them.
 - **QML keeps the renderer; SLD keeps the drawing.** `styles.export` answers
-  `StyleText` with a `format` of `"qml"` or `"sld"`, and the caller says which
-  dialect it holds. QGIS reads a categorized renderer back out of SLD as
-  rule-based, so a page that needs the renderer kind back round-trips QML.
+  `StyleText` with `format` `"qml"` or `"sld"`. QGIS reads a categorized renderer
+  back out of SLD as rule-based, so round-trip QML when the kind must survive.
 
 ### Connections from a page
 
-`host.connections` browses the provider connection registry and opens one of
-its tables; `host.auth` lists authentication configurations and re-binds one.
-The models are flat and closed - a description is a name, a provider and an
-auth config *id*, never a credential:
+`host.connections` browses the provider registry and opens one of its tables;
+`host.auth` lists authentication configurations and re-binds one. The models are
+flat and closed - a description is a name, a provider and an auth config *id*,
+never a credential:
 
 ```ts
 const { items } = await qgis.host.connections.list({ limit: 20 });
@@ -625,29 +569,22 @@ await qgis.host.auth.attach({
 });
 ```
 
-- **`test` is a verdict, not an exception.** A registered connection that will
-  not answer is `ConnectionTest` with `valid: false` and the provider's
-  message; a lookup miss (unknown provider or name) is the refusal.
-- **Two annotations, shown distinctly.** `auth.attach` is `destructive` (it
-  replaces how a connection authenticates) and `credential`; `connections.browse`,
-  `connections.test`, `connections.open_layer` and `auth.configurations` are
-  `credential` without being `destructive`. The consent list asks "will this
-  change my project?" and "will this touch my credentials?" as two questions -
-  a read that spends a password is not hidden among the writes.
+- **`test` is a verdict, not an exception**: a registered connection that will
+  not answer is `ConnectionTest` with `valid: false` and the provider's message,
+  while a lookup miss is the refusal.
+- **Two annotations, shown distinctly.** `auth.attach` is `destructive` and
+  `credential`; `browse`, `test`, `open_layer` and `auth.configurations` are
+  `credential` only, so a read that spends a password is not hidden among writes.
 - **Grants split read from spend.** `connections.read` covers the four read
-  calls (including `test`), `layers.open` covers `open_layer` - the same
-  authority as opening a file - `auth.read` lists configurations and
-  `auth.write` attaches one. A page that only lists connections carries no
-  write grant.
-- **A browse is one level.** With no `schema`, a schema-capable connection
-  answers its `kind: "schema"` entries and a GeoPackage answers its tables; a
-  named schema answers that schema's tables.
-
+  calls (including `test`), `layers.open` covers `open_layer`, `auth.read` lists
+  configurations and `auth.write` attaches one.
+- **A browse is one level**: with no `schema`, a schema-capable connection
+  answers its `kind: "schema"` entries and a GeoPackage its tables.
 ### Print layouts from a page
 
-The `layouts` namespace exports what the print designer composed. Three grants
-split it: `layouts.read` for `list()`, `layouts.write` for `load_template` (it
-adds a layout to the project) and `layouts.export` for `export` and `atlas`.
+The `layouts` namespace exports what the print designer composed. `layouts.read`
+covers `list()`, `layouts.write` `load_template` (it adds a layout to the
+project) and `layouts.export` `export` and `atlas`.
 
 ```ts
 const { items } = await qgis.host.layouts.list();   // LayoutInfo[]
@@ -678,27 +615,24 @@ atlas.pages[0].feature_id;        // the coverage feature it was drawn for
 ```
 
 - **Refs in, refs out.** `load_template` takes a `FileRef` (a string path is
-  refused), `export` takes an optional write ref as `destination`, and every
-  answer is a ref the host minted for *this* view. Omit `destination` and the
-  export lands in the host's own output directory, still as a ref.
-- **Both render operations are destructive.** An export replaces the file the
-  page's write ref names, so the manifest marks `layouts.export` and
-  `layouts.atlas` `destructive: true` and the agent consent list can ask first.
+  refused), `export` an optional write ref as `destination`, and every answer is
+  a ref minted for *this* view; omit `destination` and the export lands in the
+  host's output directory, still as a ref.
+- **Both render operations are destructive**, since an export replaces the file
+  the write ref names, so the consent list can ask first.
 - **One page or many.** `format` is `"pdf" | "png" | "svg"`; a `png` or `svg` of
-  a multi-page layout fails by name rather than writing the first page, and a
-  PDF reports how many pages it holds in `pages`.
-- **A page waits for the file.** The wire has no job to follow, so these
-  operations run the render inside the request and answer when it is written;
-  the plugin's own `ctx.layouts.export()` is the job form, with a bar and a
-  cancel button in the QGIS task manager.
+  a multi-page layout fails by name rather than writing the first page.
+- **A page waits for the file.** There is no job on the wire, so the render runs
+  inside the request; `ctx.layouts.export()` is the job form, with a bar and a
+  cancel button.
 - **An atlas answers one ref per page**, in coverage order, each with the
-  `feature_id` it was drawn for - plus a `directory` ref for the run. A pattern
-  may use `{index}` and `{feature_id}`; an unknown placeholder fails by name.
+  `feature_id` it was drawn for, plus a `directory` ref; `{index}` and
+  `{feature_id}` are the placeholders, and an unknown one fails by name.
 
 ### The project from a page
 
 `project` is the open project: the layer tree, the CRS, variables, custom
-properties, bookmarks, the file, and the change stream.
+properties, bookmarks, the file and the change stream.
 
 ```ts
 const tree = await qgis.host.project.tree();        // LayerTree
@@ -716,22 +650,20 @@ const stop = await qgis.host.project.changed({}, {
 
 - **The tree is a model.** `LayerTree { nodes }` is a flat, ordered list
   (`LayerNode { id, name, kind, visible, parent }`) so a page can rebuild the
-  hierarchy; `parent` is a group id, never a name. Every mutation answers the tree
-  it produced, so a page that just moved a node does not ask again.
+  hierarchy; `parent` is a group id, never a name. Every mutation answers the
+  tree it produced.
 - **Two grants.** `project.read` for `layer_ids`, `tree`, `crs`, `variables`,
   `properties`, `bookmarks`, `bookmark` and the `changed` stream;
   `project.write` for everything that changes the project, including `read`
   (which replaces the open project), `write` and `save`.
-- **`destructive` is declared, not inferred.** The generated module carries the
-  annotation per action, so a consent list can set a destructive tool to "ask each
-  time": `read`, `write`, `save`, `remove_layer`, `remove_bookmark`,
-  `unset_variable`, `unset_property`.
-- **Files are refs.** `project.read({file})` and `project.write({file})` take a
-  `FileRef` the view holds; `project.save()` rewrites the file the project
-  already has, and fails by name on a project never saved.
-- **One frame per change, in order.** `project.changed` emits `{kind, layer_ids}`
-  for `layers`, `crs`, `variables`, `properties` and `bookmarks`; the stream does
-  not complete, so a page follows the project until it unsubscribes.
+- **`destructive` is declared, not inferred**: `read`, `write`, `save`,
+  `remove_layer`, `remove_bookmark`, `unset_variable`, `unset_property`, so a
+  consent list can set one to "ask each time".
+- **Files are refs.** `project.read`, `project.write` and `project.save` take a
+  `FileRef` the view holds; `save()` fails by name on a project never saved.
+- **One frame per change, in order.** `project.changed` emits `{kind,
+  layer_ids}` for `layers`, `crs`, `variables`, `properties` and `bookmarks`;
+  it never completes, so a page follows the project until it unsubscribes.
 
 ## The schema module and `QgisSdk`
 
