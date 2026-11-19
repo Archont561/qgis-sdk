@@ -9,6 +9,7 @@ import {
 	errorPart,
 	labelPart,
 } from "../parts";
+import { polarisAvailable, polarisButton, polarisTextField } from "../polaris";
 
 /** How a page obtains a reference: a host dialog, a drop, a fixture. */
 export type FileRefPicker = () => Promise<FileRef | null | undefined>;
@@ -60,6 +61,33 @@ export class QgisFileInput extends QgisSdkElement {
 					? undefined
 					: this.filters.join(", ");
 		const shown = this.value === null ? "" : (this.value.name ?? this.value.id);
+		if (polarisAvailable()) {
+			return html`${polarisTextField({
+				label: this.label,
+				value: shown,
+				name: this.name,
+				disabled: this.disabled,
+				required: this.required,
+				error: this.error,
+				placeholder: this.placeholder,
+				controlId: this.controlId,
+				onInput: () => {},
+			})}
+				${polarisButton({
+					label: "Choose…",
+					disabled: this.disabled || this.pick === null,
+					loading: false,
+					controlId: `${this.controlId}-pick`,
+					onClick: this.onPick,
+				})}
+				${polarisButton({
+					label: "Clear",
+					disabled: this.disabled || this.value === null,
+					loading: false,
+					controlId: `${this.controlId}-clear`,
+					onClick: this.onClear,
+				})}`;
+		}
 		return html`${labelPart(this.controlId, this.label)}
 			<span class="qs-flex qs-items-center qs-gap-1">
 				<input

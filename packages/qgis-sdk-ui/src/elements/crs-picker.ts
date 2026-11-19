@@ -2,6 +2,7 @@ import { html, type PropertyDeclarations, type TemplateResult } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { QgisSdkElement } from "../base";
 import { CONTROL_CLASSES, describedBy, errorPart, labelPart } from "../parts";
+import { polarisAvailable, polarisTextField } from "../polaris";
 
 /** `AUTHORITY:CODE`, the form every `crs` field takes. */
 export const AUTHID_PATTERN: RegExp = /^[A-Za-z][A-Za-z0-9_-]*:[0-9]+$/;
@@ -53,6 +54,19 @@ export class QgisCrsPicker extends QgisSdkElement {
 
 	protected override render(): TemplateResult {
 		const message = this.error === "" ? this.shapeError : this.error;
+		if (polarisAvailable()) {
+			return polarisTextField({
+				label: this.label,
+				value: this.value ?? "",
+				name: this.name,
+				disabled: this.disabled,
+				required: this.required,
+				error: message,
+				placeholder: this.placeholder,
+				controlId: this.controlId,
+				onInput: this.onInput,
+			});
+		}
 		const listId = `${this.controlId}-list`;
 		return html`${labelPart(this.controlId, this.label)}
 			<input

@@ -2,6 +2,7 @@ import { html, type PropertyDeclarations, type TemplateResult } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { QgisSdkElement } from "../base";
 import { CONTROL_CLASSES, describedBy, errorPart, labelPart } from "../parts";
+import { polarisAvailable, polarisTextField } from "../polaris";
 
 /**
  * `<qgis-distance>`: a number input with a unit, for `metres` (and any other
@@ -36,6 +37,19 @@ export class QgisDistance extends QgisSdkElement {
 	}
 
 	protected override render(): TemplateResult {
+		if (polarisAvailable()) {
+			return polarisTextField({
+				label: this.label === "" ? this.unit : `${this.label} (${this.unit})`,
+				value: this.value === null ? "" : String(this.value),
+				name: this.name,
+				disabled: this.disabled,
+				required: this.required,
+				error: this.error,
+				placeholder: "",
+				controlId: this.controlId,
+				onInput: this.onInput,
+			});
+		}
 		return html`${labelPart(this.controlId, this.label)}
 			<span class="qs-flex qs-items-center qs-gap-1">
 				<input

@@ -23,6 +23,7 @@ import {
 	labelPart,
 	STATUS_CLASSES,
 } from "../parts";
+import { polarisAvailable, polarisButton, polarisSelect } from "../polaris";
 
 /** Any SDK built from any schema: the picker reads only `host` and `ready`. */
 export type AnyQgisSdk = QgisSdkCore<unknown, unknown>;
@@ -118,6 +119,46 @@ export class QgisLayerPicker extends QgisSdkElement {
 						: "";
 		const options = this.options;
 		const known = options.some((layer) => layer.id === this.value);
+		if (polarisAvailable()) {
+			const polarisOptions = options.map((layer) => ({
+				value: layer.id,
+				label: layer.name,
+			}));
+			let selected = 0;
+			if (this.nullable || !known) {
+				polarisOptions.unshift({ value: NONE, label: this.placeholder });
+				selected = 0;
+			} else {
+				selected = options.findIndex((layer) => layer.id === this.value) + 1;
+			}
+			return html`${polarisSelect({
+				label: this.label,
+				options: polarisOptions,
+				selected,
+				name: this.name,
+				disabled: this.disabled || state.status !== "ok",
+				required: this.required,
+				error: message,
+				controlId: this.controlId,
+				onChange: this.onChange,
+			})}
+				${
+					refused
+						? nothing
+						: polarisButton({
+								label: "Refresh",
+								disabled: this.disabled || this.qgis === null,
+								loading: false,
+								controlId: `${this.controlId}-refresh`,
+								onClick: this.refresh,
+							})
+				}
+				${
+					state.status === "loading"
+						? html`<p data-part="status" class=${STATUS_CLASSES} role="status">Loading layers…</p>`
+						: nothing
+				}`;
+		}
 		return html`${labelPart(this.controlId, this.label)}
 			<span class="qs-flex qs-items-center qs-gap-1">
 				<select

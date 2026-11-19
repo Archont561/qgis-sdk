@@ -17,6 +17,11 @@
 			"import": "./dist/define.js",
 			"default": "./dist/define.js"
 		},
+		"./polaris": {
+			"types": "./dist/polaris-entry.d.ts",
+			"import": "./dist/polaris-entry.js",
+			"default": "./dist/polaris-entry.js"
+		},
 		"./react": {
 			"types": "./dist/react.d.ts",
 			"import": "./dist/react.js",
