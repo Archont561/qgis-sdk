@@ -33,6 +33,8 @@ Usage:
 
 from __future__ import annotations
 
+import importlib
+import inspect
 import json
 import re
 import shutil
@@ -52,6 +54,18 @@ OUTPUT = ROOT / "apps" / "docs" / "content" / "docs" / "reference" / "python"
 
 BASE_URL = "/reference/python"
 """The URL the output is served at, which is what the links between pages use."""
+
+EMPTY = inspect.Parameter.empty
+"""What `inspect` answers for a parameter with no annotation, or with no default."""
+
+RECORD = "_published_values"
+"""The parameter a `@published` implementation takes instead of its own.
+
+Several published functions take one record and have the real parameter list
+installed on a wrapper (`qgis_sdk/_published.py`). Griffe reads the `def` line,
+so without this the reference would document `_published_values` - a name no
+author can pass - for every one of them.
+"""
 
 SKIPPED = ("_published", "layouts", "adapters", "bridge", "resources")
 """The top-level modules beside the published ones.
@@ -126,6 +140,110 @@ def undescribed_parameters(pages: list[Path]) -> tuple[int, int]:
     return empty, total
 
 
+def _runtime_parameters(signature: inspect.Signature) -> list[object]:
+    """Rebuild griffe's parameters from the published signature."""
+
+    import griffe
+
+    kinds = {
+        inspect.Parameter.POSITIONAL_ONLY: griffe.ParameterKind.positional_only,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD: griffe.ParameterKind.positional_or_keyword,
+        inspect.Parameter.VAR_POSITIONAL: griffe.ParameterKind.var_positional,
+        inspect.Parameter.KEYWORD_ONLY: griffe.ParameterKind.keyword_only,
+        inspect.Parameter.VAR_KEYWORD: griffe.ParameterKind.var_keyword,
+    }
+    built = []
+    for parameter in signature.parameters.values():
+        built.append(
+            griffe.Parameter(
+                parameter.name,
+                annotation=(
+                    None
+                    if parameter.annotation is EMPTY
+                    else inspect.formatannotation(parameter.annotation)
+                ),
+                kind=kinds[parameter.kind],
+                default=None if parameter.default is EMPTY else repr(parameter.default),
+            )
+        )
+    return built
+
+
+def _runtime_object(path: str) -> object:
+    """The object a dotted path names, imported.
+
+    Args:
+        path: A dotted path below the package, such as
+            `qgis_sdk.models.canvas.CanvasExtent.from_bounds`.
+
+    Returns:
+        What `getattr` finds there.
+    """
+
+    parts = path.split(".")
+    for split in range(len(parts), 0, -1):
+        try:
+            module = importlib.import_module(".".join(parts[:split]))
+        except ImportError:
+            continue
+        found: object = module
+        for name in parts[split:]:
+            found = getattr(found, name)
+        return found
+    raise ImportError(path)
+
+
+def _publish_signatures(root: object) -> int:
+    """Put each `@published` function's real parameters back on its page.
+
+    Args:
+        root: The loaded package.
+
+    Returns:
+        How many signatures were replaced.
+    """
+
+    import griffe
+
+    replaced = 0
+    for function in _functions(root, griffe):
+        if function.path.split(".")[1] in SKIPPED:
+            # the adapter and transport layers import QGIS, and are not
+            # published, so nothing is documented from them either.
+            continue
+        if [parameter.name for parameter in function.parameters] != [RECORD]:
+            continue
+        signature = inspect.signature(_runtime_object(function.path))
+        function.parameters = griffe.Parameters(*_runtime_parameters(signature))
+        replaced += 1
+    return replaced
+
+
+def _functions(owner: object, griffe: object) -> list[object]:
+    """Every function in the tree, methods included.
+
+    Args:
+        owner: The module or class to walk.
+        griffe: The module itself, passed in so this needs no import of its own.
+
+    Returns:
+        The functions, in tree order.
+    """
+
+    found: list[object] = []
+    for member in owner.members.values():
+        if isinstance(member, griffe.Alias):
+            try:
+                member = member.target
+            except (griffe.AliasResolutionError, griffe.CyclicAliasError):
+                continue
+        if isinstance(member, (griffe.Module, griffe.Class)):
+            found.extend(_functions(member, griffe))
+        elif isinstance(member, griffe.Function):
+            found.append(member)
+    return found
+
+
 def _render(config: fumero.Config) -> fumero.Result:
     """Load the published tree and write it, with one link table across the lot.
 
@@ -145,6 +263,7 @@ def _render(config: fumero.Config) -> fumero.Result:
     # The star-import list, which fumero would otherwise take for the
     # documentation boundary. See the module docstring.
     root.exports = None
+    _ = _publish_signatures(root)
 
     return fumero.Renderer(config).render(root, OUTPUT)
 

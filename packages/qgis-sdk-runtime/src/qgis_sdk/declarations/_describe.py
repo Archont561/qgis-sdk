@@ -182,8 +182,7 @@ def type_name(annotation: Any) -> str:
         annotation: The annotation, as written or as resolved.
 
     Returns:
-        Its ``__name__`` where it has one, and its ``str`` where it does not -
-        which is what a union or a parametrised generic gives.
+        Its ``__name__`` where it has one, and its ``str`` where it does not.
     """
     return getattr(annotation, "__name__", str(annotation))
 
@@ -201,8 +200,7 @@ def register_describer(attribute: str, describer: Callable[[Any], Any]) -> None:
     a higher layer.
 
     Args:
-        attribute: The attribute the decorator records its marker under, such as
-            ``__qgis_sdk_job__``.
+        attribute: The attribute the decorator records its marker under.
         describer: What turns a marked object into its description.
     """
     _DESCRIBERS[attribute] = describer
@@ -214,9 +212,7 @@ def register_predicate_describer(
     """Register an object-kind describer without importing higher layers.
 
     A marker covers what a decorator sets; a predicate covers what has no marker
-    to read, such as a UI surface built from a declarative description. They are
-    asked in that order, so a decorated object is never taken for the kind a
-    predicate answers for.
+    to read, such as a declared UI surface.
 
     Args:
         predicate: What decides whether an object is the kind this describes.
@@ -231,14 +227,12 @@ def register_describer_enricher(
     """Enrich unified introspection without changing a lower-layer wire schema.
 
     A layer that knows more about a marker - the host bindings a plugin carries,
-    which the declaration layer cannot see - adds its fields here. The wire
-    representation keeps the fields its own schema names, so an enrichment is
-    reference data a host reads, never a change to what is serialised.
+    which the declaration layer cannot see - adds its fields here. The wire keeps
+    the fields its own schema names, so an enrichment is reference data.
 
     Args:
         attribute: The marker attribute whose descriptions to enrich.
-        enricher: What takes a description and the object behind it and answers
-            the enriched one.
+        enricher: What takes a description and the object, and enriches it.
     """
     _DESCRIBER_ENRICHERS[attribute] = enricher
 
@@ -251,20 +245,6 @@ def describe(cls: Any) -> Any:
     and bindings through ``bindings``. These host metadata fields are not part
     of bridge serialization. Description inspects trusted author code and may
     resolve/evaluate type annotations; it never invokes the target handler.
-
-    Args:
-        cls: The class or method to describe. A bound method is read through its
-            function, since the marker is set on the function.
-
-    Returns:
-        The description of whichever kind the object declares, or of whichever
-        kind a registered predicate recognises.
-
-    Raises:
-        QgisSdkDeclarationError: The object is a plugin class rather than a
-            ``QgisSdkPlugin`` subclass. An application class is lowered to one
-            before it can be described, and describing the declaration instead
-            would answer for something that never runs.
     """
     if inspect.ismethod(cls):
         cls = cls.__func__
@@ -292,17 +272,6 @@ def describe_plugin(cls: type) -> PluginDescription:
 
     Actions and streams share one id namespace (decision-28): the dispatcher
     allowlists both by id, so a duplicate across the two is refused here.
-
-    Args:
-        cls: The plugin class to describe.
-
-    Returns:
-        Its ``PluginDescription``: the actions, the streams and the schema
-        version, in declaration order.
-
-    Raises:
-        QgisSdkDeclarationError: An action and a stream share an id, or a
-            declared annotation cannot be resolved.
     """
     _s = _CcState(cls=cls)
     for _p in (_cc_describe_plugin_p3, _cc_describe_plugin_p4, _cc_describe_plugin_p5):
@@ -313,15 +282,7 @@ def describe_plugin(cls: type) -> PluginDescription:
 
 
 def describe_lowered_plugin(cls: type) -> PluginDescription:
-    """Describe and enrich an internally lowered application class.
-
-    Args:
-        cls: The lowered application class, which carries a plugin marker but is
-            not the class an author wrote.
-
-    Returns:
-        Its description, with whatever enrichment the host layer registered.
-    """
+    """Describe and enrich an internally lowered application class."""
     result = describe_plugin(cls)
     enrich = _DESCRIBER_ENRICHERS.get(PLUGIN_ATTRIBUTE)
     return enrich(cls, result) if enrich is not None else result

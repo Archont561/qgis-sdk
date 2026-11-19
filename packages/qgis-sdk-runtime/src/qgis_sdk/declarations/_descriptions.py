@@ -20,13 +20,6 @@ def canonical_json(value: Any) -> str:
 
     Args:
         value: The JSON-compatible structure to serialise.
-
-    Returns:
-        Its canonical JSON text.
-
-    Raises:
-        ValueError: ``value`` holds a nonfinite number, or something that is not
-            JSON at all.
     """
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
@@ -46,22 +39,17 @@ class Description(Protocol):
     """
 
     @property
-    def id(self) -> str:
-        """The identifier the thing is invoked or subscribed to by."""
+    def id(self) -> str: ...
 
     @property
-    def title(self) -> str:
-        """The label a host shows for it."""
+    def title(self) -> str: ...
 
     @property
-    def schema_version(self) -> int:
-        """The description schema the object speaks."""
+    def schema_version(self) -> int: ...
 
-    def to_dict(self) -> dict[str, Any]:
-        """The transport representation, ready to be serialised."""
+    def to_dict(self) -> dict[str, Any]: ...
 
-    def to_json(self) -> str:
-        """The transport representation as canonical JSON."""
+    def to_json(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -69,15 +57,13 @@ class ActionDescription:
     """Serializable action structure; handler is a binding name, not a callable.
 
     Attributes:
-        id: The identifier the action is invoked by, unique within its plugin.
-        title: The label a host shows for it, in a menu or a button.
-        handler: The name of the binding that receives the call. It is a name
-            rather than a callable, so the description stays serialisable and a
-            generated client can name the same operation.
-        request: The JSON schema of the arguments the action takes.
+        id: The identifier the action is invoked by.
+        title: The label a host shows for it.
+        handler: The binding name that receives the call. A name rather than a
+            callable, so the description stays serialisable.
+        request: The JSON schema of the arguments it takes.
         result: The JSON schema of the value it returns.
-        bindings: The UI bindings it was declared with, as introspection
-            metadata. Not part of the wire representation.
+        bindings: The UI bindings it declared, as introspection metadata.
         wires: The wires it declared, in the same sense as ``bindings``.
     """
 
@@ -114,12 +100,10 @@ class StreamDescription:
     Attributes:
         id: The identifier the stream is subscribed to by.
         title: The label a host shows for it.
-        handler: The name of the binding that receives the subscription.
-        request: The JSON schema of what the subscriber sends to open it.
-        events: Each declared event kind, mapped to the JSON schema of its
-            payload.
-        wires: The wires it declared, as introspection metadata rather than as
-            part of the wire representation.
+        handler: The binding name that receives the subscription.
+        request: The JSON schema of what the subscriber sends.
+        events: Each declared kind, mapped to the schema of its payload.
+        wires: The wires it declared, as introspection metadata.
     """
 
     id: str
@@ -150,11 +134,9 @@ class PluginDescription:
         id: The plugin's identifier, which its actions are namespaced under.
         title: The label a host shows for the plugin.
         actions: Every action the plugin declares, in declaration order.
-        schema_version: The description schema the object speaks, so a host can
-            refuse one it does not know rather than misread it.
+        schema_version: The schema it speaks, so a host can refuse an unknown one.
         streams: Every stream the plugin declares.
-        bindings: Host bindings attached by unified introspection. They are
-            carried alongside the wire representation, not inside it.
+        bindings: Host bindings from unified introspection, beside the wire.
     """
 
     id: str

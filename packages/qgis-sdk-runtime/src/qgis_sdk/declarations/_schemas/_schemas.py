@@ -24,13 +24,7 @@ def object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
 
     Args:
         properties: Each field's schema, keyed by the name it arrives under.
-        required: The field names a caller has to send. An empty list leaves the
-            key out, since a schema that requires nothing and one that omits
-            ``required`` say the same thing.
-
-    Returns:
-        An object schema that refuses fields it does not name, so a caller that
-        misspells an argument is answered rather than ignored.
+        required: The names a caller has to send.
     """
     schema = {"type": "object", "properties": properties, "additionalProperties": False}
     if required:
@@ -41,21 +35,12 @@ def object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
 def resolve_hints(target: Any, path: str) -> dict[str, Any]:
     """Resolve ``target``'s annotations, naming ``path`` when one cannot be.
 
-    A resolution is what turns ``"Geometry"`` written under
-    ``from __future__ import annotations`` into the class, and it is where a
-    circular import or a name that moved shows up: with the declaration's path
-    attached, rather than as a bare ``NameError`` from inside ``get_type_hints``.
-
     Args:
         target: The function or class whose annotations to resolve.
         path: The declaration's path, used in the error message.
 
-    Returns:
-        Each annotation, keyed by the name it annotates.
-
     Raises:
-        QgisSdkDeclarationError: An annotation names something that does not
-            resolve from the module it is written in.
+        QgisSdkDeclarationError: An annotation does not resolve.
     """
     try:
         return get_type_hints(target, include_extras=True)
@@ -81,20 +66,10 @@ def schema_for(annotation: Any, path: str, *, result: bool) -> dict[str, Any]:
     """Describe one annotation using the JSON Schema subset the contract allows.
 
     Args:
-        annotation: The annotation to describe: a primitive, a dataclass, a
-            mapping, a sequence, an ``Annotated`` or a union of those.
-        path: The declaration's path followed by the field it belongs to, used
-            in the error message.
-        result: Whether the annotation describes what a declaration returns
-            rather than what it takes. A file reference is accepted either way,
-            but the keyword intents are input-only.
-
-    Returns:
-        The JSON Schema for it.
-
-    Raises:
-        QgisSdkDeclarationError: The annotation is outside the subset, which a
-            recursive dataclass or an arbitrary object is.
+        annotation: A primitive, a dataclass, a mapping, a sequence, or a union.
+        path: The declaration's path and the field, for the error message.
+        result: Whether it describes a return value rather than an input. The
+            keyword intents are input-only, so they are refused here.
     """
     return _schema(annotation, path, result=result)
 

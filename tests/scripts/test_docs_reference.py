@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from automation.docs import reference
 
 
@@ -73,3 +75,31 @@ def test_a_page_with_no_parameters_counts_nothing(tmp_path: Path) -> None:
     page.write_text("# A module\n\nProse only.\n", encoding="utf-8")
 
     assert reference.undescribed_parameters([page]) == (0, 0)
+
+
+def test_a_published_signature_replaces_the_one_record_parameter() -> None:
+    pytest.importorskip("griffe")
+    import inspect
+
+    signature = inspect.Signature(
+        [
+            inspect.Parameter(
+                "x", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=float
+            ),
+            inspect.Parameter(
+                "label",
+                inspect.Parameter.KEYWORD_ONLY,
+                annotation=str | None,
+                default=None,
+            ),
+        ]
+    )
+
+    built = reference._runtime_parameters(signature)
+
+    assert [(parameter.name, parameter.annotation) for parameter in built] == [
+        ("x", "float"),
+        ("label", "str | None"),
+    ]
+    assert built[1].default == "None"
+    assert built[1].kind.value == "keyword-only"

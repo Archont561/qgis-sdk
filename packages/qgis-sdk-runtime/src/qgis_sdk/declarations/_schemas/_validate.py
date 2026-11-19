@@ -21,17 +21,9 @@ __all__ = [
 def check_field_parents(properties: dict[str, Any], path: str) -> None:
     """Refuse a field input whose ``of`` is not a layer input of the same call.
 
-    A field input names the layer it reads by that layer input's name, so the
-    pair has to be in one request: a field of a layer the caller did not also
-    send has nothing to read.
-
     Args:
         properties: The request's fields, keyed by the name each arrives under.
         path: The declaration's path, used in the error message.
-
-    Raises:
-        QgisSdkDeclarationError: A field input names no input of the same
-            declaration, or names one that is not a layer.
     """
     for name, schema in properties.items():
         intent = schema.get(WIRE_KIND_KEYWORD) if isinstance(schema, dict) else None
@@ -86,10 +78,6 @@ def require_self_first(parameters: list[Any], path: str) -> None:
     Args:
         parameters: The declaration's parameters, in signature order.
         path: The declaration's path, used in the error message.
-
-    Raises:
-        QgisSdkDeclarationError: The first parameter is not ``self``, or is not
-            the kind a method's first parameter is.
     """
     if (
         not parameters
@@ -108,22 +96,12 @@ def keyword_inputs(
 ) -> tuple[dict[str, Any], list[str]]:
     """Describe the accepted inputs and say which of them must arrive.
 
-    A parameter with a default is optional; one without is required. Variadic
-    and positional-only parameters are refused rather than described, because
-    neither has a name a JSON object could carry.
+    A parameter with a default is optional; one without is required.
 
     Args:
-        parameters: The declaration's parameters, ``self`` already removed.
-        hints: The resolved annotations, keyed by parameter name, as
-            :func:`resolve_hints` answers them.
-        path: The declaration's path, used in the error messages.
-
-    Returns:
-        Each input's schema keyed by name, and the names that must arrive.
-
-    Raises:
-        QgisSdkDeclarationError: A parameter is variadic or positional-only, or
-            its annotation is outside the schema subset.
+        parameters: The parameters, ``self`` already removed.
+        hints: The resolved annotations, as :func:`resolve_hints` answers them.
+        path: The declaration's path, used in the errors.
     """
     properties, required = {}, []
     for parameter in parameters:
