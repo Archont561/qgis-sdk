@@ -2,25 +2,18 @@
 
 This is the half of the server host that can be tested without QGIS: it takes
 the declared hooks, registers them with whatever object plays
-``QgsServerInterface`` (the real one in ``qgis_sdk.adapters.qgis.server``, the
-scripted one in ``qgis_sdk.testing``), and serves a request through them in the
-order decision-69 fixes.
-
-Serving is deliberately linear. A filter returns ``None`` to pass the request
-on, a :class:`~qgis_sdk.server.ServerRequest` to rewrite what the hooks after it
-see, or a :class:`~qgis_sdk.server.ServerResponse` to answer it and stop; the
-service whose name matches the ``SERVICE`` parameter answers next; the access
-hooks then rule on each requested layer, and a refusal is a 403 naming the layer
-rather than a silently filtered map. No step of that is allowed to wait for a
-thread: the scope closes when the response exists, and a job a hook submitted is
-request-scoped and abandoned with it (decision-52).
+``QgsServerInterface``, and serves a request through them in the order
+decision-69 fixes. Serving is deliberately linear - a filter passes, rewrites
+or answers, the matching service answers next, and the access hooks then rule
+on each requested layer - and no step of it waits for a thread: the scope
+closes when the response exists, so a job a hook submitted is request-scoped
+and abandoned with it (decision-52).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Protocol, TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core.scope import ResourceScope
@@ -29,94 +22,25 @@ from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import Layers, Log, Project
 
 from ._context import ServerContext, ServerServices
-from ._hooks import HookDeclaration, ServerHooks
+from ._hooks import ServerHooks, declaration_of
+from ._interface import ServerInterface
+from ._phases import (
+    EarlyAnswer,
+    ServeState,
+    requested_layers,
+    serve_filters,
+    serve_service,
+    serve_unserved,
+)
 from ._request import ServerRequest
 from ._response import ServerResponse
 
-
-class _CcState:
-    """A mutable record shared by the phases of one long function."""
-
-    def __init__(_cc_self, **values):
-        _cc_self.__dict__.update(values)
+__all__ = ["ServerHost"]
 
 
-class _CcReturn:
-    """An early return travelling out of a phase."""
+class _ServerHostRegistration:
+    """Registering the declared hooks, and the one call a host makes per request."""
 
-    def __init__(_cc_self, value):
-        _cc_self.value = value
-
-
-def _cc_serve_p1(_s):
-    _s.rewritten = _s.self.rewrite(_s.context, _s.request, _s.response)
-    if isinstance(_s.rewritten, ServerResponse):
-        return _CcReturn(_s.rewritten)
-    _s.denied = _s.self.denied_layer(_s.context, _s.rewritten)
-    if _s.denied is not None:
-        return _CcReturn(_s.denied)
-    _s.service = _s.self.service_for(_s.rewritten)
-
-
-def _cc_serve_p2(_s):
-    if _s.service is not None:
-        _s.answer = _s.service(_s.context, _s.rewritten)
-        if not isinstance(_s.answer, ServerResponse):
-            raise QgisSdkUnsupportedCapabilityError(
-                f"@server.service `{_s.service.__name__}` returned "
-                f"{type(_s.answer).__name__}; a service answers with a "
-                "ServerResponse"
-            )
-        return _CcReturn(_s.answer)
-
-
-def _cc_serve_p3(_s):
-    return _CcReturn(
-        _s.response.write_text(
-            f"SERVICE {_s.rewritten.param('SERVICE') or '(missing)'!r} is not served "
-            "by this plugin",
-            status=400,
-        )
-    )
-
-
-__all__ = ["ServerHost", "ServerInterface"]
-
-
-class ServerInterface(Protocol):
-    """What the host needs of a ``QgsServerInterface``, and all it needs.
-
-    The real object lives in the adapter and the scripted one in
-    ``qgis_sdk.testing``; both are registered with the same three calls, so the
-    dispatcher below is the same code in a test and in a deployed server.
-    """
-
-    def register_filter(
-        self,
-        name: str,
-        hook: Callable[..., Any],
-        priority: int,
-    ) -> None:
-        """Register a request hook under ``name`` at ``priority``."""
-
-    def register_service(
-        self,
-        name: str,
-        version: str,
-        handler: Callable[..., Any],
-    ) -> None:
-        """Register the handler of the OGC service ``name`` at ``version``."""
-
-    def register_access_control(
-        self,
-        name: str,
-        hook: Callable[..., Any],
-        priority: int,
-    ) -> None:
-        """Register a layer permission hook under ``name`` at ``priority``."""
-
-
-class _ServerHostMixin1:
     @property
     def hooks(self) -> ServerHooks:
         """The hooks this host serves, in the order it serves them."""
@@ -143,7 +67,7 @@ class _ServerHostMixin1:
         if self._registered:
             return
         for hook in self._hooks.filters:
-            declaration = _declaration_of(hook, "filter")
+            declaration = declaration_of(hook, "filter")
             self._interface.register_filter(hook.__name__, hook, declaration.priority)
         for declaration, hook in self._hooks.services:
             self._interface.register_service(
@@ -152,7 +76,7 @@ class _ServerHostMixin1:
                 hook,
             )
         for hook in self._hooks.access_control:
-            declaration = _declaration_of(hook, "access_control")
+            declaration = declaration_of(hook, "access_control")
             self._interface.register_access_control(
                 hook.__name__, hook, declaration.priority
             )
@@ -175,27 +99,30 @@ class _ServerHostMixin1:
         response is sent, because a request-scoped job must be abandoned at the
         same moment (decision-52). A host that passes none gets a scope opened
         and closed inside this call.
+
+        Args:
+            request: The request, as the host received it.
+            scope: The request scope, or ``None`` to open one here.
+            project: The project the request loaded, if the host has one.
+            layers: The layers service for it.
+            log: The log the request writes to.
         """
-        owned = _published_values.scope is None
-        if _published_values.scope is None:
-            _published_values.scope = ResourceScope()
+        values = _published_values
+        owned = values.scope is None
+        if values.scope is None:
+            values.scope = ResourceScope()
         try:
-            _published_values.self.tick()
+            values.self.tick()
             response = ServerResponse()
-            context = _published_values.self.context(
-                _published_values.scope,
-                _published_values.request,
-                response,
-                project=_published_values.project,
-                layers=_published_values.layers,
-                log=_published_values.log,
-            )
-            return _published_values.self.serve(
-                context, _published_values.request, response
-            )
+            context = _request_context(values.self, values, response)
+            return values.self.serve(context, values.request, response)
         finally:
             if owned:
-                _published_values.scope.close()
+                values.scope.close()
+
+
+class _ServerHostDispatch:
+    """The steps one request is served in, in the order the host runs them."""
 
     # -- serving -----------------------------------------------------------------
 
@@ -211,11 +138,19 @@ class _ServerHostMixin1:
         - QGIS Server calls a filter, a service and an access-control object at
         three different moments of one request - has to run the same steps one
         at a time and in this order, not a second implementation of them.
+
+        Args:
+            context: The context the hooks receive.
+            request: The request being served.
+            response: The response being built.
+
+        Returns:
+            The answer, whether a hook wrote it or the service did.
         """
-        _s = _CcState(self=self, context=context, request=request, response=response)
-        for _p in (_cc_serve_p1, _cc_serve_p2, _cc_serve_p3):
+        _s = ServeState(self=self, context=context, request=request, response=response)
+        for _p in (serve_filters, serve_service, serve_unserved):
             _r = _p(_s)
-            if isinstance(_r, _CcReturn):
+            if isinstance(_r, EarlyAnswer):
                 return _r.value
         return None
 
@@ -230,6 +165,14 @@ class _ServerHostMixin1:
         ``None`` from a filter means "pass this request on unchanged", a
         ``ServerRequest`` means "the hooks after me see this one", and a
         ``ServerResponse`` means "answer the request, run nothing else".
+
+        Args:
+            context: The context the hooks receive.
+            request: The request being served.
+            response: The response being built.
+
+        Raises:
+            QgisSdkUnsupportedCapabilityError: A filter returned something else.
         """
         current = request
         for hook in self._hooks.filters:
@@ -239,11 +182,7 @@ class _ServerHostMixin1:
             if isinstance(outcome, ServerRequest):
                 current = outcome
             elif outcome is not None:
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"@server.filter `{hook.__name__}` returned "
-                    f"{type(outcome).__name__}; return None to pass, a "
-                    "ServerRequest to rewrite or a ServerResponse to answer"
-                )
+                raise _filter_return_refused(hook, outcome)
         return current
 
     def denied_layer(
@@ -254,10 +193,17 @@ class _ServerHostMixin1:
         A refusal beats the answer: a hook that denies a layer stops the request
         before any service renders it (decision-52), and the response names the
         layer instead of passing a silently filtered map.
+
+        Args:
+            context: The context the hooks receive.
+            request: The request, whose ``LAYERS`` name what to rule on.
+
+        Returns:
+            The refusal, or ``None`` when every layer is allowed.
         """
         if not self._hooks.access_control:
             return None
-        for layer in _requested_layers(request):
+        for layer in requested_layers(request):
             if self.permits(context, request, layer):
                 continue
             # A hook that wants its own refusal writes it to ctx.response;
@@ -278,6 +224,14 @@ class _ServerHostMixin1:
         resolves a filter, so the question is public and the answer is a bool -
         not the 403 :meth:`denied_layer` builds for a host that dispatches whole
         requests.
+
+        Args:
+            context: The context the hooks receive.
+            request: The request being served.
+            layer: The layer name to rule on.
+
+        Returns:
+            Whether every hook allows it.
         """
         for hook in self._hooks.access_control:
             if not hook(context, request, layer):
@@ -285,7 +239,14 @@ class _ServerHostMixin1:
         return True
 
     def service_for(self, request: ServerRequest) -> Callable[..., Any] | None:
-        """The declared handler of the OGC service this request names, if any."""
+        """The declared handler of the OGC service this request names, if any.
+
+        Args:
+            request: The request whose ``SERVICE`` parameter to look up.
+
+        Returns:
+            The handler, or ``None`` when the plugin serves no such service.
+        """
         requested = (request.param("SERVICE") or "").replace("_", "").upper()
         if not requested:
             return None
@@ -295,7 +256,11 @@ class _ServerHostMixin1:
         return None
 
 
-class _ServerHostMixin2:
+class _ServerHostContext:
+    def _request_jobs(self, scope: ResourceScope) -> Jobs | None:
+        """The jobs facade over ``scope``, which ends with the response."""
+        return None if self._jobs is None else Jobs(self._jobs.request_scoped(scope))
+
     def context(
         self,
         scope: ResourceScope,
@@ -305,27 +270,42 @@ class _ServerHostMixin2:
     ) -> ServerContext:
         """Build the context one request's hooks receive.
 
-        The ``jobs`` capability is derived here rather than taken from the
-        plugin's service, because that derivation *is* the request scope: the
-        hooks see work that dies with this response. A host with its own
-        ``context_factory`` builds the context itself and decides the same
-        question in its own factory.
+        ``jobs`` is derived from the plugin's service over *this* request's
+        scope, because that derivation is the request scope itself; a host with
+        its own ``context_factory`` decides the same question in its factory.
+
+        Args:
+            scope: The request scope, closed when the response is sent.
+            request: The request being served.
+            response: The response the hooks are building.
+            options: ``project``, ``layers`` and ``log``, when the host has them.
         """
-        values = _ContextValues1(**options)
         if self._context_factory is not None:
             return self._context_factory(scope, request, response)
-        jobs = None if self._jobs is None else Jobs(self._jobs.request_scoped(scope))
+        return self._default_context(scope, request, response, **options)
+
+    def _default_context(
+        self,
+        scope: ResourceScope,
+        request: ServerRequest,
+        response: ServerResponse,
+        **options: Unpack[_ContextOptions1],
+    ) -> ServerContext:
+        """The context a host without a factory gets: no project unless given."""
         return ServerContext(
             scope,
             request,
             response,
             ServerServices(
-                project=values.project, layers=values.layers, log=values.log, jobs=jobs
+                project=options.get("project"),
+                layers=options.get("layers"),
+                log=options.get("log"),
+                jobs=self._request_jobs(scope),
             ),
         )
 
 
-class ServerHost(_ServerHostMixin1, _ServerHostMixin2):
+class ServerHost(_ServerHostRegistration, _ServerHostDispatch, _ServerHostContext):
     """The hooks of one plugin, registered once and served request by request.
 
     ``context_factory`` is how a host adds the services a request's project
@@ -342,6 +322,13 @@ class ServerHost(_ServerHostMixin1, _ServerHostMixin2):
     (decision-52). Work submitted through ``ctx.jobs.plugin`` keeps the plugin's
     lifetime. A host without a job service leaves ``ctx.jobs`` out, and the
     context refuses it by name like any other capability it never had.
+
+    Args:
+        hooks: The plugin's declared hooks, already validated.
+        interface: The object that plays ``QgsServerInterface``.
+        context_factory: How a request's services are built, or ``None`` for the
+            default context, which has no project.
+        jobs: The plugin's job service, or ``None`` when the host has none.
     """
 
     __slots__ = ("_context_factory", "_hooks", "_interface", "_jobs", "_registered")
@@ -368,29 +355,32 @@ class ServerHost(_ServerHostMixin1, _ServerHostMixin2):
         return f"ServerHost({self._hooks!r}, {state})"
 
 
-def _requested_layers(request: ServerRequest) -> tuple[str, ...]:
-    """The layers a request names, in the order it names them."""
-    requested = request.param("LAYERS") or request.param("LAYER") or ""
-    return tuple(name.strip() for name in requested.split(",") if name.strip())
+def _request_context(
+    host: ServerHost, values: Any, response: ServerResponse
+) -> ServerContext:
+    """Build the context one request's hooks receive, from the published args."""
+    return host.context(
+        values.scope,
+        values.request,
+        response,
+        project=values.project,
+        layers=values.layers,
+        log=values.log,
+    )
 
 
-def _declaration_of(hook: Callable[..., Any], kind: str) -> HookDeclaration:
-    declaration = getattr(hook, "__qgis_sdk_server_hook__", None)
-    if not isinstance(declaration, HookDeclaration) or declaration.kind != kind:
-        raise QgisSdkUnsupportedCapabilityError(
-            f"{getattr(hook, '__name__', hook)!r} is not a @server.{kind} hook"
-        )
-    return declaration
+def _filter_return_refused(hook: Callable[..., Any], outcome: object) -> Exception:
+    """The error a filter that returned something unusable is refused with."""
+    return QgisSdkUnsupportedCapabilityError(
+        f"@server.filter `{hook.__name__}` returned {type(outcome).__name__}; "
+        "return None to pass, a ServerRequest to rewrite or a "
+        "ServerResponse to answer"
+    )
 
 
 class _ContextOptions1(TypedDict, total=False):
+    """The services a request's project makes possible, each optional."""
+
     project: Project | None
     layers: Layers | None
     log: Log | None
-
-
-@dataclass(frozen=True, slots=True)
-class _ContextValues1:
-    project: Project | None = None
-    layers: Layers | None = None
-    log: Log | None = None

@@ -44,6 +44,12 @@ class ServerServices:
     The four capabilities a request can make possible, each ``None`` when the
     host cannot provide it: a capabilities-only deployment has no project, and a
     host given no job service has nothing to submit through (decision-52).
+
+    Attributes:
+        project: The project the request loaded, if the host has one.
+        layers: The layers service for that project.
+        log: The log the request writes to.
+        jobs: The job service, which makes those jobs request-scoped.
     """
 
     project: Project | None = None
@@ -61,6 +67,12 @@ class ServerContext(Context):
     capabilities: a host that serves a request without a project - a
     capabilities-only deployment, a test - refuses them by name rather than
     returning a half-built service.
+
+    Args:
+        scope: The scope that closes when the response is sent.
+        request: The request being served.
+        response: The response the hooks are building.
+        services: What the host can provide for this request.
     """
 
     __slots__ = (
