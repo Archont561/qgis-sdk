@@ -53,37 +53,13 @@ A page outside QGIS, or one without the `layers.read` grant, sees the
 pickers say so instead of a fault; `applyHostTheme(qgis)` takes the running
 QGIS palette once the handshake answered.
 
-## Shopify Polaris
-
-The elements can render [Shopify Polaris](https://shopify.dev/docs/api/app-home/latest/web-components)
-web components (`<s-button>`, `<s-text-field>`, `<s-select>`, `<s-progress>`)
-instead of native HTML controls, giving the page the Shopify look. The
-`<qgis-*>` API — properties, events, store integration — is unchanged.
-
-Polaris is CDN-only and a QGIS web view reaches no remote origin, so the
-bundle must be vendored into the plugin's `web/` directory:
-
-```sh
-curl -o web/polaris-2.js https://cdn.shopify.com/shopifycloud/polaris-2.js
-```
-
-```html
-<script src="./polaris-2.js"></script>
-<script type="module">
-  import "@archont561/qgis-sdk-ui/polaris";
-</script>
-```
-
-Load the bundle before the elements. When the `<s-*>` tags are defined, the
-elements render Polaris; otherwise they render the native controls. The
-QGIS palette theming (`applyHostTheme`, `--qgis-sdk-*` tokens) does not
-apply to Polaris components, which carry their own theme.
-
 ## Documentation
 
 - [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) -
   the elements, their properties in both spellings, the wrappers, the
-  `--qgis-sdk-*` variables and the `./uno` preset.
+  `--qgis-sdk-*` variables, the `./uno` preset, and rendering with
+  [Shopify Polaris](https://shopify.dev/docs/api/app-home/latest/web-components)
+  via the `./polaris` entry point.
 - [Storybook](https://archont561.github.io/qgis-sdk/storybook/) - every
   component with a theme switcher and the a11y addon; `bun run storybook`
   in `packages/qgis-sdk-ui` serves the same catalogue from source.
