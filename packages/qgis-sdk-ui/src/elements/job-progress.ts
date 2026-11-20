@@ -10,6 +10,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { QgisSdkElement } from "../base";
 import { StoreController } from "../controller";
 import { BUTTON_CLASSES, STATUS_CLASSES } from "../parts";
+import { polarisAvailable, polarisButton, polarisProgress } from "../polaris";
 
 /** Where a job stands, as the element shows it. */
 export type ProgressStatus = "idle" | "pending" | "ok" | "error";
@@ -159,6 +160,32 @@ export class QgisJobProgress extends QgisSdkElement {
 		const value = known ? Math.min(1, Math.max(0, fraction)) : undefined;
 		const text =
 			message === undefined || message === "" ? STATUS_TEXT[status] : message;
+		if (polarisAvailable()) {
+			const percent = value === undefined ? 0 : Math.round(value * 100);
+			return html`${polarisProgress({
+				label: this.label,
+				value: percent,
+				controlId: this.controlId,
+			})}
+				${
+					this.cancellable && this.cancel !== null && status === "pending"
+						? polarisButton({
+								label: "Cancel",
+								disabled: false,
+								loading: false,
+								controlId: `${this.controlId}-cancel`,
+								onClick: this.onCancel,
+							})
+						: nothing
+				}
+				<output
+					data-part=${status === "error" ? "error" : "status"}
+					class=${status === "error" ? "qs-block qs-mt-1 qs-text-danger" : STATUS_CLASSES}
+					for=${this.controlId}
+					role="status"
+					aria-live="polite"
+				>${text}</output>`;
+		}
 		return html`${
 			this.label === ""
 				? nothing

@@ -2,6 +2,7 @@ import { html, type PropertyDeclarations, type TemplateResult } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { QgisSdkElement } from "../base";
 import { CONTROL_CLASSES, describedBy, errorPart, labelPart } from "../parts";
+import { polarisAvailable, polarisSelect } from "../polaris";
 
 /** One option of a choice: a bare value, or a value with its own label. */
 export type Choice =
@@ -63,6 +64,27 @@ export class QgisChoice extends QgisSdkElement {
 		const selected = this.options.findIndex((choice) =>
 			Object.is(choiceValue(choice), this.value),
 		);
+		if (polarisAvailable()) {
+			const options = this.options.map((choice, index) => ({
+				value: String(index),
+				label: labelOf(choice),
+			}));
+			if (this.nullable || selected < 0) {
+				options.unshift({ value: EMPTY, label: this.placeholder });
+			}
+			return polarisSelect({
+				label: this.label,
+				options,
+				selected:
+					selected < 0 ? 0 : selected + (this.nullable || selected < 0 ? 1 : 0),
+				name: this.name,
+				disabled: this.disabled,
+				required: this.required,
+				error: this.error,
+				controlId: this.controlId,
+				onChange: this.onPolarisChange,
+			});
+		}
 		return html`${labelPart(this.controlId, this.label)}
 			<select
 				data-part="control"
@@ -96,6 +118,18 @@ export class QgisChoice extends QgisSdkElement {
 			select.value === EMPTY
 				? null
 				: choiceValue(this.options[Number(select.value)] as Choice);
+		this.value = next;
+		this.emitChange(next);
+	}
+
+	private onPolarisChange(event: Event): void {
+		// Polaris `<s-select>` reports the selected option's value; the
+		// options are indexed, so the value is the index as a string.
+		const target = event.currentTarget as unknown as { value: string };
+		const next =
+			target.value === EMPTY
+				? null
+				: choiceValue(this.options[Number(target.value)] as Choice);
 		this.value = next;
 		this.emitChange(next);
 	}

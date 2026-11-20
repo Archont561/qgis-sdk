@@ -5,6 +5,7 @@ export default {
 	entry: [
 		"src/index.ts",
 		"src/define.ts",
+		"src/polaris-entry.ts",
 		"src/uno.ts",
 		"src/react.ts",
 		"src/vue.ts",

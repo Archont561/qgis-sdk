@@ -20,6 +20,7 @@ import {
 	labelPart,
 	STATUS_CLASSES,
 } from "../parts";
+import { polarisAvailable, polarisSelect } from "../polaris";
 import type { AnyQgisSdk } from "./layer-picker";
 
 const NONE = "";
@@ -123,6 +124,38 @@ export class QgisFieldPicker extends QgisSdkElement {
 		const options = this.options;
 		const known = this.value !== null && options.includes(this.value);
 		const waiting = this.layer === null || this.qgis === null;
+		if (polarisAvailable()) {
+			const polarisOptions = options.map((field) => ({
+				value: field,
+				label: field,
+			}));
+			let selected = 0;
+			if (this.nullable || !known) {
+				polarisOptions.unshift({
+					value: NONE,
+					label: waiting ? "Choose a layer first" : this.placeholder,
+				});
+				selected = 0;
+			} else {
+				selected = options.indexOf(this.value as string) + 1;
+			}
+			return html`${polarisSelect({
+				label: this.label,
+				options: polarisOptions,
+				selected,
+				name: this.name,
+				disabled: this.disabled || state.status !== "ok",
+				required: this.required,
+				error: message,
+				controlId: this.controlId,
+				onChange: this.onChange,
+			})}
+				${
+					state.status === "loading"
+						? html`<p data-part="status" class=${STATUS_CLASSES} role="status">Loading fields…</p>`
+						: nothing
+				}`;
+		}
 		return html`${labelPart(this.controlId, this.label)}
 			<select
 				data-part="control"

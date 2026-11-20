@@ -287,7 +287,8 @@
 			"words": 361
 		},
 		"reference/design-decisions.mdx": {
-			"words": 473
+			"words": 477,
+			"reason": "Decision-87 added (Polaris web components); the anchor line grows with each decision."
 		},
 		"reference/faq.md": {
 			"words": 553

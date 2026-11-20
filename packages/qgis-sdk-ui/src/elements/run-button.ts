@@ -10,6 +10,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { QgisSdkElement } from "../base";
 import { StoreController } from "../controller";
 import { BUTTON_CLASSES } from "../parts";
+import { polarisAvailable, polarisButton } from "../polaris";
 import { readProgress } from "./job-progress";
 
 /** Any form store: the button only submits and reads its submission. */
@@ -102,6 +103,17 @@ export class QgisRunButton extends QgisSdkElement {
 	protected override render(): TemplateResult {
 		const pending = this.pending;
 		const text = this.label === "" ? "Run" : this.label;
+		const caption =
+			pending && this.pendingLabel !== "" ? this.pendingLabel : text;
+		if (polarisAvailable()) {
+			return polarisButton({
+				label: caption,
+				disabled: this.disabled,
+				loading: pending,
+				controlId: this.controlId,
+				onClick: this.onClick,
+			});
+		}
 		return html`<button
 				data-part="control"
 				class=${`${BUTTON_CLASSES} qs-bg-accent qs-text-accent-fg qs-border-accent`}
@@ -110,7 +122,7 @@ export class QgisRunButton extends QgisSdkElement {
 				?disabled=${this.disabled || pending}
 				aria-busy=${ifDefined(pending ? "true" : undefined)}
 				@click=${this.onClick}
-			>${pending && this.pendingLabel !== "" ? this.pendingLabel : text}</button>
+			>${caption}</button>
 			${
 				this.error === ""
 					? nothing

@@ -57,7 +57,9 @@ QGIS palette once the handshake answered.
 
 - [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) -
   the elements, their properties in both spellings, the wrappers, the
-  `--qgis-sdk-*` variables and the `./uno` preset.
+  `--qgis-sdk-*` variables, the `./uno` preset, and rendering with
+  [Shopify Polaris](https://shopify.dev/docs/api/app-home/latest/web-components)
+  via the `./polaris` entry point.
 - [Storybook](https://archont561.github.io/qgis-sdk/storybook/) - every
   component with a theme switcher and the a11y addon; `bun run storybook`
   in `packages/qgis-sdk-ui` serves the same catalogue from source.

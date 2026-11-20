@@ -9,6 +9,7 @@ import {
 import { QgisSdkElement } from "../base";
 import { StoreController } from "../controller";
 import { BUTTON_CLASSES } from "../parts";
+import { polarisAvailable, polarisButton } from "../polaris";
 
 /** How a store snapshot becomes lines. */
 export type LinesReader<T> = (snapshot: T) => readonly string[];
@@ -116,6 +117,33 @@ export class QgisLogView extends QgisSdkElement {
 	}
 
 	protected override render(): TemplateResult {
+		if (polarisAvailable()) {
+			return html`${
+				this.label === ""
+					? nothing
+					: html`<span data-part="label" class="qs-block qs-text-fg qs-mb-1" id=${`${this.controlId}-label`}>${this.label}</span>`
+			}
+			<pre
+				data-part="control"
+				class="qs-m-0 qs-max-h-60 qs-overflow-auto qs-rounded qs-border qs-border-border qs-bg-surface qs-text-surface-fg qs-p-2 qs-font-mono qs-text-xs qs-whitespace-pre-wrap"
+				id=${this.controlId}
+				role="log"
+				aria-live="polite"
+				aria-labelledby=${this.label === "" ? nothing : `${this.controlId}-label`}
+				tabindex="0"
+			>${this.lines.join("\n")}</pre>
+			${
+				this.clearable
+					? polarisButton({
+							label: "Clear",
+							disabled: this.lines.length === 0,
+							loading: false,
+							controlId: `${this.controlId}-clear`,
+							onClick: this.clear,
+						})
+					: nothing
+			}`;
+		}
 		return html`${
 			this.label === ""
 				? nothing

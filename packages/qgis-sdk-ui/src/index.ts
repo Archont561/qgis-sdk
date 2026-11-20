@@ -37,6 +37,7 @@ export {
 	type AnyOperationStore,
 	QgisRunButton,
 } from "./elements/run-button";
+export { polarisAvailable } from "./polaris";
 export {
 	applyHostTheme,
 	applyTheme,
